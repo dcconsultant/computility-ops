@@ -47,6 +47,36 @@ func TestRenewalService_CreatePlan_SelectsWhitelistAndSortsByScore(t *testing.T)
 	}
 }
 
+func TestRenewalService_CreatePlan_TargetIncludesUnexpiredButOutputExcludesUnexpired(t *testing.T) {
+	ctx := context.Background()
+	serverRepo := mem.NewServerRepo()
+	datasetRepo := mem.NewDatasetRepo()
+	renewalRepo := mem.NewRenewalRepo()
+
+	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
+		{SN: "U1", ConfigType: "compute-a", PSA: 10, WarrantyEndDate: "2026-12-31", Environment: "生产"}, // 未过保，计入覆盖
+		{SN: "E1", ConfigType: "compute-a", PSA: 9, WarrantyEndDate: "2025-01-01", Environment: "生产"},  // 过保，候选
+		{SN: "E2", ConfigType: "compute-a", PSA: 8, WarrantyEndDate: "2025-01-01", Environment: "生产"},  // 过保，候选
+	})
+	_ = datasetRepo.ReplaceHostPackages(ctx, []domain.HostPackageConfig{{ConfigType: "compute-a", SceneCategory: "计算型", CPULogicalCores: 8, ArchStandardizedFactor: 1}})
+
+	svc := NewRenewalService(serverRepo, datasetRepo, renewalRepo)
+	plan, err := svc.CreatePlan(ctx, CreatePlanInput{TargetDate: "2026-01-01", TargetCores: 16, WarmTargetStorageTB: 0, HotTargetStorageTB: 0})
+	if err != nil {
+		t.Fatalf("CreatePlan() error = %v", err)
+	}
+
+	if plan.CoveredComputeCores != 8 {
+		t.Fatalf("CoveredComputeCores=%d, want 8", plan.CoveredComputeCores)
+	}
+	if plan.RequiredComputeCores != 8 {
+		t.Fatalf("RequiredComputeCores=%d, want 8", plan.RequiredComputeCores)
+	}
+	if len(plan.Items) != 1 || plan.Items[0].SN != "E1" {
+		t.Fatalf("selected items=%+v, want only E1", plan.Items)
+	}
+}
+
 func TestRenewalService_CreatePlan_InvalidTarget(t *testing.T) {
 	svc := NewRenewalService(mem.NewServerRepo(), mem.NewDatasetRepo(), mem.NewRenewalRepo())
 	_, err := svc.CreatePlan(context.Background(), CreatePlanInput{TargetDate: "2026-01-01", TargetCores: 0})

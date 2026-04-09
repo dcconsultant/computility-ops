@@ -129,6 +129,8 @@ export default function ResultPage() {
           <Space size={24} wrap style={{ marginBottom: 16 }}>
             <Statistic title="续保目标时间" value={plan.target_date || '-'} />
             <Statistic title="计算型目标核数" value={plan.target_cores} />
+            <Statistic title="计算型已覆盖(未过保)" value={plan.covered_compute_cores || 0} />
+            <Statistic title="计算型待补核数" value={plan.required_compute_cores || 0} />
             <Statistic title="总已选核数" value={plan.selected_cores} />
             <Statistic title="总已选存储(TB)" value={plan.selected_storage_tb || 0} />
             <Statistic title="总入选台数" value={plan.selected_count} />
@@ -157,6 +159,10 @@ export default function ResultPage() {
                     <Space size={24} wrap>
                       <Statistic title="目标核数" value={sec.target_cores || 0} />
                       <Statistic title="目标存储(TB)" value={sec.target_storage_tb || 0} />
+                      <Statistic title="已覆盖核数(未过保)" value={sec.covered_cores || 0} />
+                      <Statistic title="已覆盖存储(TB)(未过保)" value={sec.covered_storage_tb || 0} />
+                      <Statistic title="待补核数" value={sec.required_cores || 0} />
+                      <Statistic title="待补存储(TB)" value={sec.required_storage_tb || 0} />
                       <Statistic title="已选核数" value={sec.selected_cores || 0} />
                       <Statistic title="已选存储(TB)" value={sec.selected_storage_tb || 0} />
                       <Statistic title="入选台数" value={sec.selected_count || 0} />

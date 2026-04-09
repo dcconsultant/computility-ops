@@ -7,6 +7,12 @@ type RenewalPlan struct {
 	TargetCores          int                  `json:"target_cores"`
 	WarmTargetStorageTB  float64              `json:"warm_target_storage_tb"`
 	HotTargetStorageTB   float64              `json:"hot_target_storage_tb"`
+	CoveredComputeCores  int                  `json:"covered_compute_cores,omitempty"`
+	CoveredWarmStorageTB float64              `json:"covered_warm_storage_tb,omitempty"`
+	CoveredHotStorageTB  float64              `json:"covered_hot_storage_tb,omitempty"`
+	RequiredComputeCores int                  `json:"required_compute_cores,omitempty"`
+	RequiredWarmStorage  float64              `json:"required_warm_storage_tb,omitempty"`
+	RequiredHotStorage   float64              `json:"required_hot_storage_tb,omitempty"`
 	SelectedCores        int                  `json:"selected_cores"`
 	SelectedStorageTB    float64              `json:"selected_storage_tb"`
 	SelectedCount        int                  `json:"selected_count"`
@@ -18,6 +24,10 @@ type RenewalPlanSection struct {
 	Bucket            string        `json:"bucket"`
 	TargetCores       int           `json:"target_cores,omitempty"`
 	TargetStorageTB   float64       `json:"target_storage_tb,omitempty"`
+	CoveredCores      int           `json:"covered_cores,omitempty"`
+	CoveredStorageTB  float64       `json:"covered_storage_tb,omitempty"`
+	RequiredCores     int           `json:"required_cores,omitempty"`
+	RequiredStorageTB float64       `json:"required_storage_tb,omitempty"`
 	SelectedCores     int           `json:"selected_cores,omitempty"`
 	SelectedStorageTB float64       `json:"selected_storage_tb,omitempty"`
 	SelectedCount     int           `json:"selected_count"`

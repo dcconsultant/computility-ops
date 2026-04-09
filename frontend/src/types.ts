@@ -98,6 +98,10 @@ export interface RenewalPlanSection {
   bucket: 'compute' | 'warm_storage' | 'hot_storage' | 'gpu' | string;
   target_cores?: number;
   target_storage_tb?: number;
+  covered_cores?: number;
+  covered_storage_tb?: number;
+  required_cores?: number;
+  required_storage_tb?: number;
   selected_cores?: number;
   selected_storage_tb?: number;
   selected_count: number;
@@ -111,6 +115,12 @@ export interface RenewalPlan {
   target_cores: number;
   warm_target_storage_tb?: number;
   hot_target_storage_tb?: number;
+  covered_compute_cores?: number;
+  covered_warm_storage_tb?: number;
+  covered_hot_storage_tb?: number;
+  required_compute_cores?: number;
+  required_warm_storage_tb?: number;
+  required_hot_storage_tb?: number;
   selected_cores: number;
   selected_storage_tb?: number;
   selected_count: number;

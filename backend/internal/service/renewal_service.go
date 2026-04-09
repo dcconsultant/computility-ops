@@ -116,6 +116,9 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		"hot_storage":  {},
 		"gpu":          {},
 	}
+	coveredComputeCores := 0
+	coveredWarmStorage := 0.0
+	coveredHotStorage := 0.0
 
 	for _, srv := range servers {
 		if excludedSet[normalizeEnv(srv.Environment)] {
@@ -127,9 +130,6 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		wd, err := parseDate(srv.WarrantyEndDate)
 		if err != nil {
 			return domain.RenewalPlan{}, fmt.Errorf("invalid warranty_end_date for sn=%s: %v", srv.SN, err)
-		}
-		if !wd.Before(targetDate) {
-			continue
 		}
 
 		pkg, ok := pkgMap[srv.ConfigType]
@@ -146,9 +146,20 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		}
 
 		bucket := normalizeBucket(pkg.SceneCategory)
-		baseScore := srv.PSA * coef
-		finalScore := baseScore
+		if !wd.Before(targetDate) {
+			// 未过保：计入目标覆盖基线，但不进入续保方案列表
+			switch bucket {
+			case "compute":
+				coveredComputeCores += cores
+			case "warm_storage":
+				coveredWarmStorage += pkg.StorageCapacityTB
+			case "hot_storage":
+				coveredHotStorage += pkg.StorageCapacityTB
+			}
+			continue
+		}
 
+		baseScore := srv.PSA * coef
 		item := domain.RenewalItem{
 			SN:                     srv.SN,
 			Bucket:                 bucket,
@@ -161,7 +172,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			PSA:                    srv.PSA,
 			ArchStandardizedFactor: coef,
 			BaseScore:              baseScore,
-			FinalScore:             finalScore,
+			FinalScore:             baseScore,
 		}
 
 		if bucket == "warm_storage" || bucket == "hot_storage" {
@@ -244,9 +255,13 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		return selected, pickedStorage, pickedCores
 	}
 
-	computeItems, computeCores := selectByCores(bucketItems["compute"], in.TargetCores)
-	warmItems, warmStorage, warmCores := selectByStorage(bucketItems["warm_storage"], in.WarmTargetStorageTB)
-	hotItems, hotStorage, hotCores := selectByStorage(bucketItems["hot_storage"], in.HotTargetStorageTB)
+	requiredComputeCores := maxInt(0, in.TargetCores-coveredComputeCores)
+	requiredWarmStorage := maxFloat(0, in.WarmTargetStorageTB-coveredWarmStorage)
+	requiredHotStorage := maxFloat(0, in.HotTargetStorageTB-coveredHotStorage)
+
+	computeItems, computeCores := selectByCores(bucketItems["compute"], requiredComputeCores)
+	warmItems, warmStorage, warmCores := selectByStorage(bucketItems["warm_storage"], requiredWarmStorage)
+	hotItems, hotStorage, hotCores := selectByStorage(bucketItems["hot_storage"], requiredHotStorage)
 	gpuItems := bucketItems["gpu"] // 全部续保（已应用环境过滤、到期过滤、blacklist）
 	gpuCores := 0
 	gpuStorage := 0.0
@@ -262,10 +277,18 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		TargetCores:          in.TargetCores,
 		WarmTargetStorageTB:  in.WarmTargetStorageTB,
 		HotTargetStorageTB:   in.HotTargetStorageTB,
+		CoveredComputeCores:  coveredComputeCores,
+		CoveredWarmStorageTB: coveredWarmStorage,
+		CoveredHotStorageTB:  coveredHotStorage,
+		RequiredComputeCores: requiredComputeCores,
+		RequiredWarmStorage:  requiredWarmStorage,
+		RequiredHotStorage:   requiredHotStorage,
 		Sections: []domain.RenewalPlanSection{
 			{
 				Bucket:        "compute",
 				TargetCores:   in.TargetCores,
+				CoveredCores:  coveredComputeCores,
+				RequiredCores: requiredComputeCores,
 				SelectedCores: computeCores,
 				SelectedCount: len(computeItems),
 				Items:         computeItems,
@@ -273,6 +296,8 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			{
 				Bucket:            "warm_storage",
 				TargetStorageTB:   in.WarmTargetStorageTB,
+				CoveredStorageTB:  coveredWarmStorage,
+				RequiredStorageTB: requiredWarmStorage,
 				SelectedStorageTB: warmStorage,
 				SelectedCores:     warmCores,
 				SelectedCount:     len(warmItems),
@@ -281,6 +306,8 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			{
 				Bucket:            "hot_storage",
 				TargetStorageTB:   in.HotTargetStorageTB,
+				CoveredStorageTB:  coveredHotStorage,
+				RequiredStorageTB: requiredHotStorage,
 				SelectedStorageTB: hotStorage,
 				SelectedCores:     hotCores,
 				SelectedCount:     len(hotItems),
@@ -393,4 +420,18 @@ func findPlanItemIndexBySN(items []domain.RenewalItem, sn string) int {
 		}
 	}
 	return -1
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func maxFloat(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
 }
