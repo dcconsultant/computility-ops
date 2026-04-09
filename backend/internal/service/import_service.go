@@ -62,6 +62,7 @@ var serverHeaderMap = map[string]string{
 	"厂商":              "manufacturer",
 	"manufacturer":    "manufacturer",
 	"型号":              "model",
+	"服务器型号":           "model",
 	"model":           "model",
 	"psa":             "psa",
 	"机房":              "idc",

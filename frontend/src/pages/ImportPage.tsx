@@ -161,7 +161,7 @@ export default function ImportPage() {
               <Table rowKey="sn" dataSource={servers} pagination={{ pageSize: 10 }} columns={[
                 { title: 'SN', dataIndex: 'sn' },
                 { title: '制造商', dataIndex: 'manufacturer' },
-                { title: '型号', dataIndex: 'model' },
+                { title: '服务器型号', dataIndex: 'model' },
                 { title: 'PSA', dataIndex: 'psa' },
                 { title: '机房', dataIndex: 'idc' },
                 { title: '环境', dataIndex: 'environment' },
@@ -169,7 +169,7 @@ export default function ImportPage() {
                 { title: '保修结束日期', dataIndex: 'warranty_end_date' },
                 { title: '投产日期', dataIndex: 'launch_date' }
               ]} />,
-              '字段：SN、制造商、型号、PSA、机房、环境、配置类型、保修结束日期、投产日期'
+              '字段：SN、制造商、服务器型号、PSA、机房、环境、配置类型、保修结束日期、投产日期'
             )
           },
           {
