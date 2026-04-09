@@ -185,9 +185,10 @@ export default function ImportPage() {
                 { title: '数据盘类型', dataIndex: 'data_disk_type' },
                 { title: '数据盘数量', dataIndex: 'data_disk_count' },
                 { title: '存储容量(TB)', dataIndex: 'storage_capacity_tb' },
+                { title: '服务器价值分', dataIndex: 'server_value_score' },
                 { title: '架构标准化系数', dataIndex: 'arch_standardized_factor' }
               ]} />,
-              '服务器管理表通过配置类型关联此表；含数据盘类型/数量（温/热存储故障率分析会用到）。'
+              '服务器管理表通过配置类型关联此表；需维护服务器价值分，作为PSA非数字时的计算基准。'
             )
           },
           {

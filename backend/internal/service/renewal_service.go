@@ -163,8 +163,12 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			continue
 		}
 
-		psaValue := parsePSAValue(srv.PSA)
-		baseScore := psaValue * coef
+		baseValue := pkg.ServerValueScore
+		psaValue, psaParsed := parsePSAValue(srv.PSA)
+		if psaParsed {
+			baseValue = psaValue
+		}
+		baseScore := baseValue * coef
 		item := domain.RenewalItem{
 			SN:                     srv.SN,
 			Bucket:                 bucket,
@@ -174,7 +178,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			ConfigType:             srv.ConfigType,
 			CPULogicalCores:        cores,
 			StorageCapacityTB:      pkg.StorageCapacityTB,
-			PSA:                    psaValue,
+			PSA:                    baseValue,
 			ArchStandardizedFactor: coef,
 			BaseScore:              baseScore,
 			FinalScore:             baseScore,
@@ -439,14 +443,14 @@ func maxFloat(a, b float64) float64 {
 	return b
 }
 
-func parsePSAValue(raw string) float64 {
+func parsePSAValue(raw string) (float64, bool) {
 	v := strings.TrimSpace(raw)
 	if v == "" {
-		return 0
+		return 0, false
 	}
 	f, err := strconv.ParseFloat(v, 64)
 	if err != nil {
-		return 0
+		return 0, false
 	}
-	return f
+	return f, true
 }

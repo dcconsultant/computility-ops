@@ -42,6 +42,7 @@ export interface HostPackageConfig {
   data_disk_type?: string;
   data_disk_count?: number;
   storage_capacity_tb?: number;
+  server_value_score?: number;
   arch_standardized_factor: number;
 }
 

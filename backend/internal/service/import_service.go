@@ -146,6 +146,9 @@ var hostPackageHeaderMap = map[string]string{
 	"存储容量(tb)":               "storage_capacity_tb",
 	"存储容量":                   "storage_capacity_tb",
 	"storagecapacitytb":      "storage_capacity_tb",
+	"服务器价值分":                 "server_value_score",
+	"价值分":                    "server_value_score",
+	"servervaluescore":       "server_value_score",
 	"架构标准化系数":                "arch_standardized_factor",
 	"archstandardizedfactor": "arch_standardized_factor",
 }
@@ -191,6 +194,13 @@ func validateHostPackageRow(raw map[string]string) (domain.HostPackageConfig, er
 			return domain.HostPackageConfig{}, fmt.Errorf("架构标准化系数 必须是数字")
 		}
 	}
+	serverValueScore := 0.0
+	if v := get("server_value_score"); v != "" {
+		serverValueScore, err = strconv.ParseFloat(v, 64)
+		if err != nil {
+			return domain.HostPackageConfig{}, fmt.Errorf("服务器价值分 必须是数字")
+		}
+	}
 	storage := 0.0
 	if v := get("storage_capacity_tb"); v != "" {
 		storage, err = strconv.ParseFloat(v, 64)
@@ -205,7 +215,7 @@ func validateHostPackageRow(raw map[string]string) (domain.HostPackageConfig, er
 			return domain.HostPackageConfig{}, fmt.Errorf("数据盘数量 必须是大于等于0的整数")
 		}
 	}
-	return domain.HostPackageConfig{ConfigType: cfg, SceneCategory: get("scene_category"), CPULogicalCores: cores, DataDiskType: get("data_disk_type"), DataDiskCount: dataDiskCount, StorageCapacityTB: storage, ArchStandardizedFactor: coef}, nil
+	return domain.HostPackageConfig{ConfigType: cfg, SceneCategory: get("scene_category"), CPULogicalCores: cores, DataDiskType: get("data_disk_type"), DataDiskCount: dataDiskCount, StorageCapacityTB: storage, ServerValueScore: serverValueScore, ArchStandardizedFactor: coef}, nil
 }
 
 var specialHeaderMap = map[string]string{

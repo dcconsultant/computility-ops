@@ -19,6 +19,7 @@ type HostPackageConfig struct {
 	DataDiskType           string  `json:"data_disk_type,omitempty"`
 	DataDiskCount          int     `json:"data_disk_count,omitempty"`
 	StorageCapacityTB      float64 `json:"storage_capacity_tb,omitempty"`
+	ServerValueScore       float64 `json:"server_value_score,omitempty"`
 	ArchStandardizedFactor float64 `json:"arch_standardized_factor"`
 }
 
