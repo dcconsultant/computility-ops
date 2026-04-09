@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"computility-ops/backend/internal/domain"
 	"computility-ops/backend/internal/repository"
@@ -289,13 +290,16 @@ func normalizeSpecialPolicy(v string) string {
 }
 
 var modelFailureHeaderMap = map[string]string{
-	"厂商":           "manufacturer",
-	"制造商":          "manufacturer",
-	"manufacturer": "manufacturer",
-	"型号":           "model",
-	"model":        "model",
-	"故障率":          "failure_rate",
-	"failurerate":  "failure_rate",
+	"厂商":                      "manufacturer",
+	"制造商":                     "manufacturer",
+	"manufacturer":            "manufacturer",
+	"型号":                      "model",
+	"服务器型号":                   "model",
+	"model":                   "model",
+	"故障率":                     "failure_rate",
+	"failurerate":             "failure_rate",
+	"过保故障率":                   "over_warranty_failure_rate",
+	"overwarrantyfailurerate": "over_warranty_failure_rate",
 }
 
 func (s *ImportService) ValidateAndReplaceModelFailureRates(ctx context.Context, rows []map[string]string) (ImportResult, error) {
@@ -333,15 +337,24 @@ func validateModelFailureRow(raw map[string]string) (domain.ModelFailureRate, er
 	if err != nil {
 		return domain.ModelFailureRate{}, fmt.Errorf("故障率必须是数字")
 	}
-	return domain.ModelFailureRate{Manufacturer: m, Model: model, FailureRate: rate}, nil
+	overRate := 0.0
+	if v := get("over_warranty_failure_rate"); v != "" {
+		overRate, err = strconv.ParseFloat(v, 64)
+		if err != nil {
+			return domain.ModelFailureRate{}, fmt.Errorf("过保故障率必须是数字")
+		}
+	}
+	return domain.ModelFailureRate{Manufacturer: m, Model: model, FailureRate: rate, OverWarrantyFailureRate: overRate}, nil
 }
 
 var packageFailureHeaderMap = map[string]string{
-	"配置类型":        "config_type",
-	"套餐":          "config_type",
-	"configtype":  "config_type",
-	"故障率":         "failure_rate",
-	"failurerate": "failure_rate",
+	"配置类型":                    "config_type",
+	"套餐":                      "config_type",
+	"configtype":              "config_type",
+	"故障率":                     "failure_rate",
+	"failurerate":             "failure_rate",
+	"过保故障率":                   "over_warranty_failure_rate",
+	"overwarrantyfailurerate": "over_warranty_failure_rate",
 }
 
 func (s *ImportService) ValidateAndReplacePackageFailureRates(ctx context.Context, rows []map[string]string) (ImportResult, error) {
@@ -378,20 +391,30 @@ func validatePackageFailureRow(raw map[string]string) (domain.PackageFailureRate
 	if err != nil {
 		return domain.PackageFailureRate{}, fmt.Errorf("故障率必须是数字")
 	}
-	return domain.PackageFailureRate{ConfigType: cfg, FailureRate: rate}, nil
+	overRate := 0.0
+	if v := get("over_warranty_failure_rate"); v != "" {
+		overRate, err = strconv.ParseFloat(v, 64)
+		if err != nil {
+			return domain.PackageFailureRate{}, fmt.Errorf("过保故障率必须是数字")
+		}
+	}
+	return domain.PackageFailureRate{ConfigType: cfg, FailureRate: rate, OverWarrantyFailureRate: overRate}, nil
 }
 
 var packageModelFailureHeaderMap = map[string]string{
-	"套餐":           "config_type",
-	"配置类型":         "config_type",
-	"configtype":   "config_type",
-	"厂商":           "manufacturer",
-	"制造商":          "manufacturer",
-	"manufacturer": "manufacturer",
-	"型号":           "model",
-	"model":        "model",
-	"故障率":          "failure_rate",
-	"failurerate":  "failure_rate",
+	"套餐":                      "config_type",
+	"配置类型":                    "config_type",
+	"configtype":              "config_type",
+	"厂商":                      "manufacturer",
+	"制造商":                     "manufacturer",
+	"manufacturer":            "manufacturer",
+	"型号":                      "model",
+	"服务器型号":                   "model",
+	"model":                   "model",
+	"故障率":                     "failure_rate",
+	"failurerate":             "failure_rate",
+	"过保故障率":                   "over_warranty_failure_rate",
+	"overwarrantyfailurerate": "over_warranty_failure_rate",
 }
 
 func (s *ImportService) ValidateAndReplacePackageModelFailureRates(ctx context.Context, rows []map[string]string) (ImportResult, error) {
@@ -428,7 +451,14 @@ func validatePackageModelFailureRow(raw map[string]string) (domain.PackageModelF
 	if err != nil {
 		return domain.PackageModelFailureRate{}, fmt.Errorf("故障率必须是数字")
 	}
-	return domain.PackageModelFailureRate{ConfigType: cfg, Manufacturer: m, Model: model, FailureRate: rate}, nil
+	overRate := 0.0
+	if v := get("over_warranty_failure_rate"); v != "" {
+		overRate, err = strconv.ParseFloat(v, 64)
+		if err != nil {
+			return domain.PackageModelFailureRate{}, fmt.Errorf("过保故障率必须是数字")
+		}
+	}
+	return domain.PackageModelFailureRate{ConfigType: cfg, Manufacturer: m, Model: model, FailureRate: rate, OverWarrantyFailureRate: overRate}, nil
 }
 
 type FaultAnalysisResult struct {
@@ -489,49 +519,102 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		pkgMap[strings.TrimSpace(p.ConfigType)] = p
 	}
 
-	faultCountBySN := map[string]float64{}
+	type faultEvent struct {
+		createdAt *time.Time
+	}
+	faultEventsBySN := map[string][]faultEvent{}
 	totalFaultRows := 0
 	matchedFaultRows := 0
 	for _, raw := range rows {
 		totalFaultRows++
 		sn := strings.TrimSpace(raw["sn"])
-		if sn == "" || !isTrueFault(raw["real_fault"]) {
+		if sn == "" {
 			continue
 		}
-		faultCountBySN[sn] += 1
 		matchedFaultRows++
+		var createdAtPtr *time.Time
+		if ts, ok := parseFlexibleDateTime(raw["created_at"]); ok {
+			createdAtPtr = &ts
+		}
+		faultEventsBySN[sn] = append(faultEventsBySN[sn], faultEvent{createdAt: createdAtPtr})
 	}
 
 	modelNum := map[string]float64{}
 	modelDen := map[string]float64{}
+	modelOverNum := map[string]float64{}
+	modelOverDen := map[string]float64{}
+
 	pkgNum := map[string]float64{}
 	pkgDen := map[string]float64{}
+	pkgOverNum := map[string]float64{}
+	pkgOverDen := map[string]float64{}
+
 	pkgModelNum := map[string]float64{}
 	pkgModelDen := map[string]float64{}
+	pkgModelOverNum := map[string]float64{}
+	pkgModelOverDen := map[string]float64{}
 
+	now := time.Now()
 	for _, srv := range servers {
 		pkg, ok := pkgMap[strings.TrimSpace(srv.ConfigType)]
 		if !ok {
 			continue
 		}
+		launchAt, ok := parseFlexibleDate(srv.LaunchDate)
+		if !ok {
+			continue
+		}
+
 		bucket := normalizeBucket(pkg.SceneCategory)
 		weight := 1.0
 		if bucket == "warm_storage" || bucket == "hot_storage" {
 			weight = 1 + float64(pkg.DataDiskCount)
 		}
 
+		years := yearsBetween(launchAt, now)
+		if years <= 0 {
+			continue
+		}
+		overStart := launchAt.AddDate(5, 0, 0)
+		overYears := yearsBetween(overStart, now)
+
 		modelKey := strings.Join([]string{strings.TrimSpace(srv.Manufacturer), strings.TrimSpace(srv.Model)}, "|")
 		pkgKey := strings.TrimSpace(srv.ConfigType)
 		pkgModelKey := strings.Join([]string{pkgKey, strings.TrimSpace(srv.Manufacturer), strings.TrimSpace(srv.Model)}, "|")
 
-		modelDen[modelKey] += weight
-		pkgDen[pkgKey] += weight
-		pkgModelDen[pkgModelKey] += weight
+		weightedYears := weight * years
+		modelDen[modelKey] += weightedYears
+		pkgDen[pkgKey] += weightedYears
+		pkgModelDen[pkgModelKey] += weightedYears
 
-		faultN := faultCountBySN[srv.SN]
-		modelNum[modelKey] += faultN
-		pkgNum[pkgKey] += faultN
-		pkgModelNum[pkgModelKey] += faultN
+		if overYears > 0 {
+			weightedOverYears := weight * overYears
+			modelOverDen[modelKey] += weightedOverYears
+			pkgOverDen[pkgKey] += weightedOverYears
+			pkgModelOverDen[pkgModelKey] += weightedOverYears
+		}
+
+		events := faultEventsBySN[srv.SN]
+		totalFaultN := float64(len(events))
+		overFaultN := 0.0
+		if overYears > 0 {
+			for _, ev := range events {
+				if ev.createdAt == nil {
+					continue
+				}
+				if !ev.createdAt.Before(overStart) && !ev.createdAt.After(now) {
+					overFaultN += 1
+				}
+			}
+		}
+
+		modelNum[modelKey] += totalFaultN
+		pkgNum[pkgKey] += totalFaultN
+		pkgModelNum[pkgModelKey] += totalFaultN
+
+		modelOverNum[modelKey] += overFaultN
+		pkgOverNum[pkgKey] += overFaultN
+		pkgModelOverNum[pkgModelKey] += overFaultN
 	}
 
 	modelRates := make([]domain.ModelFailureRate, 0, len(modelDen))
@@ -543,10 +626,15 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		if len(parts) != 2 {
 			continue
 		}
+		overRate := 0.0
+		if modelOverDen[k] > 0 {
+			overRate = modelOverNum[k] / modelOverDen[k]
+		}
 		modelRates = append(modelRates, domain.ModelFailureRate{
-			Manufacturer: parts[0],
-			Model:        parts[1],
-			FailureRate:  modelNum[k] / den,
+			Manufacturer:            parts[0],
+			Model:                   parts[1],
+			FailureRate:             modelNum[k] / den,
+			OverWarrantyFailureRate: overRate,
 		})
 	}
 
@@ -555,9 +643,14 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		if den <= 0 {
 			continue
 		}
+		overRate := 0.0
+		if pkgOverDen[k] > 0 {
+			overRate = pkgOverNum[k] / pkgOverDen[k]
+		}
 		packageRates = append(packageRates, domain.PackageFailureRate{
-			ConfigType:  k,
-			FailureRate: pkgNum[k] / den,
+			ConfigType:              k,
+			FailureRate:             pkgNum[k] / den,
+			OverWarrantyFailureRate: overRate,
 		})
 	}
 
@@ -570,11 +663,16 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		if len(parts) != 3 {
 			continue
 		}
+		overRate := 0.0
+		if pkgModelOverDen[k] > 0 {
+			overRate = pkgModelOverNum[k] / pkgModelOverDen[k]
+		}
 		packageModelRates = append(packageModelRates, domain.PackageModelFailureRate{
-			ConfigType:   parts[0],
-			Manufacturer: parts[1],
-			Model:        parts[2],
-			FailureRate:  pkgModelNum[k] / den,
+			ConfigType:              parts[0],
+			Manufacturer:            parts[1],
+			Model:                   parts[2],
+			FailureRate:             pkgModelNum[k] / den,
+			OverWarrantyFailureRate: overRate,
 		})
 	}
 
@@ -597,14 +695,47 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 	}, nil
 }
 
-func isTrueFault(v string) bool {
-	n := strings.ToLower(strings.TrimSpace(v))
-	switch n {
-	case "是", "true", "yes", "y", "1", "真实", "真实故障", "故障":
-		return true
-	default:
-		return false
+func parseFlexibleDate(raw string) (time.Time, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, false
 	}
+	layouts := []string{"2006-01-02", "2006/01/02", "2006/1/2", "2006-1-2", "20060102"}
+	for _, layout := range layouts {
+		if t, err := time.ParseInLocation(layout, raw, time.Local); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+func parseFlexibleDateTime(raw string) (time.Time, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, false
+	}
+	layouts := []string{
+		time.RFC3339,
+		"2006-01-02 15:04:05",
+		"2006/01/02 15:04:05",
+		"2006-01-02 15:04",
+		"2006/01/02 15:04",
+		"2006-01-02",
+		"2006/01/02",
+	}
+	for _, layout := range layouts {
+		if t, err := time.ParseInLocation(layout, raw, time.Local); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+func yearsBetween(start, end time.Time) float64 {
+	if !end.After(start) {
+		return 0
+	}
+	return end.Sub(start).Hours() / 24 / 365
 }
 
 func MapHeaders(headers []string, headerMap map[string]string) []string {

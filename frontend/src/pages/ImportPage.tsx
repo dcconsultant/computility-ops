@@ -218,17 +218,19 @@ export default function ImportPage() {
                     label: '型号故障率',
                     children: tableCard('型号故障率表', 'failure_model', <Table rowKey={(r) => `${r.manufacturer}-${r.model}`} dataSource={fm} pagination={{ pageSize: 10 }} columns={[
                       { title: '厂商', dataIndex: 'manufacturer' },
-                      { title: '型号', dataIndex: 'model' },
-                      { title: '故障率', dataIndex: 'failure_rate' }
-                    ]} />, '本版本暂不参与续保算法，仅提供统一入口维护。')
+                      { title: '服务器型号', dataIndex: 'model' },
+                      { title: '年化故障率', dataIndex: 'failure_rate' },
+                      { title: '过保故障率(参考)', dataIndex: 'over_warranty_failure_rate' }
+                    ]} />, '故障率为年化值；过保故障率按投产满5年至今区间统计，仅供参考。')
                   },
                   {
                     key: 'fp',
                     label: '套餐故障率',
                     children: tableCard('套餐故障率表', 'failure_package', <Table rowKey="config_type" dataSource={fp} pagination={{ pageSize: 10 }} columns={[
                       { title: '配置类型', dataIndex: 'config_type' },
-                      { title: '故障率', dataIndex: 'failure_rate' }
-                    ]} />, '本版本暂不参与续保算法，仅提供统一入口维护。')
+                      { title: '年化故障率', dataIndex: 'failure_rate' },
+                      { title: '过保故障率(参考)', dataIndex: 'over_warranty_failure_rate' }
+                    ]} />, '故障率为年化值；过保故障率按投产满5年至今区间统计，仅供参考。')
                   },
                   {
                     key: 'fpm',
@@ -236,9 +238,10 @@ export default function ImportPage() {
                     children: tableCard('套餐型号故障率表', 'failure_pkg_model', <Table rowKey={(r) => `${r.config_type}-${r.manufacturer}-${r.model}`} dataSource={fpm} pagination={{ pageSize: 10 }} columns={[
                       { title: '套餐', dataIndex: 'config_type' },
                       { title: '厂商', dataIndex: 'manufacturer' },
-                      { title: '型号', dataIndex: 'model' },
-                      { title: '故障率', dataIndex: 'failure_rate' }
-                    ]} />, '本版本暂不参与续保算法，仅提供统一入口维护。')
+                      { title: '服务器型号', dataIndex: 'model' },
+                      { title: '年化故障率', dataIndex: 'failure_rate' },
+                      { title: '过保故障率(参考)', dataIndex: 'over_warranty_failure_rate' }
+                    ]} />, '故障率为年化值；过保故障率按投产满5年至今区间统计，仅供参考。')
                   },
                   {
                     key: 'fa',

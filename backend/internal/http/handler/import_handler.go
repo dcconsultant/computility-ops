@@ -196,7 +196,7 @@ func (h *ImportHandler) AnalyzeFaultRates(c *gin.Context) {
 		return
 	}
 	headers = service.MapHeaders(headers, serviceFaultListHeaderMap())
-	if err := service.ValidateRequiredHeaders(headers, "sn", "real_fault"); err != nil {
+	if err := service.ValidateRequiredHeaders(headers, "sn"); err != nil {
 		fail(c, 40004, err.Error())
 		return
 	}
@@ -269,13 +269,13 @@ func serviceSpecialHeaderMap() map[string]string {
 	return map[string]string{"sn": "sn", "序列号": "sn", "制造商": "manufacturer", "厂商": "manufacturer", "manufacturer": "manufacturer", "型号": "model", "model": "model", "psa": "psa", "机房": "idc", "idc": "idc", "套餐": "package_type", "配置类型": "package_type", "保修结束日期": "warranty_end_date", "投产日期": "launch_date", "策略": "policy", "标签": "policy", "黑白": "policy"}
 }
 func serviceModelFailureHeaderMap() map[string]string {
-	return map[string]string{"厂商": "manufacturer", "制造商": "manufacturer", "manufacturer": "manufacturer", "型号": "model", "model": "model", "故障率": "failure_rate", "failurerate": "failure_rate"}
+	return map[string]string{"厂商": "manufacturer", "制造商": "manufacturer", "manufacturer": "manufacturer", "型号": "model", "服务器型号": "model", "model": "model", "故障率": "failure_rate", "failurerate": "failure_rate", "过保故障率": "over_warranty_failure_rate", "overwarrantyfailurerate": "over_warranty_failure_rate"}
 }
 func servicePackageFailureHeaderMap() map[string]string {
-	return map[string]string{"配置类型": "config_type", "套餐": "config_type", "configtype": "config_type", "故障率": "failure_rate", "failurerate": "failure_rate"}
+	return map[string]string{"配置类型": "config_type", "套餐": "config_type", "configtype": "config_type", "故障率": "failure_rate", "failurerate": "failure_rate", "过保故障率": "over_warranty_failure_rate", "overwarrantyfailurerate": "over_warranty_failure_rate"}
 }
 func servicePackageModelFailureHeaderMap() map[string]string {
-	return map[string]string{"套餐": "config_type", "配置类型": "config_type", "configtype": "config_type", "厂商": "manufacturer", "制造商": "manufacturer", "manufacturer": "manufacturer", "型号": "model", "model": "model", "故障率": "failure_rate", "failurerate": "failure_rate"}
+	return map[string]string{"套餐": "config_type", "配置类型": "config_type", "configtype": "config_type", "厂商": "manufacturer", "制造商": "manufacturer", "manufacturer": "manufacturer", "型号": "model", "服务器型号": "model", "model": "model", "故障率": "failure_rate", "failurerate": "failure_rate", "过保故障率": "over_warranty_failure_rate", "overwarrantyfailurerate": "over_warranty_failure_rate"}
 }
 func serviceFaultListHeaderMap() map[string]string {
 	return map[string]string{"类型": "type", "主机名": "hostname", "业务": "business", "机房": "idc", "机柜": "rack", "厂商": "manufacturer", "制造商": "manufacturer", "型号": "model", "sn": "sn", "序列号": "sn", "ip": "ip", "ipmi": "ipmi", "过保日期": "warranty_end_date", "上报故障": "reported_fault", "故障描述": "fault_desc", "故障来源": "fault_source", "业务对接人": "business_owner", "处理环节": "process_stage", "工单状态": "ticket_status", "真实故障": "real_fault", "创建时间": "created_at", "提单人": "creator", "更新时间": "updated_at", "结束时间": "ended_at", "工单链接": "ticket_link", "日志链接": "log_link"}

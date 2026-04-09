@@ -36,19 +36,22 @@ type SpecialRule struct {
 }
 
 type ModelFailureRate struct {
-	Manufacturer string  `json:"manufacturer"`
-	Model        string  `json:"model"`
-	FailureRate  float64 `json:"failure_rate"`
+	Manufacturer            string  `json:"manufacturer"`
+	Model                   string  `json:"model"`
+	FailureRate             float64 `json:"failure_rate"`
+	OverWarrantyFailureRate float64 `json:"over_warranty_failure_rate,omitempty"`
 }
 
 type PackageFailureRate struct {
-	ConfigType  string  `json:"config_type"`
-	FailureRate float64 `json:"failure_rate"`
+	ConfigType              string  `json:"config_type"`
+	FailureRate             float64 `json:"failure_rate"`
+	OverWarrantyFailureRate float64 `json:"over_warranty_failure_rate,omitempty"`
 }
 
 type PackageModelFailureRate struct {
-	ConfigType   string  `json:"config_type"`
-	Manufacturer string  `json:"manufacturer"`
-	Model        string  `json:"model"`
-	FailureRate  float64 `json:"failure_rate"`
+	ConfigType              string  `json:"config_type"`
+	Manufacturer            string  `json:"manufacturer"`
+	Model                   string  `json:"model"`
+	FailureRate             float64 `json:"failure_rate"`
+	OverWarrantyFailureRate float64 `json:"over_warranty_failure_rate,omitempty"`
 }

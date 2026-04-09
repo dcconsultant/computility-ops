@@ -62,11 +62,13 @@ export interface ModelFailureRate {
   manufacturer: string;
   model: string;
   failure_rate: number;
+  over_warranty_failure_rate?: number;
 }
 
 export interface PackageFailureRate {
   config_type: string;
   failure_rate: number;
+  over_warranty_failure_rate?: number;
 }
 
 export interface PackageModelFailureRate {
@@ -74,6 +76,7 @@ export interface PackageModelFailureRate {
   manufacturer: string;
   model: string;
   failure_rate: number;
+  over_warranty_failure_rate?: number;
 }
 
 export interface FaultAnalysisResult {
