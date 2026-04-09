@@ -39,7 +39,8 @@ export interface HostPackageConfig {
   config_type: string;
   scene_category?: string;
   cpu_logical_cores: number;
-  disk_type?: string;
+  data_disk_type?: string;
+  data_disk_count?: number;
   storage_capacity_tb?: number;
   arch_standardized_factor: number;
 }
@@ -72,6 +73,14 @@ export interface PackageModelFailureRate {
   manufacturer: string;
   model: string;
   failure_rate: number;
+}
+
+export interface FaultAnalysisResult {
+  total_fault_rows: number;
+  matched_fault_rows: number;
+  generated_model_rates: number;
+  generated_package_rates: number;
+  generated_package_model_rates: number;
 }
 
 export interface PlanItem {

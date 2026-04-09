@@ -16,7 +16,8 @@ type HostPackageConfig struct {
 	ConfigType             string  `json:"config_type"`
 	SceneCategory          string  `json:"scene_category,omitempty"`
 	CPULogicalCores        int     `json:"cpu_logical_cores"`
-	DiskType               string  `json:"disk_type,omitempty"`
+	DataDiskType           string  `json:"data_disk_type,omitempty"`
+	DataDiskCount          int     `json:"data_disk_count,omitempty"`
 	StorageCapacityTB      float64 `json:"storage_capacity_tb,omitempty"`
 	ArchStandardizedFactor float64 `json:"arch_standardized_factor"`
 }

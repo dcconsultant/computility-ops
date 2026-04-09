@@ -5,6 +5,7 @@ import type {
   ImportResult,
   ListData,
   ModelFailureRate,
+  FaultAnalysisResult,
   PackageFailureRate,
   PackageModelFailureRate,
   RenewalPlan,
@@ -68,6 +69,17 @@ export async function importPackageModelFailureRates(file: File) {
 }
 export async function listPackageModelFailureRates() {
   const { data } = await http.get<ApiResp<ListData<PackageModelFailureRate>>>('/failure-rates/package-model');
+  return data;
+}
+
+export async function analyzeFaultRates(file: File) {
+  const { data } = await http.post<ApiResp<FaultAnalysisResult>>('/failure-rates/analyze/import', (() => {
+    const form = new FormData();
+    form.append('file', file);
+    return form;
+  })(), {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
   return data;
 }
 

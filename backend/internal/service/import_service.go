@@ -139,8 +139,13 @@ var hostPackageHeaderMap = map[string]string{
 	"scenecategory":          "scene_category",
 	"cpu逻辑核数":                "cpu_logical_cores",
 	"cpulogicalcores":        "cpu_logical_cores",
-	"磁盘类型":                   "disk_type",
-	"disktype":               "disk_type",
+	"数据盘类型":                  "data_disk_type",
+	"数据盘种类":                  "data_disk_type",
+	"datadisktype":           "data_disk_type",
+	"磁盘类型":                   "data_disk_type",
+	"disktype":               "data_disk_type",
+	"数据盘数量":                  "data_disk_count",
+	"datadiskcount":          "data_disk_count",
 	"存储容量(tb)":               "storage_capacity_tb",
 	"存储容量":                   "storage_capacity_tb",
 	"storagecapacitytb":      "storage_capacity_tb",
@@ -196,7 +201,14 @@ func validateHostPackageRow(raw map[string]string) (domain.HostPackageConfig, er
 			return domain.HostPackageConfig{}, fmt.Errorf("存储容量(TB) 必须是数字")
 		}
 	}
-	return domain.HostPackageConfig{ConfigType: cfg, SceneCategory: get("scene_category"), CPULogicalCores: cores, DiskType: get("disk_type"), StorageCapacityTB: storage, ArchStandardizedFactor: coef}, nil
+	dataDiskCount := 0
+	if v := get("data_disk_count"); v != "" {
+		dataDiskCount, err = strconv.Atoi(v)
+		if err != nil || dataDiskCount < 0 {
+			return domain.HostPackageConfig{}, fmt.Errorf("数据盘数量 必须是大于等于0的整数")
+		}
+	}
+	return domain.HostPackageConfig{ConfigType: cfg, SceneCategory: get("scene_category"), CPULogicalCores: cores, DataDiskType: get("data_disk_type"), DataDiskCount: dataDiskCount, StorageCapacityTB: storage, ArchStandardizedFactor: coef}, nil
 }
 
 var specialHeaderMap = map[string]string{
@@ -409,6 +421,182 @@ func validatePackageModelFailureRow(raw map[string]string) (domain.PackageModelF
 		return domain.PackageModelFailureRate{}, fmt.Errorf("故障率必须是数字")
 	}
 	return domain.PackageModelFailureRate{ConfigType: cfg, Manufacturer: m, Model: model, FailureRate: rate}, nil
+}
+
+type FaultAnalysisResult struct {
+	TotalFaultRows             int `json:"total_fault_rows"`
+	MatchedFaultRows           int `json:"matched_fault_rows"`
+	GeneratedModelRates        int `json:"generated_model_rates"`
+	GeneratedPackageRates      int `json:"generated_package_rates"`
+	GeneratedPackageModelRates int `json:"generated_package_model_rates"`
+}
+
+var faultListHeaderMap = map[string]string{
+	"类型":    "type",
+	"主机名":   "hostname",
+	"业务":    "business",
+	"机房":    "idc",
+	"机柜":    "rack",
+	"厂商":    "manufacturer",
+	"制造商":   "manufacturer",
+	"型号":    "model",
+	"sn":    "sn",
+	"序列号":   "sn",
+	"ip":    "ip",
+	"ipmi":  "ipmi",
+	"过保日期":  "warranty_end_date",
+	"上报故障":  "reported_fault",
+	"故障描述":  "fault_desc",
+	"故障来源":  "fault_source",
+	"业务对接人": "business_owner",
+	"处理环节":  "process_stage",
+	"工单状态":  "ticket_status",
+	"真实故障":  "real_fault",
+	"创建时间":  "created_at",
+	"提单人":   "creator",
+	"更新时间":  "updated_at",
+	"结束时间":  "ended_at",
+	"工单链接":  "ticket_link",
+	"日志链接":  "log_link",
+}
+
+func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string]string) (FaultAnalysisResult, error) {
+	servers, err := s.serverRepo.List(ctx)
+	if err != nil {
+		return FaultAnalysisResult{}, err
+	}
+	if len(servers) == 0 {
+		return FaultAnalysisResult{}, fmt.Errorf("服务器管理表为空，无法分析")
+	}
+	packages, err := s.datasetRepo.ListHostPackages(ctx)
+	if err != nil {
+		return FaultAnalysisResult{}, err
+	}
+	if len(packages) == 0 {
+		return FaultAnalysisResult{}, fmt.Errorf("主机套餐配置表为空，无法分析")
+	}
+
+	pkgMap := map[string]domain.HostPackageConfig{}
+	for _, p := range packages {
+		pkgMap[strings.TrimSpace(p.ConfigType)] = p
+	}
+
+	faultCountBySN := map[string]float64{}
+	totalFaultRows := 0
+	matchedFaultRows := 0
+	for _, raw := range rows {
+		totalFaultRows++
+		sn := strings.TrimSpace(raw["sn"])
+		if sn == "" || !isTrueFault(raw["real_fault"]) {
+			continue
+		}
+		faultCountBySN[sn] += 1
+		matchedFaultRows++
+	}
+
+	modelNum := map[string]float64{}
+	modelDen := map[string]float64{}
+	pkgNum := map[string]float64{}
+	pkgDen := map[string]float64{}
+	pkgModelNum := map[string]float64{}
+	pkgModelDen := map[string]float64{}
+
+	for _, srv := range servers {
+		pkg, ok := pkgMap[strings.TrimSpace(srv.ConfigType)]
+		if !ok {
+			continue
+		}
+		bucket := normalizeBucket(pkg.SceneCategory)
+		weight := 1.0
+		if bucket == "warm_storage" || bucket == "hot_storage" {
+			weight = 1 + float64(pkg.DataDiskCount)
+		}
+
+		modelKey := strings.Join([]string{strings.TrimSpace(srv.Manufacturer), strings.TrimSpace(srv.Model)}, "|")
+		pkgKey := strings.TrimSpace(srv.ConfigType)
+		pkgModelKey := strings.Join([]string{pkgKey, strings.TrimSpace(srv.Manufacturer), strings.TrimSpace(srv.Model)}, "|")
+
+		modelDen[modelKey] += weight
+		pkgDen[pkgKey] += weight
+		pkgModelDen[pkgModelKey] += weight
+
+		faultN := faultCountBySN[srv.SN]
+		modelNum[modelKey] += faultN
+		pkgNum[pkgKey] += faultN
+		pkgModelNum[pkgModelKey] += faultN
+	}
+
+	modelRates := make([]domain.ModelFailureRate, 0, len(modelDen))
+	for k, den := range modelDen {
+		if den <= 0 {
+			continue
+		}
+		parts := strings.SplitN(k, "|", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		modelRates = append(modelRates, domain.ModelFailureRate{
+			Manufacturer: parts[0],
+			Model:        parts[1],
+			FailureRate:  modelNum[k] / den,
+		})
+	}
+
+	packageRates := make([]domain.PackageFailureRate, 0, len(pkgDen))
+	for k, den := range pkgDen {
+		if den <= 0 {
+			continue
+		}
+		packageRates = append(packageRates, domain.PackageFailureRate{
+			ConfigType:  k,
+			FailureRate: pkgNum[k] / den,
+		})
+	}
+
+	packageModelRates := make([]domain.PackageModelFailureRate, 0, len(pkgModelDen))
+	for k, den := range pkgModelDen {
+		if den <= 0 {
+			continue
+		}
+		parts := strings.SplitN(k, "|", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		packageModelRates = append(packageModelRates, domain.PackageModelFailureRate{
+			ConfigType:   parts[0],
+			Manufacturer: parts[1],
+			Model:        parts[2],
+			FailureRate:  pkgModelNum[k] / den,
+		})
+	}
+
+	if err := s.datasetRepo.ReplaceModelFailureRates(ctx, modelRates); err != nil {
+		return FaultAnalysisResult{}, err
+	}
+	if err := s.datasetRepo.ReplacePackageFailureRates(ctx, packageRates); err != nil {
+		return FaultAnalysisResult{}, err
+	}
+	if err := s.datasetRepo.ReplacePackageModelFailureRates(ctx, packageModelRates); err != nil {
+		return FaultAnalysisResult{}, err
+	}
+
+	return FaultAnalysisResult{
+		TotalFaultRows:             totalFaultRows,
+		MatchedFaultRows:           matchedFaultRows,
+		GeneratedModelRates:        len(modelRates),
+		GeneratedPackageRates:      len(packageRates),
+		GeneratedPackageModelRates: len(packageModelRates),
+	}, nil
+}
+
+func isTrueFault(v string) bool {
+	n := strings.ToLower(strings.TrimSpace(v))
+	switch n {
+	case "是", "true", "yes", "y", "1", "真实", "真实故障", "故障":
+		return true
+	default:
+		return false
+	}
 }
 
 func MapHeaders(headers []string, headerMap map[string]string) []string {

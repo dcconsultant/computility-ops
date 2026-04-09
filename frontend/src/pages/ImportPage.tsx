@@ -4,6 +4,7 @@ import { Alert, Button, Card, message, Space, Table, Tabs, Typography, Upload } 
 import type { UploadProps } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import {
+  analyzeFaultRates,
   importHostPackages,
   importModelFailureRates,
   importPackageFailureRates,
@@ -19,6 +20,7 @@ import {
 } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
 import type {
+  FaultAnalysisResult,
   HostPackageConfig,
   ImportResult,
   ModelFailureRate,
@@ -30,7 +32,7 @@ import type {
 
 const { Text } = Typography;
 
-type DataKey = 'servers' | 'packages' | 'special' | 'failure_model' | 'failure_package' | 'failure_pkg_model';
+type DataKey = 'servers' | 'packages' | 'special' | 'failure_model' | 'failure_package' | 'failure_pkg_model' | 'fault_analysis';
 
 const titles: Record<DataKey, string> = {
   servers: '服务器管理',
@@ -38,11 +40,13 @@ const titles: Record<DataKey, string> = {
   special: '特殊名单',
   failure_model: '型号故障率',
   failure_package: '套餐故障率',
-  failure_pkg_model: '套餐型号故障率'
+  failure_pkg_model: '套餐型号故障率',
+  fault_analysis: '故障清单分析'
 };
 
 export default function ImportPage() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<FaultAnalysisResult | null>(null);
   const [uploading, setUploading] = useState<DataKey | null>(null);
 
   const [servers, setServers] = useState<ServerItem[]>([]);
@@ -85,7 +89,7 @@ export default function ImportPage() {
       failure_model: importModelFailureRates,
       failure_package: importPackageFailureRates,
       failure_pkg_model: importPackageModelFailureRates
-    }[kind];
+    }[kind as Exclude<DataKey, 'fault_analysis'>];
 
     return {
       maxCount: 1,
@@ -95,10 +99,17 @@ export default function ImportPage() {
         const file = options.file as File;
         setUploading(kind);
         try {
-          const resp = ensureApiOk(await importer(file));
-          setImportResult(resp.data);
-          message.success(`${titles[kind]}导入完成：成功 ${resp.data.success} 条`);
-          await reloadAll();
+          if (kind === 'fault_analysis') {
+            const resp = ensureApiOk(await analyzeFaultRates(file));
+            setAnalysisResult(resp.data);
+            await reloadAll();
+            message.success(`故障分析完成：命中故障 ${resp.data.matched_fault_rows}/${resp.data.total_fault_rows} 条`);
+          } else {
+            const resp = ensureApiOk(await importer(file));
+            setImportResult(resp.data);
+            message.success(`${titles[kind]}导入完成：成功 ${resp.data.success} 条`);
+            await reloadAll();
+          }
           options.onSuccess?.({}, new XMLHttpRequest());
         } catch (e) {
           message.error(parseApiError(e, '导入失败'));
@@ -127,6 +138,15 @@ export default function ImportPage() {
           type={importResult.failed > 0 ? 'warning' : 'success'}
           message={`总计 ${importResult.total}，成功 ${importResult.success}，失败 ${importResult.failed}`}
           description={importResult.errors.length ? importResult.errors.slice(0, 5).map((e) => `第${e.row}行: ${e.reason}`).join('；') : undefined}
+        />
+      )}
+
+      {analysisResult && (
+        <Alert
+          showIcon
+          type="success"
+          message={`故障分析完成：故障清单 ${analysisResult.total_fault_rows} 行，命中真实故障 ${analysisResult.matched_fault_rows} 行`}
+          description={`生成故障率：型号 ${analysisResult.generated_model_rates} 条、套餐 ${analysisResult.generated_package_rates} 条、套餐型号 ${analysisResult.generated_package_model_rates} 条`}
         />
       )}
 
@@ -162,11 +182,12 @@ export default function ImportPage() {
                 { title: '配置类型', dataIndex: 'config_type' },
                 { title: '场景大类', dataIndex: 'scene_category' },
                 { title: 'CPU逻辑核数', dataIndex: 'cpu_logical_cores' },
-                { title: '磁盘类型', dataIndex: 'disk_type' },
+                { title: '数据盘类型', dataIndex: 'data_disk_type' },
+                { title: '数据盘数量', dataIndex: 'data_disk_count' },
                 { title: '存储容量(TB)', dataIndex: 'storage_capacity_tb' },
                 { title: '架构标准化系数', dataIndex: 'arch_standardized_factor' }
               ]} />,
-              '服务器管理表通过配置类型关联此表；排名按 PSA × 架构标准化系数。'
+              '服务器管理表通过配置类型关联此表；含数据盘类型/数量（温/热存储故障率分析会用到）。'
             )
           },
           {
@@ -217,6 +238,18 @@ export default function ImportPage() {
                       { title: '型号', dataIndex: 'model' },
                       { title: '故障率', dataIndex: 'failure_rate' }
                     ]} />, '本版本暂不参与续保算法，仅提供统一入口维护。')
+                  },
+                  {
+                    key: 'fa',
+                    label: '故障清单分析',
+                    children: (
+                      <Card title="上传故障清单并自动分析" extra={<Upload {...makeUploadProps('fault_analysis')}><Button icon={<UploadOutlined />} loading={uploading === 'fault_analysis'}>上传并分析</Button></Upload>}>
+                        <Text type="secondary">
+                          上传包含故障字段的清单后，系统会结合服务器管理表 + 主机套餐配置表自动重算型号/套餐/套餐型号故障率；
+                          其中温存储、热存储分母按「机器数量 + 数据盘数量」。
+                        </Text>
+                      </Card>
+                    )
                   }
                 ]}
               />
