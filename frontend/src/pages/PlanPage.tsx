@@ -104,7 +104,7 @@ export default function PlanPage() {
 
         <Text type="secondary">
           分类依据：主机套餐配置的“场景大类”；GPU 全部续保。温/热存储按容量规划，
-          故障率修正系数采用 exp(-(AFR_old/AFR_avg-1))。
+          评分按基础分直接除以套餐故障率（AFR_avg）。
         </Text>
       </Space>
     </Card>

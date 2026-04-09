@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -65,10 +64,6 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	if err != nil {
 		return domain.RenewalPlan{}, err
 	}
-	packageModelRates, err := s.datasetRepo.ListPackageModelFailureRates(ctx)
-	if err != nil {
-		return domain.RenewalPlan{}, err
-	}
 
 	excludedSet := make(map[string]bool)
 	excludedCanonical := make([]string, 0, len(in.ExcludedEnvironments))
@@ -94,12 +89,6 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	pkgAFRAvg := map[string]float64{}
 	for _, p := range packageRates {
 		pkgAFRAvg[strings.TrimSpace(p.ConfigType)] = p.FailureRate
-	}
-
-	pkgModelAFROld := map[string]float64{}
-	for _, p := range packageModelRates {
-		key := failureRateKey(p.ConfigType, p.Manufacturer, p.Model)
-		pkgModelAFROld[key] = p.FailureRate
 	}
 
 	specialMap := map[string]string{}
@@ -177,13 +166,10 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 
 		if bucket == "warm_storage" || bucket == "hot_storage" {
 			afrAvg := pkgAFRAvg[strings.TrimSpace(srv.ConfigType)]
-			afrOld := pkgModelAFROld[failureRateKey(srv.ConfigType, srv.Manufacturer, srv.Model)]
-			if afrAvg > 0 && afrOld > 0 {
-				factor := math.Exp(-(afrOld/afrAvg - 1))
+			if afrAvg > 0 {
 				item.AFRAvg = afrAvg
-				item.AFROld = afrOld
-				item.FailureAdjustFactor = factor
-				item.FinalScore = baseScore * factor
+				item.FailureAdjustFactor = 1 / afrAvg
+				item.FinalScore = baseScore / afrAvg
 			}
 		}
 
