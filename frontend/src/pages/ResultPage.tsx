@@ -143,6 +143,10 @@ export default function ResultPage() {
             <Text type="secondary">
               排除PSA：{(plan.excluded_psas || []).join('、') || '无'}
             </Text>
+            <Text type="secondary">
+              未匹配配置类型：{plan.unmatched_config_count || 0} 个
+              {(plan.unmatched_config_types || []).length > 0 ? `（${(plan.unmatched_config_types || []).join('、')}）` : ''}
+            </Text>
           </Space>
 
           <Input.Search

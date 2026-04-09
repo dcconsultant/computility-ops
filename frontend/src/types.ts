@@ -135,6 +135,8 @@ export interface RenewalPlan {
   required_compute_cores?: number;
   required_warm_storage_tb?: number;
   required_hot_storage_tb?: number;
+  unmatched_config_count?: number;
+  unmatched_config_types?: string[];
   selected_cores: number;
   selected_storage_tb?: number;
   selected_count: number;

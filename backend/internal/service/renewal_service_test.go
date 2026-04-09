@@ -99,6 +99,34 @@ func TestRenewalService_CreatePlan_ExcludePSA(t *testing.T) {
 	}
 }
 
+func TestRenewalService_CreatePlan_SkipUnmatchedConfigType(t *testing.T) {
+	ctx := context.Background()
+	serverRepo := mem.NewServerRepo()
+	datasetRepo := mem.NewDatasetRepo()
+	renewalRepo := mem.NewRenewalRepo()
+
+	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
+		{SN: "A", ConfigType: "known", PSA: "10", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+		{SN: "B", ConfigType: "unknown", PSA: "10", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+	})
+	_ = datasetRepo.ReplaceHostPackages(ctx, []domain.HostPackageConfig{{ConfigType: "known", SceneCategory: "计算型", CPULogicalCores: 8, ArchStandardizedFactor: 1}})
+
+	svc := NewRenewalService(serverRepo, datasetRepo, renewalRepo)
+	plan, err := svc.CreatePlan(ctx, CreatePlanInput{TargetDate: "2026-01-01", TargetCores: 8})
+	if err != nil {
+		t.Fatalf("CreatePlan() error = %v", err)
+	}
+	if plan.UnmatchedConfigCount != 1 {
+		t.Fatalf("UnmatchedConfigCount=%d, want 1", plan.UnmatchedConfigCount)
+	}
+	if len(plan.UnmatchedConfigTypes) != 1 || plan.UnmatchedConfigTypes[0] != "unknown" {
+		t.Fatalf("UnmatchedConfigTypes=%v, want [unknown]", plan.UnmatchedConfigTypes)
+	}
+	if len(plan.Items) != 1 || plan.Items[0].SN != "A" {
+		t.Fatalf("items=%+v, want only SN A", plan.Items)
+	}
+}
+
 func TestRenewalService_CreatePlan_InvalidTarget(t *testing.T) {
 	svc := NewRenewalService(mem.NewServerRepo(), mem.NewDatasetRepo(), mem.NewRenewalRepo())
 	_, err := svc.CreatePlan(context.Background(), CreatePlanInput{TargetDate: "2026-01-01", TargetCores: 0})

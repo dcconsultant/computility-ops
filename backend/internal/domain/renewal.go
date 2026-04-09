@@ -14,6 +14,8 @@ type RenewalPlan struct {
 	RequiredComputeCores int                  `json:"required_compute_cores,omitempty"`
 	RequiredWarmStorage  float64              `json:"required_warm_storage_tb,omitempty"`
 	RequiredHotStorage   float64              `json:"required_hot_storage_tb,omitempty"`
+	UnmatchedConfigCount int                  `json:"unmatched_config_count,omitempty"`
+	UnmatchedConfigTypes []string             `json:"unmatched_config_types,omitempty"`
 	SelectedCores        int                  `json:"selected_cores"`
 	SelectedStorageTB    float64              `json:"selected_storage_tb"`
 	SelectedCount        int                  `json:"selected_count"`

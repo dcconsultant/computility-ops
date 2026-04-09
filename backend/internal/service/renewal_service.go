@@ -117,6 +117,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		"hot_storage":  {},
 		"gpu":          {},
 	}
+	unmatchedConfigSet := map[string]bool{}
 	coveredComputeCores := 0
 	coveredWarmStorage := 0.0
 	coveredHotStorage := 0.0
@@ -138,7 +139,8 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 
 		pkg, ok := pkgMap[srv.ConfigType]
 		if !ok {
-			return domain.RenewalPlan{}, fmt.Errorf("missing package config for config_type=%s", srv.ConfigType)
+			unmatchedConfigSet[strings.TrimSpace(srv.ConfigType)] = true
+			continue
 		}
 		cores := pkg.CPULogicalCores
 		if cores <= 0 {
@@ -276,6 +278,15 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		gpuStorage += item.StorageCapacityTB
 	}
 
+	unmatchedConfigTypes := make([]string, 0, len(unmatchedConfigSet))
+	for cfg := range unmatchedConfigSet {
+		if strings.TrimSpace(cfg) == "" {
+			continue
+		}
+		unmatchedConfigTypes = append(unmatchedConfigTypes, cfg)
+	}
+	sort.Strings(unmatchedConfigTypes)
+
 	plan := domain.RenewalPlan{
 		PlanID:               strconv.FormatInt(time.Now().Unix(), 10),
 		TargetDate:           targetDate.Format("2006-01-02"),
@@ -290,6 +301,8 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		RequiredComputeCores: requiredComputeCores,
 		RequiredWarmStorage:  requiredWarmStorage,
 		RequiredHotStorage:   requiredHotStorage,
+		UnmatchedConfigCount: len(unmatchedConfigTypes),
+		UnmatchedConfigTypes: unmatchedConfigTypes,
 		Sections: []domain.RenewalPlanSection{
 			{
 				Bucket:        "compute",
