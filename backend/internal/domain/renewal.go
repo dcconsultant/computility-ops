@@ -4,6 +4,7 @@ type RenewalPlan struct {
 	PlanID               string               `json:"plan_id"`
 	TargetDate           string               `json:"target_date,omitempty"`
 	ExcludedEnvironments []string             `json:"excluded_environments,omitempty"`
+	ExcludedPSAs         []string             `json:"excluded_psas,omitempty"`
 	TargetCores          int                  `json:"target_cores"`
 	WarmTargetStorageTB  float64              `json:"warm_target_storage_tb"`
 	HotTargetStorageTB   float64              `json:"hot_target_storage_tb"`

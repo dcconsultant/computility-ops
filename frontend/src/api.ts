@@ -86,6 +86,7 @@ export async function analyzeFaultRates(file: File) {
 export interface CreatePlanPayload {
   target_date: string;
   excluded_environments: string[];
+  excluded_psas: string[];
   target_cores: number;
   warm_target_storage_tb: number;
   hot_target_storage_tb: number;

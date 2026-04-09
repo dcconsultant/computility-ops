@@ -136,9 +136,14 @@ export default function ResultPage() {
             <Statistic title="总入选台数" value={plan.selected_count} />
           </Space>
 
-          <Text type="secondary">
-            排除环境：{(plan.excluded_environments || []).join('、') || '无'}
-          </Text>
+          <Space direction="vertical" size={4}>
+            <Text type="secondary">
+              排除环境：{(plan.excluded_environments || []).join('、') || '无'}
+            </Text>
+            <Text type="secondary">
+              排除PSA：{(plan.excluded_psas || []).join('、') || '无'}
+            </Text>
+          </Space>
 
           <Input.Search
             allowClear

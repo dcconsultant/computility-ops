@@ -110,10 +110,7 @@ func validateServerRow(raw map[string]string) (domain.Server, error) {
 	if sn == "" {
 		return domain.Server{}, fmt.Errorf("SN 不能为空")
 	}
-	psa, err := strconv.ParseFloat(get("psa"), 64)
-	if err != nil {
-		return domain.Server{}, fmt.Errorf("PSA 必须是数字")
-	}
+	psa := get("psa")
 	cfg := get("config_type")
 	if cfg == "" {
 		return domain.Server{}, fmt.Errorf("配置类型 不能为空")

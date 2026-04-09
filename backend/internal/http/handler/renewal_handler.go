@@ -29,6 +29,7 @@ func (h *RenewalHandler) CreatePlan(c *gin.Context) {
 	plan, err := h.service.CreatePlan(c.Request.Context(), service.CreatePlanInput{
 		TargetDate:           req.TargetDate,
 		ExcludedEnvironments: req.ExcludedEnvironments,
+		ExcludedPSAs:         req.ExcludedPSAs,
 		TargetCores:          req.TargetCores,
 		WarmTargetStorageTB:  req.WarmTargetStorageTB,
 		HotTargetStorageTB:   req.HotTargetStorageTB,

@@ -27,7 +27,7 @@ export interface ServerItem {
   sn: string;
   manufacturer?: string;
   model?: string;
-  psa: number;
+  psa: string;
   idc?: string;
   environment?: string;
   config_type: string;
@@ -121,6 +121,7 @@ export interface RenewalPlan {
   plan_id: string;
   target_date?: string;
   excluded_environments?: string[];
+  excluded_psas?: string[];
   target_cores: number;
   warm_target_storage_tb?: number;
   hot_target_storage_tb?: number;

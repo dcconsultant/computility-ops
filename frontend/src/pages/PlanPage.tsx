@@ -10,6 +10,7 @@ const { Text } = Typography;
 export default function PlanPage() {
   const [targetDate, setTargetDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [excludeEnvs, setExcludeEnvs] = useState('开发,测试');
+  const [excludePSAs, setExcludePSAs] = useState('');
   const [targetCores, setTargetCores] = useState<number>(1200);
   const [warmTargetStorageTB, setWarmTargetStorageTB] = useState<number>(0);
   const [hotTargetStorageTB, setHotTargetStorageTB] = useState<number>(0);
@@ -36,9 +37,14 @@ export default function PlanPage() {
         .split(/[，,]/)
         .map((x) => x.trim())
         .filter(Boolean);
+      const excludedPSAList = excludePSAs
+        .split(/[，,]/)
+        .map((x) => x.trim())
+        .filter(Boolean);
       const resp = ensureApiOk(await createPlan({
         target_date: targetDate,
         excluded_environments: excluded,
+        excluded_psas: excludedPSAList,
         target_cores: targetCores,
         warm_target_storage_tb: warmTargetStorageTB,
         hot_target_storage_tb: hotTargetStorageTB
@@ -73,6 +79,17 @@ export default function PlanPage() {
             placeholder="开发,测试"
           />
           <Text type="secondary">多个环境用逗号分隔</Text>
+        </Space>
+
+        <Space wrap>
+          <Text>排除PSA</Text>
+          <Input
+            style={{ width: 320 }}
+            value={excludePSAs}
+            onChange={(e) => setExcludePSAs(e.target.value)}
+            placeholder="例如：A,B,C 或 10,20"
+          />
+          <Text type="secondary">排除的PSA不参与总量和续保清单统计</Text>
         </Space>
 
         <Space wrap>

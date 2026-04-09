@@ -15,6 +15,7 @@ import (
 type CreatePlanInput struct {
 	TargetDate           string
 	ExcludedEnvironments []string
+	ExcludedPSAs         []string
 	TargetCores          int
 	WarmTargetStorageTB  float64
 	HotTargetStorageTB   float64
@@ -81,6 +82,17 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		excludedSet[normalizeEnv("测试")] = true
 	}
 
+	excludedPSASet := make(map[string]bool)
+	excludedPSACanonical := make([]string, 0, len(in.ExcludedPSAs))
+	for _, psa := range in.ExcludedPSAs {
+		n := normalizeText(psa)
+		if n == "" || excludedPSASet[n] {
+			continue
+		}
+		excludedPSASet[n] = true
+		excludedPSACanonical = append(excludedPSACanonical, strings.TrimSpace(psa))
+	}
+
 	pkgMap := map[string]domain.HostPackageConfig{}
 	for _, p := range packages {
 		pkgMap[strings.TrimSpace(p.ConfigType)] = p
@@ -111,6 +123,9 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 
 	for _, srv := range servers {
 		if excludedSet[normalizeEnv(srv.Environment)] {
+			continue
+		}
+		if excludedPSASet[normalizeText(srv.PSA)] {
 			continue
 		}
 		if strings.TrimSpace(srv.WarrantyEndDate) == "" {
@@ -148,7 +163,8 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			continue
 		}
 
-		baseScore := srv.PSA * coef
+		psaValue := parsePSAValue(srv.PSA)
+		baseScore := psaValue * coef
 		item := domain.RenewalItem{
 			SN:                     srv.SN,
 			Bucket:                 bucket,
@@ -158,7 +174,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			ConfigType:             srv.ConfigType,
 			CPULogicalCores:        cores,
 			StorageCapacityTB:      pkg.StorageCapacityTB,
-			PSA:                    srv.PSA,
+			PSA:                    psaValue,
 			ArchStandardizedFactor: coef,
 			BaseScore:              baseScore,
 			FinalScore:             baseScore,
@@ -260,6 +276,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		PlanID:               strconv.FormatInt(time.Now().Unix(), 10),
 		TargetDate:           targetDate.Format("2006-01-02"),
 		ExcludedEnvironments: excludedCanonical,
+		ExcludedPSAs:         excludedPSACanonical,
 		TargetCores:          in.TargetCores,
 		WarmTargetStorageTB:  in.WarmTargetStorageTB,
 		HotTargetStorageTB:   in.HotTargetStorageTB,
@@ -420,4 +437,16 @@ func maxFloat(a, b float64) float64 {
 		return a
 	}
 	return b
+}
+
+func parsePSAValue(raw string) float64 {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return 0
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return 0
+	}
+	return f
 }

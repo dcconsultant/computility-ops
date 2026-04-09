@@ -16,9 +16,9 @@ func TestRenewalService_CreatePlan_SelectsWhitelistAndSortsByScore(t *testing.T)
 	renewalRepo := mem.NewRenewalRepo()
 
 	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
-		{SN: "A", ConfigType: "c1", PSA: 10, WarrantyEndDate: "2025-01-01", Environment: "生产"},
-		{SN: "B", ConfigType: "c1", PSA: 20, WarrantyEndDate: "2025-01-01", Environment: "生产"},
-		{SN: "C", ConfigType: "c1", PSA: 15, WarrantyEndDate: "2025-01-01", Environment: "生产"},
+		{SN: "A", ConfigType: "c1", PSA: "10", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+		{SN: "B", ConfigType: "c1", PSA: "20", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+		{SN: "C", ConfigType: "c1", PSA: "15", WarrantyEndDate: "2025-01-01", Environment: "生产"},
 	})
 	_ = datasetRepo.ReplaceHostPackages(ctx, []domain.HostPackageConfig{{ConfigType: "c1", SceneCategory: "计算型", CPULogicalCores: 8, ArchStandardizedFactor: 1}})
 	_ = datasetRepo.ReplaceSpecialRules(ctx, []domain.SpecialRule{{SN: "A", Policy: "whitelist"}, {SN: "C", Policy: "blacklist"}})
@@ -54,9 +54,9 @@ func TestRenewalService_CreatePlan_TargetIncludesUnexpiredButOutputExcludesUnexp
 	renewalRepo := mem.NewRenewalRepo()
 
 	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
-		{SN: "U1", ConfigType: "compute-a", PSA: 10, WarrantyEndDate: "2026-12-31", Environment: "生产"}, // 未过保，计入覆盖
-		{SN: "E1", ConfigType: "compute-a", PSA: 9, WarrantyEndDate: "2025-01-01", Environment: "生产"},  // 过保，候选
-		{SN: "E2", ConfigType: "compute-a", PSA: 8, WarrantyEndDate: "2025-01-01", Environment: "生产"},  // 过保，候选
+		{SN: "U1", ConfigType: "compute-a", PSA: "10", WarrantyEndDate: "2026-12-31", Environment: "生产"}, // 未过保，计入覆盖
+		{SN: "E1", ConfigType: "compute-a", PSA: "9", WarrantyEndDate: "2025-01-01", Environment: "生产"},  // 过保，候选
+		{SN: "E2", ConfigType: "compute-a", PSA: "8", WarrantyEndDate: "2025-01-01", Environment: "生产"},  // 过保，候选
 	})
 	_ = datasetRepo.ReplaceHostPackages(ctx, []domain.HostPackageConfig{{ConfigType: "compute-a", SceneCategory: "计算型", CPULogicalCores: 8, ArchStandardizedFactor: 1}})
 
@@ -74,6 +74,28 @@ func TestRenewalService_CreatePlan_TargetIncludesUnexpiredButOutputExcludesUnexp
 	}
 	if len(plan.Items) != 1 || plan.Items[0].SN != "E1" {
 		t.Fatalf("selected items=%+v, want only E1", plan.Items)
+	}
+}
+
+func TestRenewalService_CreatePlan_ExcludePSA(t *testing.T) {
+	ctx := context.Background()
+	serverRepo := mem.NewServerRepo()
+	datasetRepo := mem.NewDatasetRepo()
+	renewalRepo := mem.NewRenewalRepo()
+
+	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
+		{SN: "A", ConfigType: "c1", PSA: "P0", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+		{SN: "B", ConfigType: "c1", PSA: "20", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+	})
+	_ = datasetRepo.ReplaceHostPackages(ctx, []domain.HostPackageConfig{{ConfigType: "c1", SceneCategory: "计算型", CPULogicalCores: 8, ArchStandardizedFactor: 1}})
+
+	svc := NewRenewalService(serverRepo, datasetRepo, renewalRepo)
+	plan, err := svc.CreatePlan(ctx, CreatePlanInput{TargetDate: "2026-01-01", TargetCores: 8, ExcludedPSAs: []string{"P0"}})
+	if err != nil {
+		t.Fatalf("CreatePlan() error = %v", err)
+	}
+	if len(plan.Items) != 1 || plan.Items[0].SN != "B" {
+		t.Fatalf("exclude psa failed, items=%+v", plan.Items)
 	}
 }
 
