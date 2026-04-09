@@ -71,10 +71,16 @@ export async function listPackageModelFailureRates() {
   return data;
 }
 
-export async function createPlan(targetCores: number) {
-  const { data } = await http.post<ApiResp<RenewalPlan>>('/renewals/plan', {
-    target_cores: targetCores
-  });
+export interface CreatePlanPayload {
+  target_date: string;
+  excluded_environments: string[];
+  target_cores: number;
+  warm_target_storage_tb: number;
+  hot_target_storage_tb: number;
+}
+
+export async function createPlan(payload: CreatePlanPayload) {
+  const { data } = await http.post<ApiResp<RenewalPlan>>('/renewals/plan', payload);
   return data;
 }
 

@@ -6,6 +6,7 @@ type Server struct {
 	Model           string  `json:"model"`
 	PSA             float64 `json:"psa"`
 	IDC             string  `json:"idc,omitempty"`
+	Environment     string  `json:"environment,omitempty"`
 	ConfigType      string  `json:"config_type"`
 	WarrantyEndDate string  `json:"warranty_end_date,omitempty"`
 	LaunchDate      string  `json:"launch_date,omitempty"`

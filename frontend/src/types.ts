@@ -29,6 +29,7 @@ export interface ServerItem {
   model?: string;
   psa: number;
   idc?: string;
+  environment?: string;
   config_type: string;
   warranty_end_date?: string;
   launch_date?: string;
@@ -75,21 +76,44 @@ export interface PackageModelFailureRate {
 
 export interface PlanItem {
   rank: number;
+  bucket?: string;
   sn: string;
   manufacturer?: string;
   model?: string;
+  environment?: string;
   config_type: string;
   cpu_logical_cores: number;
+  storage_capacity_tb?: number;
   psa: number;
   arch_standardized_factor: number;
+  base_score?: number;
+  afr_old?: number;
+  afr_avg?: number;
+  failure_adjust_factor?: number;
   final_score: number;
   special_policy?: string;
 }
 
-export interface RenewalPlan {
-  plan_id: string;
-  target_cores: number;
-  selected_cores: number;
+export interface RenewalPlanSection {
+  bucket: 'compute' | 'warm_storage' | 'hot_storage' | 'gpu' | string;
+  target_cores?: number;
+  target_storage_tb?: number;
+  selected_cores?: number;
+  selected_storage_tb?: number;
   selected_count: number;
   items: PlanItem[];
+}
+
+export interface RenewalPlan {
+  plan_id: string;
+  target_date?: string;
+  excluded_environments?: string[];
+  target_cores: number;
+  warm_target_storage_tb?: number;
+  hot_target_storage_tb?: number;
+  selected_cores: number;
+  selected_storage_tb?: number;
+  selected_count: number;
+  items: PlanItem[];
+  sections?: RenewalPlanSection[];
 }

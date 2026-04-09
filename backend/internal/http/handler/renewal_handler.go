@@ -23,10 +23,16 @@ func (h *RenewalHandler) CreatePlan(c *gin.Context) {
 	c.Set("audit_action", "renewals.create_plan")
 	var req CreatePlanReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		fail(c, 40001, "请求参数无效，请检查 target_cores")
+		fail(c, 40001, "请求参数无效，请检查 target_date/target_cores/存储目标")
 		return
 	}
-	plan, err := h.service.CreatePlan(c.Request.Context(), req.TargetCores)
+	plan, err := h.service.CreatePlan(c.Request.Context(), service.CreatePlanInput{
+		TargetDate:           req.TargetDate,
+		ExcludedEnvironments: req.ExcludedEnvironments,
+		TargetCores:          req.TargetCores,
+		WarmTargetStorageTB:  req.WarmTargetStorageTB,
+		HotTargetStorageTB:   req.HotTargetStorageTB,
+	})
 	if err != nil {
 		fail(c, 40001, err.Error())
 		return
@@ -91,28 +97,35 @@ func (h *RenewalHandler) ExportPlan(c *gin.Context) {
 func buildCSV(plan domain.RenewalPlan) (*bytes.Buffer, error) {
 	buf := &bytes.Buffer{}
 	w := csv.NewWriter(buf)
-	if err := w.Write([]string{"plan_id", "target_cores", "selected_cores", "selected_count"}); err != nil {
+	if err := w.Write([]string{"plan_id", "target_date", "target_cores", "warm_target_storage_tb", "hot_target_storage_tb", "selected_cores", "selected_storage_tb", "selected_count"}); err != nil {
 		return nil, err
 	}
-	if err := w.Write([]string{plan.PlanID, fmt.Sprint(plan.TargetCores), fmt.Sprint(plan.SelectedCores), fmt.Sprint(plan.SelectedCount)}); err != nil {
+	if err := w.Write([]string{plan.PlanID, plan.TargetDate, fmt.Sprint(plan.TargetCores), fmt.Sprintf("%.4f", plan.WarmTargetStorageTB), fmt.Sprintf("%.4f", plan.HotTargetStorageTB), fmt.Sprint(plan.SelectedCores), fmt.Sprintf("%.4f", plan.SelectedStorageTB), fmt.Sprint(plan.SelectedCount)}); err != nil {
 		return nil, err
 	}
 	if err := w.Write([]string{}); err != nil {
 		return nil, err
 	}
-	if err := w.Write([]string{"rank", "sn", "manufacturer", "model", "config_type", "cpu_logical_cores", "psa", "arch_standardized_factor", "final_score", "special_policy"}); err != nil {
+	if err := w.Write([]string{"rank", "bucket", "sn", "manufacturer", "model", "environment", "config_type", "cpu_logical_cores", "storage_capacity_tb", "psa", "arch_standardized_factor", "base_score", "afr_old", "afr_avg", "failure_adjust_factor", "final_score", "special_policy"}); err != nil {
 		return nil, err
 	}
 	for _, item := range plan.Items {
 		if err := w.Write([]string{
 			fmt.Sprint(item.Rank),
+			item.Bucket,
 			item.SN,
 			item.Manufacturer,
 			item.Model,
+			item.Environment,
 			item.ConfigType,
 			fmt.Sprint(item.CPULogicalCores),
+			fmt.Sprintf("%.4f", item.StorageCapacityTB),
 			fmt.Sprintf("%.4f", item.PSA),
 			fmt.Sprintf("%.4f", item.ArchStandardizedFactor),
+			fmt.Sprintf("%.4f", item.BaseScore),
+			fmt.Sprintf("%.4f", item.AFROld),
+			fmt.Sprintf("%.4f", item.AFRAvg),
+			fmt.Sprintf("%.6f", item.FailureAdjustFactor),
 			fmt.Sprintf("%.4f", item.FinalScore),
 			item.SpecialPolicy,
 		}); err != nil {
@@ -130,18 +143,18 @@ func buildXLSX(plan domain.RenewalPlan) (*bytes.Buffer, error) {
 	f := excelize.NewFile()
 	defer func() { _ = f.Close() }()
 	sheet := f.GetSheetName(0)
-	if err := f.SetSheetRow(sheet, "A1", &[]string{"plan_id", "target_cores", "selected_cores", "selected_count"}); err != nil {
+	if err := f.SetSheetRow(sheet, "A1", &[]string{"plan_id", "target_date", "target_cores", "warm_target_storage_tb", "hot_target_storage_tb", "selected_cores", "selected_storage_tb", "selected_count"}); err != nil {
 		return nil, err
 	}
-	if err := f.SetSheetRow(sheet, "A2", &[]any{plan.PlanID, plan.TargetCores, plan.SelectedCores, plan.SelectedCount}); err != nil {
+	if err := f.SetSheetRow(sheet, "A2", &[]any{plan.PlanID, plan.TargetDate, plan.TargetCores, plan.WarmTargetStorageTB, plan.HotTargetStorageTB, plan.SelectedCores, plan.SelectedStorageTB, plan.SelectedCount}); err != nil {
 		return nil, err
 	}
-	if err := f.SetSheetRow(sheet, "A4", &[]string{"rank", "sn", "manufacturer", "model", "config_type", "cpu_logical_cores", "psa", "arch_standardized_factor", "final_score", "special_policy"}); err != nil {
+	if err := f.SetSheetRow(sheet, "A4", &[]string{"rank", "bucket", "sn", "manufacturer", "model", "environment", "config_type", "cpu_logical_cores", "storage_capacity_tb", "psa", "arch_standardized_factor", "base_score", "afr_old", "afr_avg", "failure_adjust_factor", "final_score", "special_policy"}); err != nil {
 		return nil, err
 	}
 	for i, item := range plan.Items {
 		cell, _ := excelize.CoordinatesToCellName(1, i+5)
-		if err := f.SetSheetRow(sheet, cell, &[]any{item.Rank, item.SN, item.Manufacturer, item.Model, item.ConfigType, item.CPULogicalCores, item.PSA, item.ArchStandardizedFactor, item.FinalScore, item.SpecialPolicy}); err != nil {
+		if err := f.SetSheetRow(sheet, cell, &[]any{item.Rank, item.Bucket, item.SN, item.Manufacturer, item.Model, item.Environment, item.ConfigType, item.CPULogicalCores, item.StorageCapacityTB, item.PSA, item.ArchStandardizedFactor, item.BaseScore, item.AFROld, item.AFRAvg, item.FailureAdjustFactor, item.FinalScore, item.SpecialPolicy}); err != nil {
 			return nil, err
 		}
 	}

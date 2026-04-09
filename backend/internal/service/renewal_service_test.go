@@ -16,15 +16,15 @@ func TestRenewalService_CreatePlan_SelectsWhitelistAndSortsByScore(t *testing.T)
 	renewalRepo := mem.NewRenewalRepo()
 
 	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
-		{SN: "A", ConfigType: "c1", PSA: 10},
-		{SN: "B", ConfigType: "c1", PSA: 20},
-		{SN: "C", ConfigType: "c1", PSA: 15},
+		{SN: "A", ConfigType: "c1", PSA: 10, WarrantyEndDate: "2025-01-01", Environment: "生产"},
+		{SN: "B", ConfigType: "c1", PSA: 20, WarrantyEndDate: "2025-01-01", Environment: "生产"},
+		{SN: "C", ConfigType: "c1", PSA: 15, WarrantyEndDate: "2025-01-01", Environment: "生产"},
 	})
-	_ = datasetRepo.ReplaceHostPackages(ctx, []domain.HostPackageConfig{{ConfigType: "c1", CPULogicalCores: 8, ArchStandardizedFactor: 1}})
+	_ = datasetRepo.ReplaceHostPackages(ctx, []domain.HostPackageConfig{{ConfigType: "c1", SceneCategory: "计算型", CPULogicalCores: 8, ArchStandardizedFactor: 1}})
 	_ = datasetRepo.ReplaceSpecialRules(ctx, []domain.SpecialRule{{SN: "A", Policy: "whitelist"}, {SN: "C", Policy: "blacklist"}})
 
 	svc := NewRenewalService(serverRepo, datasetRepo, renewalRepo)
-	plan, err := svc.CreatePlan(ctx, 16)
+	plan, err := svc.CreatePlan(ctx, CreatePlanInput{TargetDate: "2026-01-01", ExcludedEnvironments: []string{"开发", "测试"}, TargetCores: 16, WarmTargetStorageTB: 0, HotTargetStorageTB: 0})
 	if err != nil {
 		t.Fatalf("CreatePlan() error = %v", err)
 	}
@@ -49,7 +49,7 @@ func TestRenewalService_CreatePlan_SelectsWhitelistAndSortsByScore(t *testing.T)
 
 func TestRenewalService_CreatePlan_InvalidTarget(t *testing.T) {
 	svc := NewRenewalService(mem.NewServerRepo(), mem.NewDatasetRepo(), mem.NewRenewalRepo())
-	_, err := svc.CreatePlan(context.Background(), 0)
+	_, err := svc.CreatePlan(context.Background(), CreatePlanInput{TargetDate: "2026-01-01", TargetCores: 0})
 	if err == nil {
 		t.Fatal("expected error for target_cores <= 0")
 	}

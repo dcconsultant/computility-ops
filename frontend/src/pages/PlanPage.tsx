@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Button, Card, InputNumber, message, Space, Typography } from 'antd';
+import { Button, Card, DatePicker, Input, InputNumber, message, Space, Typography } from 'antd';
+import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import { createPlan } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
@@ -7,18 +8,41 @@ import { ensureApiOk, parseApiError } from '../error';
 const { Text } = Typography;
 
 export default function PlanPage() {
+  const [targetDate, setTargetDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const [excludeEnvs, setExcludeEnvs] = useState('开发,测试');
   const [targetCores, setTargetCores] = useState<number>(1200);
+  const [warmTargetStorageTB, setWarmTargetStorageTB] = useState<number>(0);
+  const [hotTargetStorageTB, setHotTargetStorageTB] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   async function onCreatePlan() {
-    if (!targetCores || targetCores <= 0) {
-      message.warning('请输入有效目标核数');
+    if (!targetDate) {
+      message.warning('请选择续保目标时间');
       return;
     }
+    if (!targetCores || targetCores <= 0) {
+      message.warning('请输入有效计算型目标核数');
+      return;
+    }
+    if (warmTargetStorageTB < 0 || hotTargetStorageTB < 0) {
+      message.warning('温/热存储目标容量不能为负数');
+      return;
+    }
+
     setLoading(true);
     try {
-      const resp = ensureApiOk(await createPlan(targetCores));
+      const excluded = excludeEnvs
+        .split(/[，,]/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+      const resp = ensureApiOk(await createPlan({
+        target_date: targetDate,
+        excluded_environments: excluded,
+        target_cores: targetCores,
+        warm_target_storage_tb: warmTargetStorageTB,
+        hot_target_storage_tb: hotTargetStorageTB
+      }));
       message.success(`方案已生成：${resp.data.plan_id}`);
       navigate(`/result/${resp.data.plan_id}`);
     } catch (e) {
@@ -29,20 +53,59 @@ export default function PlanPage() {
   }
 
   return (
-    <Card title="生成续保方案">
-      <Space direction="vertical" size="middle">
-        <Space>
+    <Card title="生成续保方案（四栏目）">
+      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+        <Space wrap>
+          <Text>续保目标时间</Text>
+          <DatePicker
+            value={targetDate ? dayjs(targetDate) : undefined}
+            onChange={(d) => setTargetDate(d ? d.format('YYYY-MM-DD') : '')}
+            allowClear={false}
+          />
+        </Space>
+
+        <Space wrap>
+          <Text>排除环境</Text>
+          <Input
+            style={{ width: 320 }}
+            value={excludeEnvs}
+            onChange={(e) => setExcludeEnvs(e.target.value)}
+            placeholder="开发,测试"
+          />
+          <Text type="secondary">多个环境用逗号分隔</Text>
+        </Space>
+
+        <Space wrap>
           <InputNumber
             min={1}
             value={targetCores}
             onChange={(v) => setTargetCores(v ?? 0)}
-            addonBefore="目标核数"
+            addonBefore="计算型目标核数"
           />
-          <Button type="primary" loading={loading} onClick={onCreatePlan}>
-            生成方案
-          </Button>
+          <InputNumber
+            min={0}
+            step={1}
+            value={warmTargetStorageTB}
+            onChange={(v) => setWarmTargetStorageTB(v ?? 0)}
+            addonBefore="温存储目标容量(TB)"
+          />
+          <InputNumber
+            min={0}
+            step={1}
+            value={hotTargetStorageTB}
+            onChange={(v) => setHotTargetStorageTB(v ?? 0)}
+            addonBefore="热存储目标容量(TB)"
+          />
         </Space>
-        <Text type="secondary">系统按（PSA × 架构标准化系数）排名；特殊名单加白强制续保、加黑强制不续保。</Text>
+
+        <Button type="primary" loading={loading} onClick={onCreatePlan}>
+          生成方案
+        </Button>
+
+        <Text type="secondary">
+          分类依据：主机套餐配置的“场景大类”；GPU 全部续保。温/热存储按容量规划，
+          故障率修正系数采用 exp(-(AFR_old/AFR_avg-1))。
+        </Text>
       </Space>
     </Card>
   );
