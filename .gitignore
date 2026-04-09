@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# logs/runtime artifacts
+logs/*.log
+*.log
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.tsbuildinfo
+
+# backend temp/build
+backend/tmp/
+backend/bin/
+
+# env files
+.env
+.env.*
+
+# local: ignore GitHub workflow until auth scope is ready
+.github/workflows/ci.yml

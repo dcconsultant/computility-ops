@@ -1,0 +1,20 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    environment:
+      STORAGE_DRIVER: memory
+      APP_ADDR: :8080
+      AUDIT_LOG_PATH: /var/log/computility/audit.log
+    volumes:
+      - ./logs:/var/log/computility
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "18080:80"
+    restart: unless-stopped

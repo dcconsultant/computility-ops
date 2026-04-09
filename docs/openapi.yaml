@@ -1,0 +1,42 @@
+openapi: 3.0.3
+info:
+  title: Computility Ops API
+  version: 1.0.0
+servers:
+  - url: /api/v1
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200': { description: OK }
+  /servers/import:
+    post:
+      summary: Import xlsx server list
+  /servers:
+    get:
+      summary: List servers
+  /renewals/plan:
+    post:
+      summary: Create renewal plan
+  /renewals/plans/{plan_id}:
+    get:
+      summary: Get plan by id
+      parameters:
+        - in: path
+          name: plan_id
+          required: true
+          schema: { type: string }
+  /renewals/plans/{plan_id}/export:
+    get:
+      summary: Export plan as xlsx/csv
+      parameters:
+        - in: path
+          name: plan_id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum: [xlsx, csv]

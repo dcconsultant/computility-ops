@@ -1,0 +1,3 @@
+server_id,hostname,location,cpu_cores,value_score,expire_date,remark
+SRV-001,node-01,SG-DC1,64,98.5,2026-12-31,example
+SRV-002,node-02,SG-DC1,32,87.0,2026-10-15,example
