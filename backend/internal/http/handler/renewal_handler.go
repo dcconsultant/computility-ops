@@ -55,6 +55,29 @@ func (h *RenewalHandler) GetPlan(c *gin.Context) {
 	ok(c, plan)
 }
 
+func (h *RenewalHandler) ListPlans(c *gin.Context) {
+	c.Set("audit_action", "renewals.list_plans")
+	plans, err := h.service.ListPlans(c.Request.Context())
+	if err != nil {
+		fail(c, 50001, err.Error())
+		return
+	}
+	ok(c, gin.H{"list": plans, "total": len(plans), "page": 1, "page_size": len(plans)})
+}
+
+func (h *RenewalHandler) DeletePlan(c *gin.Context) {
+	c.Set("audit_action", "renewals.delete_plan")
+	if err := h.service.DeletePlan(c.Request.Context(), c.Param("plan_id")); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			fail(c, 40401, err.Error())
+			return
+		}
+		fail(c, 50001, err.Error())
+		return
+	}
+	ok(c, gin.H{"deleted": true, "plan_id": c.Param("plan_id")})
+}
+
 func (h *RenewalHandler) ExportPlan(c *gin.Context) {
 	c.Set("audit_action", "renewals.export_plan")
 	planID := c.Param("plan_id")

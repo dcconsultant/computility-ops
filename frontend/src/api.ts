@@ -97,8 +97,18 @@ export async function createPlan(payload: CreatePlanPayload) {
   return data;
 }
 
+export async function listPlans() {
+  const { data } = await http.get<ApiResp<ListData<RenewalPlan>>>('/renewals/plans');
+  return data;
+}
+
 export async function getPlan(planId: string) {
   const { data } = await http.get<ApiResp<RenewalPlan>>(`/renewals/plans/${planId}`);
+  return data;
+}
+
+export async function deletePlan(planId: string) {
+  const { data } = await http.delete<ApiResp<{ deleted: boolean; plan_id: string }>>(`/renewals/plans/${planId}`);
   return data;
 }
 

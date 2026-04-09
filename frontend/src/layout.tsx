@@ -1,27 +1,27 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { Layout, Menu, Typography } from 'antd';
+import { APP_VERSION } from './version';
 
 const { Header, Content } = Layout;
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
 export default function AppLayout() {
   const location = useLocation();
-  const key = location.pathname.startsWith('/result') ? '/result' : location.pathname;
+  const key = location.pathname.startsWith('/result') ? '/plan' : location.pathname;
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Header style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
         <Title level={4} style={{ color: '#fff', margin: 0 }}>
-          Computility Ops
+          Computility Ops <Text style={{ color: '#ddd', fontSize: 14 }}>{APP_VERSION}</Text>
         </Title>
         <Menu
           theme="dark"
           mode="horizontal"
           selectedKeys={[key]}
           items={[
-            { key: '/import', label: <Link to="/import">导入清单</Link> },
-            { key: '/plan', label: <Link to="/plan">生成方案</Link> },
-            { key: '/result', label: <Link to="/result">结果查询</Link> }
+            { key: '/import', label: <Link to="/import">配置管理</Link> },
+            { key: '/plan', label: <Link to="/plan">续保管理</Link> }
           ]}
           style={{ flex: 1, minWidth: 0 }}
         />

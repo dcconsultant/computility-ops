@@ -44,7 +44,9 @@ func NewRouter(h Handlers) *gin.Engine {
 		v1.POST("/failure-rates/analyze/import", h.Import.AnalyzeFaultRates)
 
 		v1.POST("/renewals/plan", h.Renewal.CreatePlan)
+		v1.GET("/renewals/plans", h.Renewal.ListPlans)
 		v1.GET("/renewals/plans/:plan_id", h.Renewal.GetPlan)
+		v1.DELETE("/renewals/plans/:plan_id", h.Renewal.DeletePlan)
 		v1.GET("/renewals/plans/:plan_id/export", h.Renewal.ExportPlan)
 	}
 	return r

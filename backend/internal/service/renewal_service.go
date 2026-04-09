@@ -376,6 +376,14 @@ func (s *RenewalService) GetPlan(ctx context.Context, planID string) (domain.Ren
 	return s.renewalRepo.GetPlan(ctx, planID)
 }
 
+func (s *RenewalService) ListPlans(ctx context.Context) ([]domain.RenewalPlan, error) {
+	return s.renewalRepo.ListPlans(ctx)
+}
+
+func (s *RenewalService) DeletePlan(ctx context.Context, planID string) error {
+	return s.renewalRepo.DeletePlan(ctx, planID)
+}
+
 func splitByWhitelist(items []domain.RenewalItem) (must []domain.RenewalItem, normal []domain.RenewalItem) {
 	must = make([]domain.RenewalItem, 0)
 	normal = make([]domain.RenewalItem, 0)

@@ -9,4 +9,6 @@ import (
 type RenewalPlanRepo interface {
 	SavePlan(ctx context.Context, plan domain.RenewalPlan) error
 	GetPlan(ctx context.Context, planID string) (domain.RenewalPlan, error)
+	ListPlans(ctx context.Context) ([]domain.RenewalPlan, error)
+	DeletePlan(ctx context.Context, planID string) error
 }
