@@ -5,7 +5,9 @@ import (
 	"encoding/csv"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"computility-ops/backend/internal/domain"
 	"computility-ops/backend/internal/service"
@@ -108,7 +110,7 @@ func (h *RenewalHandler) ExportPlan(c *gin.Context) {
 		return
 	}
 
-	filename := fmt.Sprintf("renewal_plan_%s.%s", planID, format)
+	filename := exportFilename(plan, format)
 	if format == "csv" {
 		buf, err := buildCSV(plan)
 		if err != nil {
@@ -198,4 +200,56 @@ func buildXLSX(plan domain.RenewalPlan) (*bytes.Buffer, error) {
 		return nil, err
 	}
 	return buf, nil
+}
+
+func exportFilename(plan domain.RenewalPlan, format string) string {
+	ts := time.Now().Format("200601021504")
+	if unixSec, err := strconv.ParseInt(strings.TrimSpace(plan.PlanID), 10, 64); err == nil {
+		ts = time.Unix(unixSec, 0).Format("200601021504")
+	}
+	targetDate := sanitizeFilenameToken(strings.ReplaceAll(strings.TrimSpace(plan.TargetDate), "-", ""))
+	if targetDate == "" {
+		targetDate = "unknown"
+	}
+	return fmt.Sprintf(
+		"renewal_plan_t%s_c%d_w%s_h%s_id%s_%s.%s",
+		targetDate,
+		plan.TargetCores,
+		safeNumberToken(plan.WarmTargetStorageTB),
+		safeNumberToken(plan.HotTargetStorageTB),
+		sanitizeFilenameToken(plan.PlanID),
+		ts,
+		format,
+	)
+}
+
+func safeNumberToken(v float64) string {
+	raw := fmt.Sprintf("%.2f", v)
+	raw = strings.TrimRight(strings.TrimRight(raw, "0"), ".")
+	if raw == "" {
+		raw = "0"
+	}
+	raw = strings.ReplaceAll(raw, ".", "p")
+	return sanitizeFilenameToken(raw)
+}
+
+func sanitizeFilenameToken(v string) string {
+	n := strings.TrimSpace(v)
+	if n == "" {
+		return "na"
+	}
+	replacer := strings.NewReplacer(
+		"/", "_",
+		"\\", "_",
+		":", "_",
+		" ", "_",
+		"|", "_",
+		"?", "_",
+		"*", "_",
+		"\"", "_",
+		"<", "_",
+		">", "_",
+	)
+	n = replacer.Replace(n)
+	return n
 }

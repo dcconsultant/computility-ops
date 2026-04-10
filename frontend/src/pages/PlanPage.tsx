@@ -3,7 +3,9 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
   DatePicker,
+  Dropdown,
   Input,
   InputNumber,
   Modal,
@@ -42,6 +44,7 @@ export default function PlanPage() {
   const [queryTargetDateRange, setQueryTargetDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
   const [queryExcludedPSA, setQueryExcludedPSA] = useState('');
   const [queryExcludedEnv, setQueryExcludedEnv] = useState('');
+  const [viewOnlyAnomalyRows, setViewOnlyAnomalyRows] = useState(false);
 
   async function reloadPlans() {
     setListLoading(true);
@@ -95,6 +98,7 @@ export default function PlanPage() {
       message.success(`方案已生成：${resp.data.plan_id}`);
       await reloadPlans();
       setViewPlan(resp.data);
+      setViewOnlyAnomalyRows(false);
       setViewOpen(true);
     } catch (e) {
       message.error(parseApiError(e, '生成失败'));
@@ -107,6 +111,7 @@ export default function PlanPage() {
     try {
       const resp = ensureApiOk(await getPlan(planId));
       setViewPlan(resp.data);
+      setViewOnlyAnomalyRows(false);
       setViewOpen(true);
     } catch (e) {
       message.error(parseApiError(e, '查询方案失败'));
@@ -166,20 +171,37 @@ export default function PlanPage() {
     { title: '温存储空间需求(TB)', dataIndex: 'warm_target_storage_tb', width: 160 },
     { title: '热存储空间需求(TB)', dataIndex: 'hot_target_storage_tb', width: 160 },
     {
-      title: '异常',
-      width: 70,
+      title: '摘要',
+      width: 260,
       render: (_: unknown, r: RenewalPlan) => {
-        const hasIssue = (r.unmatched_config_count || 0) > 0;
+        const summary = buildPlanSummary(r);
+        return (
+          <Space direction="vertical" size={2}>
+            <Text type={summary.computeRate >= 100 ? undefined : 'warning'}>算力达成: {summary.computeRate.toFixed(1)}%</Text>
+            <Text type={summary.warmRate >= 100 ? undefined : 'warning'}>温存储达成: {summary.warmRate.toFixed(1)}%</Text>
+            <Text type={summary.hotRate >= 100 ? undefined : 'warning'}>热存储达成: {summary.hotRate.toFixed(1)}%</Text>
+            <Text type="secondary">入选台数: {r.selected_count || 0}</Text>
+          </Space>
+        );
+      }
+    },
+    {
+      title: '异常',
+      width: 90,
+      render: (_: unknown, r: RenewalPlan) => {
+        const anomaly = analyzeAnomalies(r);
         const report = buildAnomalyReport(r);
         return (
           <Tooltip title={report}>
             <Button
-              type={hasIssue ? 'primary' : 'default'}
-              danger={hasIssue}
+              type={anomaly.blockers.length ? 'primary' : 'default'}
+              danger={anomaly.blockers.length > 0}
               icon={<ExclamationCircleOutlined />}
               size="small"
               onClick={() => Modal.info({ title: `方案 ${r.plan_id} 异常报告`, width: 760, content: <pre style={{ whiteSpace: 'pre-wrap' }}>{report}</pre> })}
-            />
+            >
+              {anomaly.blockers.length + anomaly.warnings.length || 0}
+            </Button>
           </Tooltip>
         );
       }
@@ -187,11 +209,21 @@ export default function PlanPage() {
     {
       title: '操作',
       fixed: 'right' as const,
-      width: 220,
+      width: 280,
       render: (_: unknown, r: RenewalPlan) => (
         <Space>
           <Button size="small" onClick={() => onView(r.plan_id)}>查看</Button>
-          <Button size="small" onClick={() => exportPlan(r.plan_id, 'xlsx')}>下载</Button>
+          <Dropdown
+            menu={{
+              items: [
+                { key: 'xlsx', label: '下载 Excel (.xlsx)' },
+                { key: 'csv', label: '下载 CSV (.csv)' }
+              ],
+              onClick: ({ key }) => exportPlan(r.plan_id, key as 'xlsx' | 'csv')
+            }}
+          >
+            <Button size="small">下载</Button>
+          </Dropdown>
           <Popconfirm title="确认删除该方案？" onConfirm={() => onDelete(r.plan_id)}>
             <Button size="small" danger>删除</Button>
           </Popconfirm>
@@ -286,7 +318,10 @@ export default function PlanPage() {
         title={viewPlan ? `方案详情 ${viewPlan.plan_id}` : '方案详情'}
         footer={null}
         width={1000}
-        onCancel={() => setViewOpen(false)}
+        onCancel={() => {
+          setViewOpen(false);
+          setViewOnlyAnomalyRows(false);
+        }}
       >
         {viewPlan && (
           <Space direction="vertical" style={{ width: '100%' }}>
@@ -306,9 +341,12 @@ export default function PlanPage() {
               <Tag color="blue">入选台数: {viewPlan.selected_count}</Tag>
             </Space>
             <Paragraph copyable>{planIssues}</Paragraph>
+            <Checkbox checked={viewOnlyAnomalyRows} onChange={(e) => setViewOnlyAnomalyRows(e.target.checked)}>
+              仅看异常相关行（未满足目标栏目）
+            </Checkbox>
             <Table
               rowKey="sn"
-              dataSource={viewPlan.items}
+              dataSource={filterPlanItems(viewPlan, viewOnlyAnomalyRows)}
               pagination={{ pageSize: 10 }}
               columns={[
                 { title: '排名', dataIndex: 'rank', width: 70 },
@@ -327,24 +365,90 @@ export default function PlanPage() {
 }
 
 function buildAnomalyReport(plan: RenewalPlan): string {
+  const detail = analyzeAnomalies(plan);
   const lines: string[] = [];
+
+  lines.push('【阻断】');
+  if (detail.blockers.length) {
+    detail.blockers.forEach((x) => lines.push(`- ${x}`));
+  } else {
+    lines.push('- 无');
+  }
+
+  lines.push('');
+  lines.push('【警告】');
+  if (detail.warnings.length) {
+    detail.warnings.forEach((x) => lines.push(`- ${x}`));
+  } else {
+    lines.push('- 无');
+  }
+
+  lines.push('');
+  lines.push(`【结论】阻断 ${detail.blockers.length} 项，警告 ${detail.warnings.length} 项`);
+  return lines.join('\n');
+}
+
+function analyzeAnomalies(plan: RenewalPlan): { blockers: string[]; warnings: string[] } {
+  const blockers: string[] = [];
+  const warnings: string[] = [];
+
   if ((plan.unmatched_config_count || 0) > 0) {
-    lines.push(`- 未匹配套餐配置: ${plan.unmatched_config_count} 个`);
-    lines.push(`  清单: ${(plan.unmatched_config_types || []).join('、')}`);
+    blockers.push(`未匹配套餐配置: ${plan.unmatched_config_count} 个（${(plan.unmatched_config_types || []).join('、')}）`);
   }
-  if ((plan.required_compute_cores || 0) > (plan.sections?.find((s) => s.bucket === 'compute')?.selected_cores || 0)) {
-    lines.push('- 计算型缺口未补齐');
+
+  const computeSelected = plan.sections?.find((s) => s.bucket === 'compute')?.selected_cores || 0;
+  if ((plan.required_compute_cores || 0) > computeSelected) {
+    blockers.push(`计算型缺口未补齐（要求 ${plan.required_compute_cores || 0}，已选 ${computeSelected}）`);
   }
+
   const warm = plan.sections?.find((s) => s.bucket === 'warm_storage');
   if ((warm?.required_storage_tb || 0) > (warm?.selected_storage_tb || 0)) {
-    lines.push('- 温存储缺口未补齐');
+    blockers.push(`温存储缺口未补齐（要求 ${warm?.required_storage_tb || 0}TB，已选 ${warm?.selected_storage_tb || 0}TB）`);
   }
+
   const hot = plan.sections?.find((s) => s.bucket === 'hot_storage');
   if ((hot?.required_storage_tb || 0) > (hot?.selected_storage_tb || 0)) {
-    lines.push('- 热存储缺口未补齐');
+    blockers.push(`热存储缺口未补齐（要求 ${hot?.required_storage_tb || 0}TB，已选 ${hot?.selected_storage_tb || 0}TB）`);
   }
-  if (!lines.length) {
-    lines.push('- 未发现明显异常');
+
+  if (!plan.items?.length) {
+    warnings.push('方案列表为空，请检查输入与过滤条件');
   }
-  return lines.join('\n');
+
+  return { blockers, warnings };
+}
+
+function buildPlanSummary(plan: RenewalPlan) {
+  const computeRate = calcRate(plan.required_compute_cores || 0, plan.sections?.find((s) => s.bucket === 'compute')?.selected_cores || 0);
+  const warm = plan.sections?.find((s) => s.bucket === 'warm_storage');
+  const hot = plan.sections?.find((s) => s.bucket === 'hot_storage');
+  const warmRate = calcRate(warm?.required_storage_tb || 0, warm?.selected_storage_tb || 0);
+  const hotRate = calcRate(hot?.required_storage_tb || 0, hot?.selected_storage_tb || 0);
+  return { computeRate, warmRate, hotRate };
+}
+
+function calcRate(required: number, selected: number): number {
+  if (!required || required <= 0) {
+    return 100;
+  }
+  return Math.min(999.9, (selected / required) * 100);
+}
+
+function filterPlanItems(plan: RenewalPlan, onlyAnomalyRows: boolean) {
+  if (!onlyAnomalyRows) {
+    return plan.items;
+  }
+  const blockers = analyzeAnomalies(plan).blockers;
+  if (!blockers.length) {
+    return plan.items;
+  }
+  const needCompute = blockers.some((x) => x.includes('计算型'));
+  const needWarm = blockers.some((x) => x.includes('温存储'));
+  const needHot = blockers.some((x) => x.includes('热存储'));
+  return (plan.items || []).filter((item) => {
+    if (needCompute && item.bucket === 'compute') return true;
+    if (needWarm && item.bucket === 'warm_storage') return true;
+    if (needHot && item.bucket === 'hot_storage') return true;
+    return false;
+  });
 }
