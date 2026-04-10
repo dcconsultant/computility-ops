@@ -69,7 +69,7 @@ export default function FailureDashboardPage() {
 
   return (
     <div style={{ minHeight: '100vh', padding: 20, background: 'radial-gradient(circle at 20% 20%, #1d4ed8 0, #0f172a 35%, #020617 100%)' }}>
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
+      <Space direction="vertical" size={16} style={{ width: '100%' }}>
         <Space style={{ justifyContent: 'space-between', width: '100%' }}>
           <Space>
             <Title level={2} style={{ margin: 0, color: '#e2e8f0' }}>⚡ 故障率分析看板</Title>
