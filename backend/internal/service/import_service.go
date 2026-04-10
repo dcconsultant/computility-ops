@@ -570,10 +570,10 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 	pkgModelOverNum := map[string]float64{}
 	pkgModelOverDen := map[string]float64{}
 
-	overallFaultNum := map[string]float64{"storage": 0, "non_storage": 0}
-	overallFaultOverNum := map[string]float64{"storage": 0, "non_storage": 0}
-	overallDenYears := map[string]float64{"storage": 0, "non_storage": 0}
-	overallOverDenYears := map[string]float64{"storage": 0, "non_storage": 0}
+	overallFaultNum := map[string]float64{}
+	overallFaultOverNum := map[string]float64{}
+	overallDenYears := map[string]float64{}
+	overallOverDenYears := map[string]float64{}
 
 	now := time.Now()
 	for _, srv := range servers {
@@ -593,6 +593,8 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 			segment = "storage"
 			weight = 1 + float64(pkg.DataDiskCount)
 		}
+		scope := classifyScopeByEnv(srv.Environment)
+		k := scope + "|" + segment
 
 		years := yearsBetween(launchAt, now)
 		if years <= 0 {
@@ -609,14 +611,16 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		modelDen[modelKey] += weightedYears
 		pkgDen[pkgKey] += weightedYears
 		pkgModelDen[pkgModelKey] += weightedYears
-		overallDenYears[segment] += weightedYears
+		overallDenYears[k] += weightedYears
+		overallDenYears["all|"+segment] += weightedYears
 
 		if overYears > 0 {
 			weightedOverYears := weight * overYears
 			modelOverDen[modelKey] += weightedOverYears
 			pkgOverDen[pkgKey] += weightedOverYears
 			pkgModelOverDen[pkgModelKey] += weightedOverYears
-			overallOverDenYears[segment] += weightedOverYears
+			overallOverDenYears[k] += weightedOverYears
+			overallOverDenYears["all|"+segment] += weightedOverYears
 		}
 
 		events := faultEventsBySN[srv.SN]
@@ -641,8 +645,10 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		pkgOverNum[pkgKey] += overFaultN
 		pkgModelOverNum[pkgModelKey] += overFaultN
 
-		overallFaultNum[segment] += totalFaultN
-		overallFaultOverNum[segment] += overFaultN
+		overallFaultNum[k] += totalFaultN
+		overallFaultOverNum[k] += overFaultN
+		overallFaultNum["all|"+segment] += totalFaultN
+		overallFaultOverNum["all|"+segment] += overFaultN
 	}
 
 	modelRates := make([]domain.ModelFailureRate, 0, len(modelDen))
@@ -715,29 +721,35 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 	}
 
 	overallRates := []domain.FailureRateSummary{}
-	buildSummary := func(segment string) domain.FailureRateSummary {
+	buildSummary := func(scope, segment string) domain.FailureRateSummary {
+		key := scope + "|" + segment
 		fullRate := 0.0
-		if overallDenYears[segment] > 0 {
-			fullRate = overallFaultNum[segment] / overallDenYears[segment]
+		if overallDenYears[key] > 0 {
+			fullRate = overallFaultNum[key] / overallDenYears[key]
 		}
 		overRate := 0.0
-		if overallOverDenYears[segment] > 0 {
-			overRate = overallFaultOverNum[segment] / overallOverDenYears[segment]
+		if overallOverDenYears[key] > 0 {
+			overRate = overallFaultOverNum[key] / overallOverDenYears[key]
 		}
 		return domain.FailureRateSummary{
+			Scope:                scope,
 			Segment:              segment,
 			FullCycleFailureRate: fullRate,
 			OverWarrantyRate:     overRate,
-			FaultCount:           int(overallFaultNum[segment]),
-			OverWarrantyFaults:   int(overallFaultOverNum[segment]),
-			ServerYears:          overallDenYears[segment],
-			OverWarrantyYears:    overallOverDenYears[segment],
+			FaultCount:           int(overallFaultNum[key]),
+			OverWarrantyFaults:   int(overallFaultOverNum[key]),
+			ServerYears:          overallDenYears[key],
+			OverWarrantyYears:    overallOverDenYears[key],
 		}
 	}
 
 	overallRates = []domain.FailureRateSummary{
-		buildSummary("storage"),
-		buildSummary("non_storage"),
+		buildSummary("all", "storage"),
+		buildSummary("all", "non_storage"),
+		buildSummary("product", "storage"),
+		buildSummary("product", "non_storage"),
+		buildSummary("devtest", "storage"),
+		buildSummary("devtest", "non_storage"),
 	}
 	if err := s.datasetRepo.ReplaceOverallFailureRates(ctx, overallRates); err != nil {
 		return FaultAnalysisResult{}, err
@@ -794,6 +806,14 @@ func yearsBetween(start, end time.Time) float64 {
 		return 0
 	}
 	return end.Sub(start).Hours() / 24 / 365
+}
+
+func classifyScopeByEnv(env string) string {
+	n := normalizeText(env)
+	if n == "product" {
+		return "product"
+	}
+	return "devtest"
 }
 
 func MapHeaders(headers []string, headerMap map[string]string) []string {

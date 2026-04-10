@@ -58,6 +58,7 @@ type PackageModelFailureRate struct {
 }
 
 type FailureRateSummary struct {
+	Scope                string  `json:"scope"`
 	Segment              string  `json:"segment"`
 	FullCycleFailureRate float64 `json:"full_cycle_failure_rate"`
 	OverWarrantyRate     float64 `json:"over_warranty_failure_rate"`

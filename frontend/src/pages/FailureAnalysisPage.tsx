@@ -113,6 +113,7 @@ export default function FailureAnalysisPage() {
           pagination={false}
           dataSource={overallRates || []}
           columns={[
+            { title: '环境范围', dataIndex: 'scope', render: (v: string) => scopeLabel(v) },
             { title: '分类', dataIndex: 'segment', render: (v: string) => (v === 'storage' ? '存储' : '非存储') },
             { title: '全周期故障率', dataIndex: 'full_cycle_failure_rate', render: (v: number) => formatPercent(v) },
             { title: '过保故障率', dataIndex: 'over_warranty_failure_rate', render: (v: number) => formatPercent(v) },
@@ -186,6 +187,13 @@ export default function FailureAnalysisPage() {
       />
     </Space>
   );
+}
+
+function scopeLabel(v?: string) {
+  if (v === 'all') return '整体';
+  if (v === 'product') return '生产';
+  if (v === 'devtest') return '开测';
+  return v || '-';
 }
 
 function formatPercent(v?: number) {

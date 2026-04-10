@@ -12,6 +12,7 @@ export default function AppLayout() {
     : location.pathname.startsWith('/failure/')
       ? '/failure'
       : location.pathname;
+  const isFailureDashboard = location.pathname === '/failure/dashboard';
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -31,7 +32,7 @@ export default function AppLayout() {
           style={{ flex: 1, minWidth: 0 }}
         />
       </Header>
-      <Content style={{ padding: 24, maxWidth: 1400, width: '100%', margin: '0 auto' }}>
+      <Content style={{ padding: isFailureDashboard ? 0 : 24, maxWidth: isFailureDashboard ? 'none' : 1400, width: '100%', margin: '0 auto' }}>
         <Outlet />
       </Content>
     </Layout>

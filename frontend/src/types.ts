@@ -81,6 +81,7 @@ export interface PackageModelFailureRate {
 }
 
 export interface FailureRateSummary {
+  scope: 'all' | 'product' | 'devtest' | string;
   segment: 'storage' | 'non_storage' | string;
   full_cycle_failure_rate: number;
   over_warranty_failure_rate: number;
