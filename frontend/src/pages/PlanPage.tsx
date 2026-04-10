@@ -1,9 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  Alert,
   Button,
   Card,
-  Checkbox,
   DatePicker,
   Dropdown,
   Input,
@@ -12,21 +10,22 @@ import {
   Popconfirm,
   Space,
   Table,
-  Tag,
   Tooltip,
   Typography,
   message
 } from 'antd';
 import { ExclamationCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { createPlan, deletePlan, exportPlan, getPlan, listPlans } from '../api';
+import { useNavigate } from 'react-router-dom';
+import { createPlan, deletePlan, exportPlan, listPlans } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
 import type { RenewalPlan } from '../types';
 
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 const { RangePicker } = DatePicker;
 
 export default function PlanPage() {
+  const navigate = useNavigate();
   const [targetDate, setTargetDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [excludeEnvs, setExcludeEnvs] = useState('开发,测试');
   const [excludePSAs, setExcludePSAs] = useState('');
@@ -37,14 +36,11 @@ export default function PlanPage() {
 
   const [plans, setPlans] = useState<RenewalPlan[]>([]);
   const [listLoading, setListLoading] = useState(false);
-  const [viewPlan, setViewPlan] = useState<RenewalPlan | null>(null);
-  const [viewOpen, setViewOpen] = useState(false);
 
   const [queryPlanID, setQueryPlanID] = useState('');
   const [queryTargetDateRange, setQueryTargetDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
   const [queryExcludedPSA, setQueryExcludedPSA] = useState('');
   const [queryExcludedEnv, setQueryExcludedEnv] = useState('');
-  const [viewOnlyAnomalyRows, setViewOnlyAnomalyRows] = useState(false);
 
   async function reloadPlans() {
     setListLoading(true);
@@ -97,24 +93,11 @@ export default function PlanPage() {
       }));
       message.success(`方案已生成：${resp.data.plan_id}`);
       await reloadPlans();
-      setViewPlan(resp.data);
-      setViewOnlyAnomalyRows(false);
-      setViewOpen(true);
+      navigate(`/plan/${resp.data.plan_id}`);
     } catch (e) {
       message.error(parseApiError(e, '生成失败'));
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function onView(planId: string) {
-    try {
-      const resp = ensureApiOk(await getPlan(planId));
-      setViewPlan(resp.data);
-      setViewOnlyAnomalyRows(false);
-      setViewOpen(true);
-    } catch (e) {
-      message.error(parseApiError(e, '查询方案失败'));
     }
   }
 
@@ -123,17 +106,9 @@ export default function PlanPage() {
       ensureApiOk(await deletePlan(planId));
       message.success('方案已删除');
       await reloadPlans();
-      if (viewPlan?.plan_id === planId) {
-        setViewOpen(false);
-        setViewPlan(null);
-      }
     } catch (e) {
       message.error(parseApiError(e, '删除失败'));
     }
-  }
-
-  async function onSearchHistory() {
-    await reloadPlans();
   }
 
   async function onResetHistoryFilters() {
@@ -212,7 +187,7 @@ export default function PlanPage() {
       width: 280,
       render: (_: unknown, r: RenewalPlan) => (
         <Space>
-          <Button size="small" onClick={() => onView(r.plan_id)}>查看</Button>
+          <Button size="small" onClick={() => navigate(`/plan/${r.plan_id}`)}>查看</Button>
           <Dropdown
             menu={{
               items: [
@@ -231,8 +206,6 @@ export default function PlanPage() {
       )
     }
   ];
-
-  const planIssues = useMemo(() => (viewPlan ? buildAnomalyReport(viewPlan) : ''), [viewPlan]);
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -298,7 +271,7 @@ export default function PlanPage() {
               placeholder="排除环境"
               allowClear
             />
-            <Button type="primary" onClick={onSearchHistory} loading={listLoading}>搜索</Button>
+            <Button type="primary" onClick={reloadPlans} loading={listLoading}>搜索</Button>
             <Button onClick={onResetHistoryFilters} loading={listLoading}>重置</Button>
           </Space>
         )}
@@ -312,54 +285,6 @@ export default function PlanPage() {
           pagination={{ pageSize: 10 }}
         />
       </Card>
-
-      <Modal
-        open={viewOpen}
-        title={viewPlan ? `方案详情 ${viewPlan.plan_id}` : '方案详情'}
-        footer={null}
-        width={1000}
-        onCancel={() => {
-          setViewOpen(false);
-          setViewOnlyAnomalyRows(false);
-        }}
-      >
-        {viewPlan && (
-          <Space direction="vertical" style={{ width: '100%' }}>
-            {(viewPlan.unmatched_config_count || 0) > 0 && (
-              <Alert
-                type="warning"
-                showIcon
-                message={`检测到未匹配套餐配置 ${viewPlan.unmatched_config_count} 个`}
-                description={(viewPlan.unmatched_config_types || []).join('、')}
-              />
-            )}
-            <Space wrap>
-              <Tag>目标时间: {viewPlan.target_date || '-'}</Tag>
-              <Tag>计算目标: {viewPlan.target_cores}</Tag>
-              <Tag>温存储目标: {viewPlan.warm_target_storage_tb || 0}TB</Tag>
-              <Tag>热存储目标: {viewPlan.hot_target_storage_tb || 0}TB</Tag>
-              <Tag color="blue">入选台数: {viewPlan.selected_count}</Tag>
-            </Space>
-            <Paragraph copyable>{planIssues}</Paragraph>
-            <Checkbox checked={viewOnlyAnomalyRows} onChange={(e) => setViewOnlyAnomalyRows(e.target.checked)}>
-              仅看异常相关行（未满足目标栏目）
-            </Checkbox>
-            <Table
-              rowKey="sn"
-              dataSource={filterPlanItems(viewPlan, viewOnlyAnomalyRows)}
-              pagination={{ pageSize: 10 }}
-              columns={[
-                { title: '排名', dataIndex: 'rank', width: 70 },
-                { title: '栏目', dataIndex: 'bucket', width: 100 },
-                { title: 'SN', dataIndex: 'sn', width: 150 },
-                { title: '服务器型号', dataIndex: 'model', width: 150 },
-                { title: '配置类型', dataIndex: 'config_type', width: 150 },
-                { title: '最终分', dataIndex: 'final_score', width: 100 }
-              ]}
-            />
-          </Space>
-        )}
-      </Modal>
     </Space>
   );
 }
@@ -432,23 +357,4 @@ function calcRate(required: number, selected: number): number {
     return 100;
   }
   return Math.min(999.9, (selected / required) * 100);
-}
-
-function filterPlanItems(plan: RenewalPlan, onlyAnomalyRows: boolean) {
-  if (!onlyAnomalyRows) {
-    return plan.items;
-  }
-  const blockers = analyzeAnomalies(plan).blockers;
-  if (!blockers.length) {
-    return plan.items;
-  }
-  const needCompute = blockers.some((x) => x.includes('计算型'));
-  const needWarm = blockers.some((x) => x.includes('温存储'));
-  const needHot = blockers.some((x) => x.includes('热存储'));
-  return (plan.items || []).filter((item) => {
-    if (needCompute && item.bucket === 'compute') return true;
-    if (needWarm && item.bucket === 'warm_storage') return true;
-    if (needHot && item.bucket === 'hot_storage') return true;
-    return false;
-  });
 }

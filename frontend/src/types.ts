@@ -39,6 +39,7 @@ export interface HostPackageConfig {
   config_type: string;
   scene_category?: string;
   cpu_logical_cores: number;
+  gpu_card_count?: number;
   data_disk_type?: string;
   data_disk_count?: number;
   storage_capacity_tb?: number;
@@ -96,6 +97,7 @@ export interface PlanItem {
   environment?: string;
   config_type: string;
   cpu_logical_cores: number;
+  gpu_card_count?: number;
   storage_capacity_tb?: number;
   psa: number;
   arch_standardized_factor: number;
@@ -115,6 +117,7 @@ export interface RenewalPlanSection {
   covered_storage_tb?: number;
   required_cores?: number;
   required_storage_tb?: number;
+  covered_count?: number;
   selected_cores?: number;
   selected_storage_tb?: number;
   selected_count: number;
@@ -137,6 +140,12 @@ export interface RenewalPlan {
   required_hot_storage_tb?: number;
   unmatched_config_count?: number;
   unmatched_config_types?: string[];
+  gpu_current_cards?: number;
+  gpu_current_servers?: number;
+  gpu_covered_cards?: number;
+  gpu_covered_servers?: number;
+  gpu_renewal_cards?: number;
+  gpu_renewal_servers?: number;
   selected_cores: number;
   selected_storage_tb?: number;
   selected_count: number;

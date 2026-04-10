@@ -127,8 +127,15 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	}
 	unmatchedConfigSet := map[string]bool{}
 	coveredComputeCores := 0
+	coveredComputeCount := 0
 	coveredWarmStorage := 0.0
+	coveredWarmCount := 0
 	coveredHotStorage := 0.0
+	coveredHotCount := 0
+	gpuCurrentCards := 0
+	gpuCurrentServers := 0
+	gpuCoveredCards := 0
+	gpuCoveredServers := 0
 
 	for _, srv := range servers {
 		if excludedSet[normalizeEnv(srv.Environment)] {
@@ -160,15 +167,26 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		}
 
 		bucket := normalizeBucket(pkg.SceneCategory)
+		gpuCards := pkg.GPUCardCount
+		if bucket == "gpu" {
+			gpuCurrentCards += gpuCards
+			gpuCurrentServers++
+		}
 		if !wd.Before(targetDate) {
 			// 未过保：计入目标覆盖基线，但不进入续保方案列表
 			switch bucket {
 			case "compute":
 				coveredComputeCores += cores
+				coveredComputeCount++
 			case "warm_storage":
 				coveredWarmStorage += pkg.StorageCapacityTB
+				coveredWarmCount++
 			case "hot_storage":
 				coveredHotStorage += pkg.StorageCapacityTB
+				coveredHotCount++
+			case "gpu":
+				gpuCoveredCards += gpuCards
+				gpuCoveredServers++
 			}
 			continue
 		}
@@ -187,6 +205,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			Environment:            srv.Environment,
 			ConfigType:             srv.ConfigType,
 			CPULogicalCores:        cores,
+			GPUCardCount:           gpuCards,
 			StorageCapacityTB:      pkg.StorageCapacityTB,
 			PSA:                    baseValue,
 			ArchStandardizedFactor: coef,
@@ -281,9 +300,11 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	gpuItems := bucketItems["gpu"] // 全部续保（已应用环境过滤、到期过滤、blacklist）
 	gpuCores := 0
 	gpuStorage := 0.0
+	gpuRenewalCards := 0
 	for _, item := range gpuItems {
 		gpuCores += item.CPULogicalCores
 		gpuStorage += item.StorageCapacityTB
+		gpuRenewalCards += item.GPUCardCount
 	}
 
 	unmatchedConfigTypes := make([]string, 0, len(unmatchedConfigSet))
@@ -311,12 +332,19 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		RequiredHotStorage:   requiredHotStorage,
 		UnmatchedConfigCount: len(unmatchedConfigTypes),
 		UnmatchedConfigTypes: unmatchedConfigTypes,
+		GPUCurrentCards:      gpuCurrentCards,
+		GPUCurrentServers:    gpuCurrentServers,
+		GPUCoveredCards:      gpuCoveredCards,
+		GPUCoveredServers:    gpuCoveredServers,
+		GPURenewalCards:      gpuRenewalCards,
+		GPURenewalServers:    len(gpuItems),
 		Sections: []domain.RenewalPlanSection{
 			{
 				Bucket:        "compute",
 				TargetCores:   in.TargetCores,
 				CoveredCores:  coveredComputeCores,
 				RequiredCores: requiredComputeCores,
+				CoveredCount:  coveredComputeCount,
 				SelectedCores: computeCores,
 				SelectedCount: len(computeItems),
 				Items:         computeItems,
@@ -326,6 +354,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 				TargetStorageTB:   in.WarmTargetStorageTB,
 				CoveredStorageTB:  coveredWarmStorage,
 				RequiredStorageTB: requiredWarmStorage,
+				CoveredCount:      coveredWarmCount,
 				SelectedStorageTB: warmStorage,
 				SelectedCores:     warmCores,
 				SelectedCount:     len(warmItems),
@@ -336,6 +365,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 				TargetStorageTB:   in.HotTargetStorageTB,
 				CoveredStorageTB:  coveredHotStorage,
 				RequiredStorageTB: requiredHotStorage,
+				CoveredCount:      coveredHotCount,
 				SelectedStorageTB: hotStorage,
 				SelectedCores:     hotCores,
 				SelectedCount:     len(hotItems),
@@ -343,6 +373,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			},
 			{
 				Bucket:            "gpu",
+				CoveredCount:      gpuCoveredServers,
 				SelectedStorageTB: gpuStorage,
 				SelectedCores:     gpuCores,
 				SelectedCount:     len(gpuItems),

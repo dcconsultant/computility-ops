@@ -16,6 +16,12 @@ type RenewalPlan struct {
 	RequiredHotStorage   float64              `json:"required_hot_storage_tb,omitempty"`
 	UnmatchedConfigCount int                  `json:"unmatched_config_count,omitempty"`
 	UnmatchedConfigTypes []string             `json:"unmatched_config_types,omitempty"`
+	GPUCurrentCards      int                  `json:"gpu_current_cards,omitempty"`
+	GPUCurrentServers    int                  `json:"gpu_current_servers,omitempty"`
+	GPUCoveredCards      int                  `json:"gpu_covered_cards,omitempty"`
+	GPUCoveredServers    int                  `json:"gpu_covered_servers,omitempty"`
+	GPURenewalCards      int                  `json:"gpu_renewal_cards,omitempty"`
+	GPURenewalServers    int                  `json:"gpu_renewal_servers,omitempty"`
 	SelectedCores        int                  `json:"selected_cores"`
 	SelectedStorageTB    float64              `json:"selected_storage_tb"`
 	SelectedCount        int                  `json:"selected_count"`
@@ -31,6 +37,7 @@ type RenewalPlanSection struct {
 	CoveredStorageTB  float64       `json:"covered_storage_tb,omitempty"`
 	RequiredCores     int           `json:"required_cores,omitempty"`
 	RequiredStorageTB float64       `json:"required_storage_tb,omitempty"`
+	CoveredCount      int           `json:"covered_count,omitempty"`
 	SelectedCores     int           `json:"selected_cores,omitempty"`
 	SelectedStorageTB float64       `json:"selected_storage_tb,omitempty"`
 	SelectedCount     int           `json:"selected_count"`
@@ -46,6 +53,7 @@ type RenewalItem struct {
 	Environment            string  `json:"environment,omitempty"`
 	ConfigType             string  `json:"config_type"`
 	CPULogicalCores        int     `json:"cpu_logical_cores"`
+	GPUCardCount           int     `json:"gpu_card_count,omitempty"`
 	StorageCapacityTB      float64 `json:"storage_capacity_tb,omitempty"`
 	PSA                    float64 `json:"psa"`
 	ArchStandardizedFactor float64 `json:"arch_standardized_factor"`

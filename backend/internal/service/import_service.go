@@ -138,6 +138,10 @@ var hostPackageHeaderMap = map[string]string{
 	"scenecategory":          "scene_category",
 	"cpu逻辑核数":                "cpu_logical_cores",
 	"cpulogicalcores":        "cpu_logical_cores",
+	"gpu卡数":                  "gpu_card_count",
+	"卡数":                     "gpu_card_count",
+	"gpu_card_count":         "gpu_card_count",
+	"gpucardcount":           "gpu_card_count",
 	"数据盘类型":                  "data_disk_type",
 	"数据盘种类":                  "data_disk_type",
 	"datadisktype":           "data_disk_type",
@@ -210,6 +214,13 @@ func validateHostPackageRow(raw map[string]string) (domain.HostPackageConfig, er
 			return domain.HostPackageConfig{}, fmt.Errorf("存储容量(TB) 必须是数字")
 		}
 	}
+	gpuCardCount := 0
+	if v := get("gpu_card_count"); v != "" {
+		gpuCardCount, err = strconv.Atoi(v)
+		if err != nil || gpuCardCount < 0 {
+			return domain.HostPackageConfig{}, fmt.Errorf("GPU卡数 必须是大于等于0的整数")
+		}
+	}
 	dataDiskCount := 0
 	if v := get("data_disk_count"); v != "" {
 		dataDiskCount, err = strconv.Atoi(v)
@@ -217,7 +228,7 @@ func validateHostPackageRow(raw map[string]string) (domain.HostPackageConfig, er
 			return domain.HostPackageConfig{}, fmt.Errorf("数据盘数量 必须是大于等于0的整数")
 		}
 	}
-	return domain.HostPackageConfig{ConfigType: cfg, SceneCategory: get("scene_category"), CPULogicalCores: cores, DataDiskType: get("data_disk_type"), DataDiskCount: dataDiskCount, StorageCapacityTB: storage, ServerValueScore: serverValueScore, ArchStandardizedFactor: coef}, nil
+	return domain.HostPackageConfig{ConfigType: cfg, SceneCategory: get("scene_category"), CPULogicalCores: cores, GPUCardCount: gpuCardCount, DataDiskType: get("data_disk_type"), DataDiskCount: dataDiskCount, StorageCapacityTB: storage, ServerValueScore: serverValueScore, ArchStandardizedFactor: coef}, nil
 }
 
 var specialHeaderMap = map[string]string{
