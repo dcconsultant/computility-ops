@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Col, Progress, Row, Space, Tag, Typography, message } from 'antd';
+import { Button, Card, Col, Row, Space, Tag, Typography, message } from 'antd';
 import { ExpandOutlined, ReloadOutlined, ShrinkOutlined } from '@ant-design/icons';
 import { listHostPackages, listOverallFailureRates, listPackageFailureRates, listPackageModelFailureRates } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
@@ -61,6 +61,11 @@ export default function FailureDashboardPage() {
     document.addEventListener('fullscreenchange', onChange);
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
+
+  const currentYear = useMemo(() => {
+    const y = overall.find((x) => x.period === 'year')?.year;
+    return y || new Date().getFullYear();
+  }, [overall]);
 
   const pkgBucketMap = useMemo(() => {
     const m = new Map<string, string>();
@@ -125,20 +130,13 @@ export default function FailureDashboardPage() {
           </Space>
         </Space>
 
-        <Row gutter={12}>
-          {scopes.map((scope) => (
-            <Col span={8} key={scope.key}>
-              <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                <MetricCard title={`${scope.label} - 非存储`} data={findRate(overall, scope.key, 'non_storage')} glow="#22d3ee" />
-                <MetricCard title={`${scope.label} - 存储`} data={findRate(overall, scope.key, 'storage')} glow="#a78bfa" />
-              </Space>
-            </Col>
-          ))}
-        </Row>
+        <SummaryGroup title="历史平均故障率" period="history" data={overall} />
+        <SummaryGroup title={`${currentYear}年故障率`} period="year" data={overall} />
 
         <Card
           title={<span style={{ color: '#dbeafe' }}>TOP故障率轮播：{activeGroup.label}</span>}
-          style={{ background: 'rgba(2,6,23,0.65)', border: '1px solid #334155', boxShadow: '0 0 28px rgba(56,189,248,0.18)' }}
+          className="oc-neon-panel"
+          style={{ background: 'rgba(2,6,23,0.65)', border: '1px solid #334155' }}
           bodyStyle={{ paddingTop: 10 }}
           extra={<Text style={{ color: '#93c5fd' }}>每10秒自动切换</Text>}
         >
@@ -147,18 +145,33 @@ export default function FailureDashboardPage() {
             <Col span={8}><RankCard title="套餐 TOP8" rows={topPackage} /></Col>
             <Col span={8}><RankCard title="套餐型号 TOP8" rows={topPackageModel} /></Col>
           </Row>
-          <div style={{ marginTop: 10 }}>
-            <Progress percent={((groupIndex + 1) / bucketGroups.length) * 100} showInfo={false} strokeColor="#38bdf8" />
-          </div>
         </Card>
       </Space>
     </div>
   );
 }
 
+function SummaryGroup({ title, period, data }: { title: string; period: 'history' | 'year'; data: FailureRateSummary[] }) {
+  return (
+    <Card title={<span style={{ color: '#dbeafe' }}>{title}</span>} style={{ background: 'rgba(2,6,23,0.65)', border: '1px solid #334155' }} bodyStyle={{ paddingTop: 10 }}>
+      <Row gutter={12}>
+        {scopes.map((scope) => (
+          <Col span={8} key={`${period}-${scope.key}`}>
+            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+              <MetricCard title={`${scope.label} - 非存储`} data={findRate(data, period, scope.key, 'non_storage')} glow="#22d3ee" />
+              <MetricCard title={`${scope.label} - 存储`} data={findRate(data, period, scope.key, 'storage')} glow="#a78bfa" />
+            </Space>
+          </Col>
+        ))}
+      </Row>
+    </Card>
+  );
+}
+
 function MetricCard({ title, data, glow }: { title: string; data?: FailureRateSummary; glow: string }) {
   return (
     <Card
+      className="oc-neon-card"
       style={{
         background: 'linear-gradient(160deg, rgba(15,23,42,0.96), rgba(15,23,42,0.72))',
         border: `1px solid ${glow}`,
@@ -186,7 +199,7 @@ function MetricCard({ title, data, glow }: { title: string; data?: FailureRateSu
 
 function RankCard({ title, rows }: { title: string; rows: Array<{ name: string; rate: number }> }) {
   return (
-    <Card style={{ background: 'rgba(15,23,42,0.75)', border: '1px solid #334155' }} bodyStyle={{ padding: 10 }}>
+    <Card className="oc-neon-card" style={{ background: 'rgba(15,23,42,0.75)', border: '1px solid #334155' }} bodyStyle={{ padding: 10 }}>
       <Text style={{ color: '#93c5fd' }}>{title}</Text>
       <div style={{ marginTop: 8 }}>
         {rows.map((x, idx) => (
@@ -209,8 +222,8 @@ function normalizeBucket(scene?: string) {
   return 'compute';
 }
 
-function findRate(rows: FailureRateSummary[], scope: string, segment: string) {
-  return rows.find((x) => x.scope === scope && x.segment === segment);
+function findRate(rows: FailureRateSummary[], period: string, scope: string, segment: string) {
+  return rows.find((x) => x.period === period && x.scope === scope && x.segment === segment);
 }
 
 function formatPercent(v?: number) {

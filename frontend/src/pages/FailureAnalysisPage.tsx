@@ -113,6 +113,7 @@ export default function FailureAnalysisPage() {
           pagination={false}
           dataSource={overallRates || []}
           columns={[
+            { title: '分组', dataIndex: 'period', render: (_: string, r: any) => periodLabel(r.period, r.year) },
             { title: '环境范围', dataIndex: 'scope', render: (v: string) => scopeLabel(v) },
             { title: '分类', dataIndex: 'segment', render: (v: string) => (v === 'storage' ? '存储' : '非存储') },
             { title: '全周期故障率', dataIndex: 'full_cycle_failure_rate', render: (v: number) => formatPercent(v) },
@@ -187,6 +188,12 @@ export default function FailureAnalysisPage() {
       />
     </Space>
   );
+}
+
+function periodLabel(period?: string, year?: number) {
+  if (period === 'history') return '历史平均故障率';
+  if (period === 'year') return `${year || new Date().getFullYear()}年故障率`;
+  return period || '-';
 }
 
 function scopeLabel(v?: string) {

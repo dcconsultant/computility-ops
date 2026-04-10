@@ -81,6 +81,8 @@ export interface PackageModelFailureRate {
 }
 
 export interface FailureRateSummary {
+  period: 'history' | 'year' | string;
+  year?: number;
   scope: 'all' | 'product' | 'devtest' | string;
   segment: 'storage' | 'non_storage' | string;
   full_cycle_failure_rate: number;

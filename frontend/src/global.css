@@ -8,3 +8,36 @@ html, body, #root {
 body {
   background: #020617;
 }
+
+.oc-neon-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.oc-neon-card::after {
+  content: '';
+  position: absolute;
+  inset: -120% auto auto -40%;
+  width: 40%;
+  height: 280%;
+  background: linear-gradient(120deg, transparent, rgba(56, 189, 248, 0.18), transparent);
+  transform: rotate(18deg);
+  animation: ocSweep 2.8s linear infinite;
+  pointer-events: none;
+}
+
+.oc-neon-panel {
+  position: relative;
+  overflow: hidden;
+  animation: ocPulse 2.2s ease-in-out infinite;
+}
+
+@keyframes ocSweep {
+  0% { left: -50%; }
+  100% { left: 130%; }
+}
+
+@keyframes ocPulse {
+  0%, 100% { box-shadow: 0 0 18px rgba(56,189,248,0.15); }
+  50% { box-shadow: 0 0 36px rgba(56,189,248,0.35); }
+}
