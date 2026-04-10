@@ -12,14 +12,16 @@ import {
   Table,
   Tooltip,
   Typography,
+  Upload,
   message
 } from 'antd';
-import { ExclamationCircleOutlined } from '@ant-design/icons';
+import { ExclamationCircleOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import type { UploadProps } from 'antd';
 import { useNavigate } from 'react-router-dom';
-import { createPlan, deletePlan, exportPlan, listPlans } from '../api';
+import { createPlan, deletePlan, exportPlan, importSpecialRules, listPlans, listSpecialRules } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
-import type { RenewalPlan } from '../types';
+import type { RenewalPlan, SpecialRule } from '../types';
 
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -36,6 +38,9 @@ export default function PlanPage() {
 
   const [plans, setPlans] = useState<RenewalPlan[]>([]);
   const [listLoading, setListLoading] = useState(false);
+  const [specialRules, setSpecialRules] = useState<SpecialRule[]>([]);
+  const [specialLoading, setSpecialLoading] = useState(false);
+  const [specialUploading, setSpecialUploading] = useState(false);
 
   const [queryPlanID, setQueryPlanID] = useState('');
   const [queryTargetDateRange, setQueryTargetDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
@@ -61,8 +66,21 @@ export default function PlanPage() {
     }
   }
 
+  async function reloadSpecialRules() {
+    setSpecialLoading(true);
+    try {
+      const resp = ensureApiOk(await listSpecialRules());
+      setSpecialRules(resp.data.list || []);
+    } catch (e) {
+      message.error(parseApiError(e, '加载例外清单失败'));
+    } finally {
+      setSpecialLoading(false);
+    }
+  }
+
   useEffect(() => {
     reloadPlans();
+    reloadSpecialRules();
   }, []);
 
   async function onCreatePlan() {
@@ -126,6 +144,27 @@ export default function PlanPage() {
       setListLoading(false);
     }
   }
+
+  const specialUploadProps: UploadProps = {
+    maxCount: 1,
+    showUploadList: true,
+    accept: '.xlsx',
+    customRequest: async (options) => {
+      const file = options.file as File;
+      setSpecialUploading(true);
+      try {
+        const resp = ensureApiOk(await importSpecialRules(file));
+        message.success(`例外清单导入完成：成功 ${resp.data.success} 条`);
+        await reloadSpecialRules();
+        options.onSuccess?.({}, new XMLHttpRequest());
+      } catch (e) {
+        message.error(parseApiError(e, '导入例外清单失败'));
+        options.onError?.(new Error('import failed'));
+      } finally {
+        setSpecialUploading(false);
+      }
+    }
+  };
 
   const columns = [
     { title: '方案ID', dataIndex: 'plan_id', width: 140 },
@@ -283,6 +322,34 @@ export default function PlanPage() {
           columns={columns}
           scroll={{ x: 1500 }}
           pagination={{ pageSize: 10 }}
+        />
+      </Card>
+
+      <Card
+        title="续保管理 - 例外清单"
+        extra={(
+          <Space>
+            <Button onClick={reloadSpecialRules} loading={specialLoading}>刷新</Button>
+            <Upload {...specialUploadProps}>
+              <Button icon={<UploadOutlined />} loading={specialUploading}>上传并导入</Button>
+            </Upload>
+          </Space>
+        )}
+      >
+        <Table
+          rowKey="sn"
+          loading={specialLoading}
+          dataSource={specialRules}
+          pagination={{ pageSize: 10 }}
+          columns={[
+            { title: 'SN', dataIndex: 'sn', width: 160 },
+            { title: '制造商', dataIndex: 'manufacturer', width: 120 },
+            { title: '型号', dataIndex: 'model', width: 140 },
+            { title: 'PSA', dataIndex: 'psa', width: 100 },
+            { title: '套餐', dataIndex: 'package_type', width: 140 },
+            { title: '策略', dataIndex: 'policy', width: 100 }
+          ]}
+          scroll={{ x: 900 }}
         />
       </Card>
     </Space>

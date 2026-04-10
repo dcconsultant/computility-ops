@@ -472,12 +472,23 @@ func validatePackageModelFailureRow(raw map[string]string) (domain.PackageModelF
 	return domain.PackageModelFailureRate{ConfigType: cfg, Manufacturer: m, Model: model, FailureRate: rate, OverWarrantyFailureRate: overRate}, nil
 }
 
+type FailureRateSummary struct {
+	Segment              string  `json:"segment"`
+	FullCycleFailureRate float64 `json:"full_cycle_failure_rate"`
+	OverWarrantyRate     float64 `json:"over_warranty_failure_rate"`
+	FaultCount           int     `json:"fault_count"`
+	OverWarrantyFaults   int     `json:"over_warranty_fault_count"`
+	ServerYears          float64 `json:"server_years"`
+	OverWarrantyYears    float64 `json:"over_warranty_years"`
+}
+
 type FaultAnalysisResult struct {
-	TotalFaultRows             int `json:"total_fault_rows"`
-	MatchedFaultRows           int `json:"matched_fault_rows"`
-	GeneratedModelRates        int `json:"generated_model_rates"`
-	GeneratedPackageRates      int `json:"generated_package_rates"`
-	GeneratedPackageModelRates int `json:"generated_package_model_rates"`
+	TotalFaultRows             int                  `json:"total_fault_rows"`
+	MatchedFaultRows           int                  `json:"matched_fault_rows"`
+	GeneratedModelRates        int                  `json:"generated_model_rates"`
+	GeneratedPackageRates      int                  `json:"generated_package_rates"`
+	GeneratedPackageModelRates int                  `json:"generated_package_model_rates"`
+	OverallRates               []FailureRateSummary `json:"overall_rates,omitempty"`
 }
 
 var faultListHeaderMap = map[string]string{
@@ -565,6 +576,11 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 	pkgModelOverNum := map[string]float64{}
 	pkgModelOverDen := map[string]float64{}
 
+	overallFaultNum := map[string]float64{"storage": 0, "non_storage": 0}
+	overallFaultOverNum := map[string]float64{"storage": 0, "non_storage": 0}
+	overallDenYears := map[string]float64{"storage": 0, "non_storage": 0}
+	overallOverDenYears := map[string]float64{"storage": 0, "non_storage": 0}
+
 	now := time.Now()
 	for _, srv := range servers {
 		pkg, ok := pkgMap[strings.TrimSpace(srv.ConfigType)]
@@ -577,8 +593,10 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		}
 
 		bucket := normalizeBucket(pkg.SceneCategory)
+		segment := "non_storage"
 		weight := 1.0
 		if bucket == "warm_storage" || bucket == "hot_storage" {
+			segment = "storage"
 			weight = 1 + float64(pkg.DataDiskCount)
 		}
 
@@ -597,12 +615,14 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		modelDen[modelKey] += weightedYears
 		pkgDen[pkgKey] += weightedYears
 		pkgModelDen[pkgModelKey] += weightedYears
+		overallDenYears[segment] += years
 
 		if overYears > 0 {
 			weightedOverYears := weight * overYears
 			modelOverDen[modelKey] += weightedOverYears
 			pkgOverDen[pkgKey] += weightedOverYears
 			pkgModelOverDen[pkgModelKey] += weightedOverYears
+			overallOverDenYears[segment] += overYears
 		}
 
 		events := faultEventsBySN[srv.SN]
@@ -626,6 +646,9 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		modelOverNum[modelKey] += overFaultN
 		pkgOverNum[pkgKey] += overFaultN
 		pkgModelOverNum[pkgModelKey] += overFaultN
+
+		overallFaultNum[segment] += totalFaultN
+		overallFaultOverNum[segment] += overFaultN
 	}
 
 	modelRates := make([]domain.ModelFailureRate, 0, len(modelDen))
@@ -697,12 +720,36 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		return FaultAnalysisResult{}, err
 	}
 
+	buildSummary := func(segment string) FailureRateSummary {
+		fullRate := 0.0
+		if overallDenYears[segment] > 0 {
+			fullRate = overallFaultNum[segment] / overallDenYears[segment]
+		}
+		overRate := 0.0
+		if overallOverDenYears[segment] > 0 {
+			overRate = overallFaultOverNum[segment] / overallOverDenYears[segment]
+		}
+		return FailureRateSummary{
+			Segment:              segment,
+			FullCycleFailureRate: fullRate,
+			OverWarrantyRate:     overRate,
+			FaultCount:           int(overallFaultNum[segment]),
+			OverWarrantyFaults:   int(overallFaultOverNum[segment]),
+			ServerYears:          overallDenYears[segment],
+			OverWarrantyYears:    overallOverDenYears[segment],
+		}
+	}
+
 	return FaultAnalysisResult{
 		TotalFaultRows:             totalFaultRows,
 		MatchedFaultRows:           matchedFaultRows,
 		GeneratedModelRates:        len(modelRates),
 		GeneratedPackageRates:      len(packageRates),
 		GeneratedPackageModelRates: len(packageModelRates),
+		OverallRates: []FailureRateSummary{
+			buildSummary("storage"),
+			buildSummary("non_storage"),
+		},
 	}, nil
 }
 

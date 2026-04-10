@@ -21,7 +21,8 @@ export default function AppLayout() {
           selectedKeys={[key]}
           items={[
             { key: '/import', label: <Link to="/import">配置管理</Link> },
-            { key: '/plan', label: <Link to="/plan">续保管理</Link> }
+            { key: '/plan', label: <Link to="/plan">续保管理</Link> },
+            { key: '/failure', label: <Link to="/failure">故障率分析</Link> }
           ]}
           style={{ flex: 1, minWidth: 0 }}
         />

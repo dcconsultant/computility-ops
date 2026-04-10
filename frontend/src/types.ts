@@ -80,12 +80,23 @@ export interface PackageModelFailureRate {
   over_warranty_failure_rate?: number;
 }
 
+export interface FailureRateSummary {
+  segment: 'storage' | 'non_storage' | string;
+  full_cycle_failure_rate: number;
+  over_warranty_failure_rate: number;
+  fault_count: number;
+  over_warranty_fault_count: number;
+  server_years: number;
+  over_warranty_years: number;
+}
+
 export interface FaultAnalysisResult {
   total_fault_rows: number;
   matched_fault_rows: number;
   generated_model_rates: number;
   generated_package_rates: number;
   generated_package_model_rates: number;
+  overall_rates?: FailureRateSummary[];
 }
 
 export interface PlanItem {

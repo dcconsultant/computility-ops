@@ -3,6 +3,7 @@ import AppLayout from './layout';
 import ImportPage from './pages/ImportPage';
 import PlanPage from './pages/PlanPage';
 import PlanDetailPage from './pages/PlanDetailPage';
+import FailureAnalysisPage from './pages/FailureAnalysisPage';
 
 export default function App() {
   return (
@@ -12,6 +13,7 @@ export default function App() {
         <Route path="/import" element={<ImportPage />} />
         <Route path="/plan" element={<PlanPage />} />
         <Route path="/plan/:planId" element={<PlanDetailPage />} />
+        <Route path="/failure" element={<FailureAnalysisPage />} />
         <Route path="/result" element={<Navigate to="/plan" replace />} />
         <Route path="/result/:planId" element={<PlanDetailPage />} />
       </Route>
