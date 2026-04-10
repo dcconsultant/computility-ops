@@ -15,6 +15,7 @@ type DatasetRepo struct {
 	modelFailureRates []domain.ModelFailureRate
 	pkgFailureRates   []domain.PackageFailureRate
 	pkgModelRates     []domain.PackageModelFailureRate
+	overallRates      []domain.FailureRateSummary
 }
 
 func NewDatasetRepo() *DatasetRepo { return &DatasetRepo{} }
@@ -77,4 +78,17 @@ func (r *DatasetRepo) ListPackageModelFailureRates(_ context.Context) ([]domain.
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return append([]domain.PackageModelFailureRate(nil), r.pkgModelRates...), nil
+}
+
+func (r *DatasetRepo) ReplaceOverallFailureRates(_ context.Context, rows []domain.FailureRateSummary) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.overallRates = append([]domain.FailureRateSummary(nil), rows...)
+	return nil
+}
+
+func (r *DatasetRepo) ListOverallFailureRates(_ context.Context) ([]domain.FailureRateSummary, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return append([]domain.FailureRateSummary(nil), r.overallRates...), nil
 }

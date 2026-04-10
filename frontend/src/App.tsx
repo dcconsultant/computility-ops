@@ -4,6 +4,7 @@ import ImportPage from './pages/ImportPage';
 import PlanPage from './pages/PlanPage';
 import PlanDetailPage from './pages/PlanDetailPage';
 import FailureAnalysisPage from './pages/FailureAnalysisPage';
+import FailureDashboardPage from './pages/FailureDashboardPage';
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
         <Route path="/plan" element={<PlanPage />} />
         <Route path="/plan/:planId" element={<PlanDetailPage />} />
         <Route path="/failure" element={<FailureAnalysisPage />} />
+        <Route path="/failure/dashboard" element={<FailureDashboardPage />} />
         <Route path="/result" element={<Navigate to="/plan" replace />} />
         <Route path="/result/:planId" element={<PlanDetailPage />} />
       </Route>

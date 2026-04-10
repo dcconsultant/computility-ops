@@ -45,3 +45,11 @@ func (r *DatasetRepo) ReplacePackageModelFailureRates(_ context.Context, _ []dom
 func (r *DatasetRepo) ListPackageModelFailureRates(_ context.Context) ([]domain.PackageModelFailureRate, error) {
 	return nil, errors.New("mysql repo not implemented in phase 1")
 }
+
+func (r *DatasetRepo) ReplaceOverallFailureRates(_ context.Context, _ []domain.FailureRateSummary) error {
+	return errors.New("mysql repo not implemented in phase 1")
+}
+
+func (r *DatasetRepo) ListOverallFailureRates(_ context.Context) ([]domain.FailureRateSummary, error) {
+	return nil, errors.New("mysql repo not implemented in phase 1")
+}

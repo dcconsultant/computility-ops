@@ -41,6 +41,7 @@ func NewRouter(h Handlers) *gin.Engine {
 		v1.GET("/failure-rates/package", h.Import.ListPackageFailureRates)
 		v1.POST("/failure-rates/package-model/import", h.Import.ImportPackageModelFailureRates)
 		v1.GET("/failure-rates/package-model", h.Import.ListPackageModelFailureRates)
+		v1.GET("/failure-rates/overall", h.Import.ListOverallFailureRates)
 		v1.POST("/failure-rates/analyze/import", h.Import.AnalyzeFaultRates)
 
 		v1.POST("/renewals/plan", h.Renewal.CreatePlan)

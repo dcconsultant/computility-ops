@@ -7,7 +7,11 @@ const { Title, Text } = Typography;
 
 export default function AppLayout() {
   const location = useLocation();
-  const key = location.pathname.startsWith('/result') || location.pathname.startsWith('/plan/') ? '/plan' : location.pathname;
+  const key = location.pathname.startsWith('/result') || location.pathname.startsWith('/plan/')
+    ? '/plan'
+    : location.pathname.startsWith('/failure/')
+      ? '/failure'
+      : location.pathname;
 
   return (
     <Layout style={{ minHeight: '100vh' }}>

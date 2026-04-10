@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Card, message, Space, Table, Tabs, Typography, Upload } from 'antd';
+import { useNavigate } from 'react-router-dom';
 import type { UploadProps } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import {
@@ -8,6 +9,7 @@ import {
   importPackageFailureRates,
   importPackageModelFailureRates,
   listModelFailureRates,
+  listOverallFailureRates,
   listPackageFailureRates,
   listPackageModelFailureRates
 } from '../api';
@@ -24,20 +26,24 @@ const { Text } = Typography;
 type DataKey = 'failure_model' | 'failure_package' | 'failure_pkg_model' | 'fault_analysis';
 
 export default function FailureAnalysisPage() {
+  const navigate = useNavigate();
   const [analysisResult, setAnalysisResult] = useState<FaultAnalysisResult | null>(null);
   const [uploading, setUploading] = useState<DataKey | null>(null);
 
+  const [overallRates, setOverallRates] = useState<FaultAnalysisResult['overall_rates']>([]);
   const [fm, setFm] = useState<ModelFailureRate[]>([]);
   const [fp, setFp] = useState<PackageFailureRate[]>([]);
   const [fpm, setFpm] = useState<PackageModelFailureRate[]>([]);
 
   async function reloadAll() {
     try {
-      const [s1, s2, s3] = await Promise.all([
+      const [s0, s1, s2, s3] = await Promise.all([
+        listOverallFailureRates(),
         listModelFailureRates(),
         listPackageFailureRates(),
         listPackageModelFailureRates()
       ]);
+      setOverallRates(ensureApiOk(s0).data.list || []);
       setFm(ensureApiOk(s1).data.list);
       setFp(ensureApiOk(s2).data.list);
       setFpm(ensureApiOk(s3).data.list);
@@ -68,6 +74,7 @@ export default function FailureAnalysisPage() {
           if (kind === 'fault_analysis') {
             const resp = ensureApiOk(await analyzeFaultRates(file));
             setAnalysisResult(resp.data);
+            setOverallRates(resp.data.overall_rates || []);
             await reloadAll();
             message.success(`故障分析完成：命中故障 ${resp.data.matched_fault_rows}/${resp.data.total_fault_rows} 条`);
           } else {
@@ -97,11 +104,14 @@ export default function FailureAnalysisPage() {
         />
       )}
 
-      <Card title="整体故障率（按存储/非存储 + 全周期/过保）">
+      <Card
+        title="整体故障率（按存储/非存储 + 全周期/过保）"
+        extra={<Button type="primary" onClick={() => navigate('/failure/dashboard')}>打开分析看板</Button>}
+      >
         <Table
           rowKey="segment"
           pagination={false}
-          dataSource={analysisResult?.overall_rates || []}
+          dataSource={overallRates || []}
           columns={[
             { title: '分类', dataIndex: 'segment', render: (v: string) => (v === 'storage' ? '存储' : '非存储') },
             { title: '全周期故障率', dataIndex: 'full_cycle_failure_rate', render: (v: number) => formatPercent(v) },

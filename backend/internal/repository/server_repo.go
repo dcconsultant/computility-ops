@@ -27,4 +27,7 @@ type DatasetRepo interface {
 
 	ReplacePackageModelFailureRates(ctx context.Context, rows []domain.PackageModelFailureRate) error
 	ListPackageModelFailureRates(ctx context.Context) ([]domain.PackageModelFailureRate, error)
+
+	ReplaceOverallFailureRates(ctx context.Context, rows []domain.FailureRateSummary) error
+	ListOverallFailureRates(ctx context.Context) ([]domain.FailureRateSummary, error)
 }

@@ -452,6 +452,10 @@ func (s *ImportService) ListPackageModelFailureRates(ctx context.Context) ([]dom
 	return s.datasetRepo.ListPackageModelFailureRates(ctx)
 }
 
+func (s *ImportService) ListOverallFailureRates(ctx context.Context) ([]domain.FailureRateSummary, error) {
+	return s.datasetRepo.ListOverallFailureRates(ctx)
+}
+
 func validatePackageModelFailureRow(raw map[string]string) (domain.PackageModelFailureRate, error) {
 	get := func(k string) string { return strings.TrimSpace(raw[k]) }
 	cfg, m, model := get("config_type"), get("manufacturer"), get("model")
@@ -472,23 +476,13 @@ func validatePackageModelFailureRow(raw map[string]string) (domain.PackageModelF
 	return domain.PackageModelFailureRate{ConfigType: cfg, Manufacturer: m, Model: model, FailureRate: rate, OverWarrantyFailureRate: overRate}, nil
 }
 
-type FailureRateSummary struct {
-	Segment              string  `json:"segment"`
-	FullCycleFailureRate float64 `json:"full_cycle_failure_rate"`
-	OverWarrantyRate     float64 `json:"over_warranty_failure_rate"`
-	FaultCount           int     `json:"fault_count"`
-	OverWarrantyFaults   int     `json:"over_warranty_fault_count"`
-	ServerYears          float64 `json:"server_years"`
-	OverWarrantyYears    float64 `json:"over_warranty_years"`
-}
-
 type FaultAnalysisResult struct {
-	TotalFaultRows             int                  `json:"total_fault_rows"`
-	MatchedFaultRows           int                  `json:"matched_fault_rows"`
-	GeneratedModelRates        int                  `json:"generated_model_rates"`
-	GeneratedPackageRates      int                  `json:"generated_package_rates"`
-	GeneratedPackageModelRates int                  `json:"generated_package_model_rates"`
-	OverallRates               []FailureRateSummary `json:"overall_rates,omitempty"`
+	TotalFaultRows             int                         `json:"total_fault_rows"`
+	MatchedFaultRows           int                         `json:"matched_fault_rows"`
+	GeneratedModelRates        int                         `json:"generated_model_rates"`
+	GeneratedPackageRates      int                         `json:"generated_package_rates"`
+	GeneratedPackageModelRates int                         `json:"generated_package_model_rates"`
+	OverallRates               []domain.FailureRateSummary `json:"overall_rates,omitempty"`
 }
 
 var faultListHeaderMap = map[string]string{
@@ -615,14 +609,14 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		modelDen[modelKey] += weightedYears
 		pkgDen[pkgKey] += weightedYears
 		pkgModelDen[pkgModelKey] += weightedYears
-		overallDenYears[segment] += years
+		overallDenYears[segment] += weightedYears
 
 		if overYears > 0 {
 			weightedOverYears := weight * overYears
 			modelOverDen[modelKey] += weightedOverYears
 			pkgOverDen[pkgKey] += weightedOverYears
 			pkgModelOverDen[pkgModelKey] += weightedOverYears
-			overallOverDenYears[segment] += overYears
+			overallOverDenYears[segment] += weightedOverYears
 		}
 
 		events := faultEventsBySN[srv.SN]
@@ -720,7 +714,8 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		return FaultAnalysisResult{}, err
 	}
 
-	buildSummary := func(segment string) FailureRateSummary {
+	overallRates := []domain.FailureRateSummary{}
+	buildSummary := func(segment string) domain.FailureRateSummary {
 		fullRate := 0.0
 		if overallDenYears[segment] > 0 {
 			fullRate = overallFaultNum[segment] / overallDenYears[segment]
@@ -729,7 +724,7 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		if overallOverDenYears[segment] > 0 {
 			overRate = overallFaultOverNum[segment] / overallOverDenYears[segment]
 		}
-		return FailureRateSummary{
+		return domain.FailureRateSummary{
 			Segment:              segment,
 			FullCycleFailureRate: fullRate,
 			OverWarrantyRate:     overRate,
@@ -740,16 +735,21 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		}
 	}
 
+	overallRates = []domain.FailureRateSummary{
+		buildSummary("storage"),
+		buildSummary("non_storage"),
+	}
+	if err := s.datasetRepo.ReplaceOverallFailureRates(ctx, overallRates); err != nil {
+		return FaultAnalysisResult{}, err
+	}
+
 	return FaultAnalysisResult{
 		TotalFaultRows:             totalFaultRows,
 		MatchedFaultRows:           matchedFaultRows,
 		GeneratedModelRates:        len(modelRates),
 		GeneratedPackageRates:      len(packageRates),
 		GeneratedPackageModelRates: len(packageModelRates),
-		OverallRates: []FailureRateSummary{
-			buildSummary("storage"),
-			buildSummary("non_storage"),
-		},
+		OverallRates:               overallRates,
 	}, nil
 }
 

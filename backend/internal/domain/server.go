@@ -56,3 +56,13 @@ type PackageModelFailureRate struct {
 	FailureRate             float64 `json:"failure_rate"`
 	OverWarrantyFailureRate float64 `json:"over_warranty_failure_rate,omitempty"`
 }
+
+type FailureRateSummary struct {
+	Segment              string  `json:"segment"`
+	FullCycleFailureRate float64 `json:"full_cycle_failure_rate"`
+	OverWarrantyRate     float64 `json:"over_warranty_failure_rate"`
+	FaultCount           int     `json:"fault_count"`
+	OverWarrantyFaults   int     `json:"over_warranty_fault_count"`
+	ServerYears          float64 `json:"server_years"`
+	OverWarrantyYears    float64 `json:"over_warranty_years"`
+}
