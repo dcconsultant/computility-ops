@@ -126,6 +126,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		"gpu":          {},
 	}
 	unmatchedConfigSet := map[string]bool{}
+	nonRenewalItems := make([]domain.NonRenewalItem, 0)
 	coveredComputeCores := 0
 	coveredComputeCount := 0
 	coveredWarmStorage := 0.0
@@ -142,6 +143,18 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			continue
 		}
 		if excludedPSASet[normalizeText(srv.PSA)] {
+			psa, _ := parsePSAValue(srv.PSA)
+			nonRenewalItems = append(nonRenewalItems, domain.NonRenewalItem{
+				SN:           srv.SN,
+				Manufacturer: srv.Manufacturer,
+				Model:        srv.Model,
+				Environment:  srv.Environment,
+				ConfigType:   srv.ConfigType,
+				PSA:          psa,
+				ReasonCode:   "psa_exception",
+				Reason:       "PSA例外",
+				ReasonDetail: fmt.Sprintf("PSA=%s 命中排除条件", strings.TrimSpace(srv.PSA)),
+			})
 			continue
 		}
 		if strings.TrimSpace(srv.WarrantyEndDate) == "" {
@@ -224,6 +237,19 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 
 		specialPolicy := specialMap[srv.SN]
 		if specialPolicy == "blacklist" {
+			nonRenewalItems = append(nonRenewalItems, domain.NonRenewalItem{
+				SN:           item.SN,
+				Bucket:       item.Bucket,
+				Manufacturer: item.Manufacturer,
+				Model:        item.Model,
+				Environment:  item.Environment,
+				ConfigType:   item.ConfigType,
+				PSA:          item.PSA,
+				FinalScore:   item.FinalScore,
+				ReasonCode:   "blacklist",
+				Reason:       "黑名单",
+				ReasonDetail: "命中特殊名单黑名单策略",
+			})
 			continue
 		}
 		if specialPolicy == "whitelist" {
@@ -298,6 +324,35 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	warmItems, warmStorage, warmCores := selectByStorage(bucketItems["warm_storage"], requiredWarmStorage)
 	hotItems, hotStorage, hotCores := selectByStorage(bucketItems["hot_storage"], requiredHotStorage)
 	gpuItems := bucketItems["gpu"] // 全部续保（已应用环境过滤、到期过滤、blacklist）
+
+	appendRankingNonRenewals := func(bucket string, all []domain.RenewalItem, selected []domain.RenewalItem) {
+		selectedSet := make(map[string]bool, len(selected))
+		for _, item := range selected {
+			selectedSet[item.SN] = true
+		}
+		for i, item := range all {
+			if selectedSet[item.SN] {
+				continue
+			}
+			nonRenewalItems = append(nonRenewalItems, domain.NonRenewalItem{
+				SN:           item.SN,
+				Bucket:       bucket,
+				Manufacturer: item.Manufacturer,
+				Model:        item.Model,
+				Environment:  item.Environment,
+				ConfigType:   item.ConfigType,
+				PSA:          item.PSA,
+				FinalScore:   item.FinalScore,
+				ReasonCode:   "value_rank",
+				Reason:       "价值分排名未入选",
+				ReasonDetail: fmt.Sprintf("在 %s 栏目排名第 %d，目标已被更高分机器满足", bucket, i+1),
+				RankInBucket: i + 1,
+			})
+		}
+	}
+	appendRankingNonRenewals("compute", bucketItems["compute"], computeItems)
+	appendRankingNonRenewals("warm_storage", bucketItems["warm_storage"], warmItems)
+	appendRankingNonRenewals("hot_storage", bucketItems["hot_storage"], hotItems)
 	gpuCores := 0
 	gpuStorage := 0.0
 	gpuRenewalCards := 0
@@ -306,6 +361,16 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		gpuStorage += item.StorageCapacityTB
 		gpuRenewalCards += item.GPUCardCount
 	}
+
+	sort.SliceStable(nonRenewalItems, func(i, j int) bool {
+		if nonRenewalItems[i].ReasonCode != nonRenewalItems[j].ReasonCode {
+			return nonRenewalItems[i].ReasonCode < nonRenewalItems[j].ReasonCode
+		}
+		if nonRenewalItems[i].RankInBucket != nonRenewalItems[j].RankInBucket {
+			return nonRenewalItems[i].RankInBucket < nonRenewalItems[j].RankInBucket
+		}
+		return nonRenewalItems[i].SN < nonRenewalItems[j].SN
+	})
 
 	unmatchedConfigTypes := make([]string, 0, len(unmatchedConfigSet))
 	for cfg := range unmatchedConfigSet {
@@ -338,6 +403,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		GPUCoveredServers:    gpuCoveredServers,
 		GPURenewalCards:      gpuRenewalCards,
 		GPURenewalServers:    len(gpuItems),
+		NonRenewalItems:      nonRenewalItems,
 		Sections: []domain.RenewalPlanSection{
 			{
 				Bucket:        "compute",

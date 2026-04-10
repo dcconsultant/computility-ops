@@ -155,7 +155,7 @@ export default function ImportPage() {
                     { title: 'SN', dataIndex: 'sn' },
                     { title: '制造商', dataIndex: 'manufacturer' },
                     { title: '服务器型号', dataIndex: 'model' },
-                    { title: 'PSA', dataIndex: 'psa' },
+                    { title: 'PSA', dataIndex: 'psa', render: (v: string) => formatMaybeNumber(v) },
                     { title: '机房', dataIndex: 'idc' },
                     { title: '环境', dataIndex: 'environment' },
                     { title: '配置类型', dataIndex: 'config_type' },
@@ -187,13 +187,13 @@ export default function ImportPage() {
                   columns={[
                     { title: '配置类型', dataIndex: 'config_type' },
                     { title: '场景大类', dataIndex: 'scene_category' },
-                    { title: 'CPU逻辑核数', dataIndex: 'cpu_logical_cores' },
-                    { title: 'GPU卡数', dataIndex: 'gpu_card_count' },
+                    { title: 'CPU逻辑核数', dataIndex: 'cpu_logical_cores', render: (v: number) => formatInt(v) },
+                    { title: 'GPU卡数', dataIndex: 'gpu_card_count', render: (v: number) => formatInt(v) },
                     { title: '数据盘类型', dataIndex: 'data_disk_type' },
-                    { title: '数据盘数量', dataIndex: 'data_disk_count' },
-                    { title: '存储容量(TB)', dataIndex: 'storage_capacity_tb' },
-                    { title: '服务器价值分', dataIndex: 'server_value_score' },
-                    { title: '架构标准化系数', dataIndex: 'arch_standardized_factor' }
+                    { title: '数据盘数量', dataIndex: 'data_disk_count', render: (v: number) => formatInt(v) },
+                    { title: '存储容量(TB)', dataIndex: 'storage_capacity_tb', render: (v: number) => formatFloat(v) },
+                    { title: '服务器价值分', dataIndex: 'server_value_score', render: (v: number) => formatFloat(v) },
+                    { title: '架构标准化系数', dataIndex: 'arch_standardized_factor', render: (v: number) => formatFloat(v) }
                   ]}
                 />
               </Space>,
@@ -204,4 +204,18 @@ export default function ImportPage() {
       />
     </Space>
   );
+}
+
+function formatInt(v?: number) {
+  return Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+function formatFloat(v?: number) {
+  return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatMaybeNumber(v?: string) {
+  const n = Number((v || '').trim());
+  if (Number.isNaN(n)) return v || '-';
+  return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }

@@ -26,6 +26,7 @@ type RenewalPlan struct {
 	SelectedStorageTB    float64              `json:"selected_storage_tb"`
 	SelectedCount        int                  `json:"selected_count"`
 	Items                []RenewalItem        `json:"items"`
+	NonRenewalItems      []NonRenewalItem     `json:"non_renewal_items,omitempty"`
 	Sections             []RenewalPlanSection `json:"sections,omitempty"`
 }
 
@@ -63,4 +64,19 @@ type RenewalItem struct {
 	FailureAdjustFactor    float64 `json:"failure_adjust_factor,omitempty"`
 	FinalScore             float64 `json:"final_score"`
 	SpecialPolicy          string  `json:"special_policy,omitempty"`
+}
+
+type NonRenewalItem struct {
+	SN           string  `json:"sn"`
+	Bucket       string  `json:"bucket,omitempty"`
+	Manufacturer string  `json:"manufacturer,omitempty"`
+	Model        string  `json:"model,omitempty"`
+	Environment  string  `json:"environment,omitempty"`
+	ConfigType   string  `json:"config_type,omitempty"`
+	PSA          float64 `json:"psa,omitempty"`
+	FinalScore   float64 `json:"final_score,omitempty"`
+	ReasonCode   string  `json:"reason_code"`
+	Reason       string  `json:"reason"`
+	ReasonDetail string  `json:"reason_detail,omitempty"`
+	RankInBucket int     `json:"rank_in_bucket,omitempty"`
 }

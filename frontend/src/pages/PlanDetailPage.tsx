@@ -63,10 +63,10 @@ export default function PlanDetailPage() {
           <Card title="基础信息" loading={loading}>
             <Space wrap>
               <Tag>目标时间: {plan.target_date || '-'}</Tag>
-              <Tag>计算目标: {plan.target_cores}</Tag>
-              <Tag>温存储目标: {plan.warm_target_storage_tb || 0}TB</Tag>
-              <Tag>热存储目标: {plan.hot_target_storage_tb || 0}TB</Tag>
-              <Tag color="blue">入选台数: {plan.selected_count}</Tag>
+              <Tag>计算目标: {formatInt(plan.target_cores)} </Tag>
+              <Tag>温存储目标: {toTB(plan.warm_target_storage_tb || 0)}TB</Tag>
+              <Tag>热存储目标: {toTB(plan.hot_target_storage_tb || 0)}TB</Tag>
+              <Tag color="blue">入选台数: {formatInt(plan.selected_count)}</Tag>
             </Space>
             <div style={{ marginTop: 12 }}>
               <Text type="secondary">异常详情已收敛到列表页“异常”列提示，本页仅展示方案汇总与明细。</Text>
@@ -82,11 +82,11 @@ export default function PlanDetailPage() {
                 { title: '维度', dataIndex: 'dimension', width: 120 },
                 { title: '目标', dataIndex: 'target', width: 120 },
                 { title: '保内满足', dataIndex: 'coveredValue', width: 130 },
-                { title: '保内台数', dataIndex: 'coveredServers', width: 100 },
+                { title: '保内台数', dataIndex: 'coveredServers', width: 100, render: (v: number) => formatInt(v) },
                 { title: '续保满足', dataIndex: 'renewalValue', width: 130 },
-                { title: '续保台数', dataIndex: 'renewalServers', width: 100 },
+                { title: '续保台数', dataIndex: 'renewalServers', width: 100, render: (v: number) => formatInt(v) },
                 { title: '当前总量', dataIndex: 'currentValue', width: 130 },
-                { title: '当前台数', dataIndex: 'currentServers', width: 100 }
+                { title: '当前台数', dataIndex: 'currentServers', width: 100, render: (v: number) => formatInt(v) }
               ]}
             />
           </Card>
@@ -97,17 +97,36 @@ export default function PlanDetailPage() {
               dataSource={plan.items}
               pagination={{ pageSize: 10 }}
               columns={[
-                { title: '排名', dataIndex: 'rank', width: 70 },
+                { title: '排名', dataIndex: 'rank', width: 70, render: (v: number) => formatInt(v) },
                 { title: '栏目', dataIndex: 'bucket', width: 100 },
                 { title: 'SN', dataIndex: 'sn', width: 160 },
                 { title: '服务器型号', dataIndex: 'model', width: 160 },
                 { title: '配置类型', dataIndex: 'config_type', width: 140 },
-                { title: 'CPU核数', dataIndex: 'cpu_logical_cores', width: 100 },
-                { title: 'GPU卡数', dataIndex: 'gpu_card_count', width: 100 },
-                { title: '存储(TB)', dataIndex: 'storage_capacity_tb', width: 100 },
-                { title: '最终分', dataIndex: 'final_score', width: 110 }
+                { title: 'CPU核数', dataIndex: 'cpu_logical_cores', width: 100, render: (v: number) => formatInt(v) },
+                { title: 'GPU卡数', dataIndex: 'gpu_card_count', width: 100, render: (v: number) => formatInt(v) },
+                { title: '存储(TB)', dataIndex: 'storage_capacity_tb', width: 100, render: (v: number) => toTB(v) },
+                { title: '最终分', dataIndex: 'final_score', width: 110, render: (v: number) => formatFloat(v) }
               ]}
               scroll={{ x: 1200 }}
+            />
+          </Card>
+
+          <Card title="不续保清单（含原因）" loading={loading}>
+            <Table
+              rowKey={(r) => `${r.sn}-${r.reason_code}-${r.rank_in_bucket || 0}`}
+              dataSource={plan.non_renewal_items || []}
+              pagination={{ pageSize: 10 }}
+              columns={[
+                { title: 'SN', dataIndex: 'sn', width: 160 },
+                { title: '栏目', dataIndex: 'bucket', width: 110 },
+                { title: '配置类型', dataIndex: 'config_type', width: 140 },
+                { title: 'PSA', dataIndex: 'psa', width: 100, render: (v: number) => formatFloat(v) },
+                { title: '价值分', dataIndex: 'final_score', width: 110, render: (v: number) => formatFloat(v) },
+                { title: '桶内排名', dataIndex: 'rank_in_bucket', width: 100, render: (v: number) => (v ? formatInt(v) : '-') },
+                { title: '不续保理由', dataIndex: 'reason', width: 140 },
+                { title: '原因说明', dataIndex: 'reason_detail', width: 260 }
+              ]}
+              scroll={{ x: 1300 }}
             />
           </Card>
         </>
@@ -140,12 +159,12 @@ function buildSummaryRows(plan: RenewalPlan): SummaryRow[] {
     {
       key: 'compute',
       dimension: '计算型',
-      target: `${plan.target_cores || 0} 核`,
-      coveredValue: `${computeCovered} 核`,
+      target: `${formatInt(plan.target_cores || 0)} 核`,
+      coveredValue: `${formatInt(computeCovered)} 核`,
       coveredServers: computeCoveredServers,
-      renewalValue: `${computeRenewal} 核`,
+      renewalValue: `${formatInt(computeRenewal)} 核`,
       renewalServers: computeRenewalServers,
-      currentValue: `${computeCovered + computeRenewal} 核`,
+      currentValue: `${formatInt(computeCovered + computeRenewal)} 核`,
       currentServers: computeCoveredServers + computeRenewalServers
     },
     {
@@ -174,16 +193,24 @@ function buildSummaryRows(plan: RenewalPlan): SummaryRow[] {
       key: 'gpu',
       dimension: 'GPU（例外）',
       target: '-',
-      coveredValue: `${plan.gpu_covered_cards || 0} 卡`,
+      coveredValue: `${formatInt(plan.gpu_covered_cards || 0)} 卡`,
       coveredServers: plan.gpu_covered_servers || 0,
-      renewalValue: `${plan.gpu_renewal_cards || 0} 卡`,
+      renewalValue: `${formatInt(plan.gpu_renewal_cards || 0)} 卡`,
       renewalServers: plan.gpu_renewal_servers || 0,
-      currentValue: `${plan.gpu_current_cards || 0} 卡`,
+      currentValue: `${formatInt(plan.gpu_current_cards || 0)} 卡`,
       currentServers: plan.gpu_current_servers || 0
     }
   ];
 }
 
 function toTB(v: number) {
-  return Number(v || 0).toFixed(2);
+  return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatInt(v?: number) {
+  return Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+function formatFloat(v?: number) {
+  return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }

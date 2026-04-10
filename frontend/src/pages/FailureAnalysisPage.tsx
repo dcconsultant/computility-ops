@@ -106,10 +106,10 @@ export default function FailureAnalysisPage() {
             { title: '分类', dataIndex: 'segment', render: (v: string) => (v === 'storage' ? '存储' : '非存储') },
             { title: '全周期故障率', dataIndex: 'full_cycle_failure_rate', render: (v: number) => formatPercent(v) },
             { title: '过保故障率', dataIndex: 'over_warranty_failure_rate', render: (v: number) => formatPercent(v) },
-            { title: '故障数', dataIndex: 'fault_count' },
-            { title: '过保故障数', dataIndex: 'over_warranty_fault_count' },
-            { title: '全周期台年', dataIndex: 'server_years' },
-            { title: '过保台年', dataIndex: 'over_warranty_years' }
+            { title: '故障数', dataIndex: 'fault_count', render: (v: number) => formatInt(v) },
+            { title: '过保故障数', dataIndex: 'over_warranty_fault_count', render: (v: number) => formatInt(v) },
+            { title: '全周期台年', dataIndex: 'server_years', render: (v: number) => formatFloat(v) },
+            { title: '过保台年', dataIndex: 'over_warranty_years', render: (v: number) => formatFloat(v) }
           ]}
         />
       </Card>
@@ -181,4 +181,12 @@ export default function FailureAnalysisPage() {
 function formatPercent(v?: number) {
   const n = Number(v || 0);
   return `${(n * 100).toFixed(2)}%`;
+}
+
+function formatInt(v?: number) {
+  return Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+function formatFloat(v?: number) {
+  return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }

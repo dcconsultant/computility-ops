@@ -181,9 +181,9 @@ export default function PlanPage() {
       render: (v: string[]) => (v && v.length ? v.join('、') : '-'),
       width: 160
     },
-    { title: '计算目标核数', dataIndex: 'target_cores', width: 120 },
-    { title: '温存储空间需求(TB)', dataIndex: 'warm_target_storage_tb', width: 160 },
-    { title: '热存储空间需求(TB)', dataIndex: 'hot_target_storage_tb', width: 160 },
+    { title: '计算目标核数', dataIndex: 'target_cores', width: 120, render: (v: number) => formatInt(v) },
+    { title: '温存储空间需求(TB)', dataIndex: 'warm_target_storage_tb', width: 160, render: (v: number) => formatFloat(v) },
+    { title: '热存储空间需求(TB)', dataIndex: 'hot_target_storage_tb', width: 160, render: (v: number) => formatFloat(v) },
     {
       title: '摘要',
       width: 260,
@@ -194,7 +194,7 @@ export default function PlanPage() {
             <Text type={summary.computeRate >= 100 ? undefined : 'warning'}>算力达成: {summary.computeRate.toFixed(1)}%</Text>
             <Text type={summary.warmRate >= 100 ? undefined : 'warning'}>温存储达成: {summary.warmRate.toFixed(1)}%</Text>
             <Text type={summary.hotRate >= 100 ? undefined : 'warning'}>热存储达成: {summary.hotRate.toFixed(1)}%</Text>
-            <Text type="secondary">入选台数: {r.selected_count || 0}</Text>
+            <Text type="secondary">入选台数: {formatInt(r.selected_count || 0)}</Text>
           </Space>
         );
       }
@@ -424,4 +424,12 @@ function calcRate(required: number, selected: number): number {
     return 100;
   }
   return Math.min(999.9, (selected / required) * 100);
+}
+
+function formatInt(v?: number) {
+  return Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+function formatFloat(v?: number) {
+  return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }

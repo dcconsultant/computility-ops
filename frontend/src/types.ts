@@ -135,6 +135,21 @@ export interface RenewalPlanSection {
   items: PlanItem[];
 }
 
+export interface NonRenewalItem {
+  sn: string;
+  bucket?: string;
+  manufacturer?: string;
+  model?: string;
+  environment?: string;
+  config_type?: string;
+  psa?: number;
+  final_score?: number;
+  reason_code: string;
+  reason: string;
+  reason_detail?: string;
+  rank_in_bucket?: number;
+}
+
 export interface RenewalPlan {
   plan_id: string;
   target_date?: string;
@@ -161,5 +176,6 @@ export interface RenewalPlan {
   selected_storage_tb?: number;
   selected_count: number;
   items: PlanItem[];
+  non_renewal_items?: NonRenewalItem[];
   sections?: RenewalPlanSection[];
 }
