@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Alert, Button, Card, message, Space, Table, Tabs, Typography, Upload } from 'antd';
+import { Alert, Button, Card, Input, message, Space, Table, Tabs, Typography, Upload } from 'antd';
 import type { UploadProps } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import {
@@ -31,6 +31,8 @@ export default function ImportPage() {
 
   const [servers, setServers] = useState<ServerItem[]>([]);
   const [packages, setPackages] = useState<HostPackageConfig[]>([]);
+  const [serverKeyword, setServerKeyword] = useState('');
+  const [packageKeyword, setPackageKeyword] = useState('');
 
   async function reloadAll() {
     try {
@@ -48,6 +50,38 @@ export default function ImportPage() {
   useEffect(() => {
     reloadAll();
   }, []);
+
+  const filteredServers = useMemo(() => {
+    const q = serverKeyword.trim().toLowerCase();
+    if (!q) return servers;
+    return servers.filter((x) => [
+      x.sn,
+      x.manufacturer,
+      x.model,
+      x.psa,
+      x.idc,
+      x.environment,
+      x.config_type,
+      x.warranty_end_date,
+      x.launch_date
+    ].some((v) => (v || '').toString().toLowerCase().includes(q)));
+  }, [servers, serverKeyword]);
+
+  const filteredPackages = useMemo(() => {
+    const q = packageKeyword.trim().toLowerCase();
+    if (!q) return packages;
+    return packages.filter((x) => [
+      x.config_type,
+      x.scene_category,
+      x.cpu_logical_cores,
+      x.gpu_card_count,
+      x.data_disk_type,
+      x.data_disk_count,
+      x.storage_capacity_tb,
+      x.server_value_score,
+      x.arch_standardized_factor
+    ].some((v) => String(v ?? '').toLowerCase().includes(q)));
+  }, [packages, packageKeyword]);
 
   function makeUploadProps(kind: DataKey): UploadProps {
     const importer = {
@@ -106,17 +140,30 @@ export default function ImportPage() {
             children: tableCard(
               '服务器管理表',
               'servers',
-              <Table rowKey="sn" dataSource={servers} pagination={{ pageSize: 10 }} columns={[
-                { title: 'SN', dataIndex: 'sn' },
-                { title: '制造商', dataIndex: 'manufacturer' },
-                { title: '服务器型号', dataIndex: 'model' },
-                { title: 'PSA', dataIndex: 'psa' },
-                { title: '机房', dataIndex: 'idc' },
-                { title: '环境', dataIndex: 'environment' },
-                { title: '配置类型', dataIndex: 'config_type' },
-                { title: '保修结束日期', dataIndex: 'warranty_end_date' },
-                { title: '投产日期', dataIndex: 'launch_date' }
-              ]} />,
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Input
+                  allowClear
+                  placeholder="搜索服务器（SN/型号/PSA/环境/配置类型等）"
+                  value={serverKeyword}
+                  onChange={(e) => setServerKeyword(e.target.value)}
+                />
+                <Table
+                  rowKey="sn"
+                  dataSource={filteredServers}
+                  pagination={{ pageSize: 10 }}
+                  columns={[
+                    { title: 'SN', dataIndex: 'sn' },
+                    { title: '制造商', dataIndex: 'manufacturer' },
+                    { title: '服务器型号', dataIndex: 'model' },
+                    { title: 'PSA', dataIndex: 'psa' },
+                    { title: '机房', dataIndex: 'idc' },
+                    { title: '环境', dataIndex: 'environment' },
+                    { title: '配置类型', dataIndex: 'config_type' },
+                    { title: '保修结束日期', dataIndex: 'warranty_end_date' },
+                    { title: '投产日期', dataIndex: 'launch_date' }
+                  ]}
+                />
+              </Space>,
               '字段：SN、制造商、服务器型号、PSA、机房、环境、配置类型、保修结束日期、投产日期'
             )
           },
@@ -126,17 +173,30 @@ export default function ImportPage() {
             children: tableCard(
               '主机套餐配置表',
               'packages',
-              <Table rowKey="config_type" dataSource={packages} pagination={{ pageSize: 10 }} columns={[
-                { title: '配置类型', dataIndex: 'config_type' },
-                { title: '场景大类', dataIndex: 'scene_category' },
-                { title: 'CPU逻辑核数', dataIndex: 'cpu_logical_cores' },
-                { title: 'GPU卡数', dataIndex: 'gpu_card_count' },
-                { title: '数据盘类型', dataIndex: 'data_disk_type' },
-                { title: '数据盘数量', dataIndex: 'data_disk_count' },
-                { title: '存储容量(TB)', dataIndex: 'storage_capacity_tb' },
-                { title: '服务器价值分', dataIndex: 'server_value_score' },
-                { title: '架构标准化系数', dataIndex: 'arch_standardized_factor' }
-              ]} />,
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Input
+                  allowClear
+                  placeholder="搜索套餐（配置类型/场景/核数/卡数/存储等）"
+                  value={packageKeyword}
+                  onChange={(e) => setPackageKeyword(e.target.value)}
+                />
+                <Table
+                  rowKey="config_type"
+                  dataSource={filteredPackages}
+                  pagination={{ pageSize: 10 }}
+                  columns={[
+                    { title: '配置类型', dataIndex: 'config_type' },
+                    { title: '场景大类', dataIndex: 'scene_category' },
+                    { title: 'CPU逻辑核数', dataIndex: 'cpu_logical_cores' },
+                    { title: 'GPU卡数', dataIndex: 'gpu_card_count' },
+                    { title: '数据盘类型', dataIndex: 'data_disk_type' },
+                    { title: '数据盘数量', dataIndex: 'data_disk_count' },
+                    { title: '存储容量(TB)', dataIndex: 'storage_capacity_tb' },
+                    { title: '服务器价值分', dataIndex: 'server_value_score' },
+                    { title: '架构标准化系数', dataIndex: 'arch_standardized_factor' }
+                  ]}
+                />
+              </Space>,
               '服务器管理表通过配置类型关联此表；需维护服务器价值分（PSA非数字时基准）与GPU卡数（GPU汇总统计依赖）。'
             )
           }

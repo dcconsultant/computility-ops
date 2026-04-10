@@ -104,8 +104,8 @@ export default function FailureAnalysisPage() {
           dataSource={analysisResult?.overall_rates || []}
           columns={[
             { title: '分类', dataIndex: 'segment', render: (v: string) => (v === 'storage' ? '存储' : '非存储') },
-            { title: '全周期故障率', dataIndex: 'full_cycle_failure_rate' },
-            { title: '过保故障率', dataIndex: 'over_warranty_failure_rate' },
+            { title: '全周期故障率', dataIndex: 'full_cycle_failure_rate', render: (v: number) => formatPercent(v) },
+            { title: '过保故障率', dataIndex: 'over_warranty_failure_rate', render: (v: number) => formatPercent(v) },
             { title: '故障数', dataIndex: 'fault_count' },
             { title: '过保故障数', dataIndex: 'over_warranty_fault_count' },
             { title: '全周期台年', dataIndex: 'server_years' },
@@ -125,8 +125,8 @@ export default function FailureAnalysisPage() {
                 <Table rowKey={(r) => `${r.manufacturer}-${r.model}`} dataSource={fm} pagination={{ pageSize: 10 }} columns={[
                   { title: '厂商', dataIndex: 'manufacturer' },
                   { title: '服务器型号', dataIndex: 'model' },
-                  { title: '年化故障率', dataIndex: 'failure_rate' },
-                  { title: '过保故障率(参考)', dataIndex: 'over_warranty_failure_rate' }
+                  { title: '年化故障率', dataIndex: 'failure_rate', render: (v: number) => formatPercent(v) },
+                  { title: '过保故障率(参考)', dataIndex: 'over_warranty_failure_rate', render: (v: number) => formatPercent(v) }
                 ]} />
               </Card>
             )
@@ -139,8 +139,8 @@ export default function FailureAnalysisPage() {
                 <Text type="secondary">故障率为年化值；过保故障率按投产满5年至今区间统计，仅供参考。</Text>
                 <Table rowKey="config_type" dataSource={fp} pagination={{ pageSize: 10 }} columns={[
                   { title: '配置类型', dataIndex: 'config_type' },
-                  { title: '年化故障率', dataIndex: 'failure_rate' },
-                  { title: '过保故障率(参考)', dataIndex: 'over_warranty_failure_rate' }
+                  { title: '年化故障率', dataIndex: 'failure_rate', render: (v: number) => formatPercent(v) },
+                  { title: '过保故障率(参考)', dataIndex: 'over_warranty_failure_rate', render: (v: number) => formatPercent(v) }
                 ]} />
               </Card>
             )
@@ -155,8 +155,8 @@ export default function FailureAnalysisPage() {
                   { title: '套餐', dataIndex: 'config_type' },
                   { title: '厂商', dataIndex: 'manufacturer' },
                   { title: '服务器型号', dataIndex: 'model' },
-                  { title: '年化故障率', dataIndex: 'failure_rate' },
-                  { title: '过保故障率(参考)', dataIndex: 'over_warranty_failure_rate' }
+                  { title: '年化故障率', dataIndex: 'failure_rate', render: (v: number) => formatPercent(v) },
+                  { title: '过保故障率(参考)', dataIndex: 'over_warranty_failure_rate', render: (v: number) => formatPercent(v) }
                 ]} />
               </Card>
             )
@@ -176,4 +176,9 @@ export default function FailureAnalysisPage() {
       />
     </Space>
   );
+}
+
+function formatPercent(v?: number) {
+  const n = Number(v || 0);
+  return `${(n * 100).toFixed(2)}%`;
 }
