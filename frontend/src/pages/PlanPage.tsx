@@ -22,6 +22,7 @@ import { ensureApiOk, parseApiError } from '../error';
 import type { RenewalPlan } from '../types';
 
 const { Text, Paragraph } = Typography;
+const { RangePicker } = DatePicker;
 
 export default function PlanPage() {
   const [targetDate, setTargetDate] = useState(dayjs().format('YYYY-MM-DD'));
@@ -37,10 +38,22 @@ export default function PlanPage() {
   const [viewPlan, setViewPlan] = useState<RenewalPlan | null>(null);
   const [viewOpen, setViewOpen] = useState(false);
 
+  const [queryPlanID, setQueryPlanID] = useState('');
+  const [queryTargetDateRange, setQueryTargetDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
+  const [queryExcludedPSA, setQueryExcludedPSA] = useState('');
+  const [queryExcludedEnv, setQueryExcludedEnv] = useState('');
+
   async function reloadPlans() {
     setListLoading(true);
     try {
-      const resp = ensureApiOk(await listPlans());
+      const params = {
+        plan_id: queryPlanID.trim() || undefined,
+        target_date_from: queryTargetDateRange?.[0]?.format('YYYY-MM-DD') || undefined,
+        target_date_to: queryTargetDateRange?.[1]?.format('YYYY-MM-DD') || undefined,
+        excluded_psa: queryExcludedPSA.trim() || undefined,
+        excluded_environment: queryExcludedEnv.trim() || undefined
+      };
+      const resp = ensureApiOk(await listPlans(params));
       setPlans(resp.data.list || []);
     } catch (e) {
       message.error(parseApiError(e, '加载历史方案失败'));
@@ -111,6 +124,26 @@ export default function PlanPage() {
       }
     } catch (e) {
       message.error(parseApiError(e, '删除失败'));
+    }
+  }
+
+  async function onSearchHistory() {
+    await reloadPlans();
+  }
+
+  async function onResetHistoryFilters() {
+    setQueryPlanID('');
+    setQueryTargetDateRange(null);
+    setQueryExcludedPSA('');
+    setQueryExcludedEnv('');
+    setListLoading(true);
+    try {
+      const resp = ensureApiOk(await listPlans());
+      setPlans(resp.data.list || []);
+    } catch (e) {
+      message.error(parseApiError(e, '重置查询失败'));
+    } finally {
+      setListLoading(false);
     }
   }
 
@@ -203,7 +236,41 @@ export default function PlanPage() {
         </Space>
       </Card>
 
-      <Card title="续保管理 - 历史方案列表" extra={<Button onClick={reloadPlans} loading={listLoading}>刷新</Button>}>
+      <Card
+        title="续保管理 - 历史方案列表"
+        extra={(
+          <Space wrap>
+            <Input
+              style={{ width: 160 }}
+              value={queryPlanID}
+              onChange={(e) => setQueryPlanID(e.target.value)}
+              placeholder="方案ID"
+              allowClear
+            />
+            <RangePicker
+              value={queryTargetDateRange}
+              onChange={(v) => setQueryTargetDateRange((v as [dayjs.Dayjs | null, dayjs.Dayjs | null]) || null)}
+              allowEmpty={[true, true]}
+            />
+            <Input
+              style={{ width: 140 }}
+              value={queryExcludedPSA}
+              onChange={(e) => setQueryExcludedPSA(e.target.value)}
+              placeholder="排除PSA"
+              allowClear
+            />
+            <Input
+              style={{ width: 140 }}
+              value={queryExcludedEnv}
+              onChange={(e) => setQueryExcludedEnv(e.target.value)}
+              placeholder="排除环境"
+              allowClear
+            />
+            <Button type="primary" onClick={onSearchHistory} loading={listLoading}>搜索</Button>
+            <Button onClick={onResetHistoryFilters} loading={listLoading}>重置</Button>
+          </Space>
+        )}
+      >
         <Table
           rowKey="plan_id"
           loading={listLoading}

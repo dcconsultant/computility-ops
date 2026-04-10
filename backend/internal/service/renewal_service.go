@@ -27,6 +27,14 @@ type RenewalService struct {
 	renewalRepo repository.RenewalPlanRepo
 }
 
+type ListPlansFilter struct {
+	PlanID              string
+	TargetDateFrom      string
+	TargetDateTo        string
+	ExcludedPSA         string
+	ExcludedEnvironment string
+}
+
 func NewRenewalService(serverRepo repository.ServerRepo, datasetRepo repository.DatasetRepo, renewalRepo repository.RenewalPlanRepo) *RenewalService {
 	return &RenewalService{serverRepo: serverRepo, datasetRepo: datasetRepo, renewalRepo: renewalRepo}
 }
@@ -376,8 +384,62 @@ func (s *RenewalService) GetPlan(ctx context.Context, planID string) (domain.Ren
 	return s.renewalRepo.GetPlan(ctx, planID)
 }
 
-func (s *RenewalService) ListPlans(ctx context.Context) ([]domain.RenewalPlan, error) {
-	return s.renewalRepo.ListPlans(ctx)
+func (s *RenewalService) ListPlans(ctx context.Context, filter ListPlansFilter) ([]domain.RenewalPlan, error) {
+	plans, err := s.renewalRepo.ListPlans(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	planID := strings.TrimSpace(filter.PlanID)
+	excludedPSA := normalizeText(filter.ExcludedPSA)
+	excludedEnv := normalizeText(filter.ExcludedEnvironment)
+
+	var fromDate *time.Time
+	if strings.TrimSpace(filter.TargetDateFrom) != "" {
+		parsed, err := parseDate(filter.TargetDateFrom)
+		if err != nil {
+			return nil, fmt.Errorf("invalid target_date_from: %v", err)
+		}
+		fromDate = &parsed
+	}
+	var toDate *time.Time
+	if strings.TrimSpace(filter.TargetDateTo) != "" {
+		parsed, err := parseDate(filter.TargetDateTo)
+		if err != nil {
+			return nil, fmt.Errorf("invalid target_date_to: %v", err)
+		}
+		toDate = &parsed
+	}
+	if fromDate != nil && toDate != nil && fromDate.After(*toDate) {
+		return nil, fmt.Errorf("target_date_from must be <= target_date_to")
+	}
+
+	out := make([]domain.RenewalPlan, 0, len(plans))
+	for _, p := range plans {
+		if planID != "" && !strings.Contains(p.PlanID, planID) {
+			continue
+		}
+		if excludedPSA != "" && !containsNormalized(p.ExcludedPSAs, excludedPSA) {
+			continue
+		}
+		if excludedEnv != "" && !containsNormalized(p.ExcludedEnvironments, excludedEnv) {
+			continue
+		}
+		if (fromDate != nil || toDate != nil) && strings.TrimSpace(p.TargetDate) != "" {
+			d, err := parseDate(p.TargetDate)
+			if err != nil {
+				continue
+			}
+			if fromDate != nil && d.Before(*fromDate) {
+				continue
+			}
+			if toDate != nil && d.After(*toDate) {
+				continue
+			}
+		}
+		out = append(out, p)
+	}
+	return out, nil
 }
 
 func (s *RenewalService) DeletePlan(ctx context.Context, planID string) error {
@@ -474,4 +536,13 @@ func parsePSAValue(raw string) (float64, bool) {
 		return 0, false
 	}
 	return f, true
+}
+
+func containsNormalized(list []string, target string) bool {
+	for _, item := range list {
+		if normalizeText(item) == target {
+			return true
+		}
+	}
+	return false
 }

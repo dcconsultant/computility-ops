@@ -97,8 +97,16 @@ export async function createPlan(payload: CreatePlanPayload) {
   return data;
 }
 
-export async function listPlans() {
-  const { data } = await http.get<ApiResp<ListData<RenewalPlan>>>('/renewals/plans');
+export interface ListPlansParams {
+  plan_id?: string;
+  target_date_from?: string;
+  target_date_to?: string;
+  excluded_psa?: string;
+  excluded_environment?: string;
+}
+
+export async function listPlans(params?: ListPlansParams) {
+  const { data } = await http.get<ApiResp<ListData<RenewalPlan>>>('/renewals/plans', { params });
   return data;
 }
 

@@ -52,3 +52,30 @@ npm run dev
 - 审计日志：`./logs/audit.log`
 
 > 默认使用 memory 存储。若切换 mysql，可在 `docker-compose.yml` 中调整 `STORAGE_DRIVER` 和 `MYSQL_DSN`。
+
+## 发布与版本号（P0）
+
+版本格式：`V<大版本>.<中版本>.<YYMMDDHHMM>`，例如 `V1.0.2604100835`。
+
+### 一键发版（推荐）
+
+```bash
+./release.sh "feat: xxx"
+```
+
+脚本会自动执行：
+1. 更新 `frontend/src/version.ts`
+2. 提交版本变更（commit message 自动附带版本号）
+3. 推送 `origin/main`（失败时自动无代理重试）
+
+### 自定义大/中版本
+
+```bash
+APP_VERSION_MAJOR=2 APP_VERSION_MINOR=3 ./release.sh "feat: xxx"
+```
+
+### 仅更新版本号（不提交）
+
+```bash
+APP_VERSION_MAJOR=1 APP_VERSION_MINOR=0 node ./scripts/bump-version.mjs
+```

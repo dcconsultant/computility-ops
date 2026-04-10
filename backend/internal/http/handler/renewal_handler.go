@@ -57,9 +57,20 @@ func (h *RenewalHandler) GetPlan(c *gin.Context) {
 
 func (h *RenewalHandler) ListPlans(c *gin.Context) {
 	c.Set("audit_action", "renewals.list_plans")
-	plans, err := h.service.ListPlans(c.Request.Context())
+	var req ListPlansReq
+	if err := c.ShouldBindQuery(&req); err != nil {
+		fail(c, 40001, "请求参数无效，请检查查询条件")
+		return
+	}
+	plans, err := h.service.ListPlans(c.Request.Context(), service.ListPlansFilter{
+		PlanID:              req.PlanID,
+		TargetDateFrom:      req.TargetDateFrom,
+		TargetDateTo:        req.TargetDateTo,
+		ExcludedPSA:         req.ExcludedPSA,
+		ExcludedEnvironment: req.ExcludedEnvironment,
+	})
 	if err != nil {
-		fail(c, 50001, err.Error())
+		fail(c, 40001, err.Error())
 		return
 	}
 	ok(c, gin.H{"list": plans, "total": len(plans), "page": 1, "page_size": len(plans)})

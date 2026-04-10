@@ -8,3 +8,11 @@ type CreatePlanReq struct {
 	WarmTargetStorageTB  float64  `json:"warm_target_storage_tb" binding:"required,min=0"`
 	HotTargetStorageTB   float64  `json:"hot_target_storage_tb" binding:"required,min=0"`
 }
+
+type ListPlansReq struct {
+	PlanID              string `form:"plan_id"`
+	TargetDateFrom      string `form:"target_date_from"`
+	TargetDateTo        string `form:"target_date_to"`
+	ExcludedPSA         string `form:"excluded_psa"`
+	ExcludedEnvironment string `form:"excluded_environment"`
+}
