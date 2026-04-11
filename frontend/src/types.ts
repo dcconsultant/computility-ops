@@ -112,6 +112,14 @@ export interface FailureAgeTrendPoint {
   fault_rate: number;
 }
 
+export interface ImportErrorInsight {
+  time: string;
+  request_id: string;
+  action: string;
+  reason: string;
+  hint: string;
+}
+
 export interface FaultAnalysisResult {
   total_fault_rows: number;
   matched_fault_rows: number;

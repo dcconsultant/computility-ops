@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { Alert, Button, Drawer, Form, Input, InputNumber, Layout, Menu, Space, Typography, message } from 'antd';
-import { SettingOutlined } from '@ant-design/icons';
+import { Alert, Button, Divider, Drawer, Form, Input, InputNumber, Layout, List, Menu, Space, Typography, message } from 'antd';
+import { ReloadOutlined, SettingOutlined } from '@ant-design/icons';
 import { APP_VERSION } from './version';
-import { testMySQLConnection } from './api';
+import { listImportErrors, testMySQLConnection } from './api';
 import { ensureApiOk, parseApiError } from './error';
+import type { ImportErrorInsight } from './types';
 
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
@@ -14,6 +15,8 @@ export default function AppLayout() {
   const [open, setOpen] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testOK, setTestOK] = useState<string>('');
+  const [loadingErrors, setLoadingErrors] = useState(false);
+  const [importErrors, setImportErrors] = useState<ImportErrorInsight[]>([]);
   const [form] = Form.useForm();
 
   const key = location.pathname.startsWith('/result') || location.pathname.startsWith('/plan/')
@@ -22,6 +25,12 @@ export default function AppLayout() {
       ? '/failure'
       : location.pathname;
   const isFailureDashboard = location.pathname === '/failure/dashboard';
+
+  useEffect(() => {
+    if (open) {
+      loadImportErrors();
+    }
+  }, [open]);
 
   async function onTestMySQL() {
     try {
@@ -35,6 +44,18 @@ export default function AppLayout() {
       message.error(parseApiError(e, 'MySQL 连接失败'));
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function loadImportErrors() {
+    setLoadingErrors(true);
+    try {
+      const resp = ensureApiOk(await listImportErrors(20));
+      setImportErrors(resp.data.list || []);
+    } catch (e) {
+      message.error(parseApiError(e, '加载导入异常失败'));
+    } finally {
+      setLoadingErrors(false);
     }
   }
 
@@ -71,12 +92,12 @@ export default function AppLayout() {
       <Drawer
         title="系统配置"
         placement="right"
-        width={420}
+        width={460}
         onClose={() => setOpen(false)}
         open={open}
       >
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <Text type="secondary">用于测试 MySQL 连接可用性，不会保存密码到后端。</Text>
+          <Text type="secondary">用于测试 MySQL 连接可用性；并提供导入异常自动分析。</Text>
           {testOK ? <Alert type="success" message={testOK} showIcon /> : null}
 
           <Form
@@ -112,6 +133,30 @@ export default function AppLayout() {
               </Button>
             </Form.Item>
           </Form>
+
+          <Divider style={{ margin: '4px 0' }} />
+
+          <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+            <Text strong>导入异常分析（最近20条）</Text>
+            <Button icon={<ReloadOutlined />} loading={loadingErrors} onClick={loadImportErrors}>刷新</Button>
+          </Space>
+          <List
+            size="small"
+            bordered
+            loading={loadingErrors}
+            locale={{ emptyText: '暂无导入异常记录' }}
+            dataSource={importErrors}
+            renderItem={(item) => (
+              <List.Item>
+                <Space direction="vertical" size={2} style={{ width: '100%' }}>
+                  <Text style={{ fontSize: 12 }}>{item.time} | {item.action}</Text>
+                  <Text style={{ fontSize: 12 }} type="secondary">请求ID: {item.request_id || '-'}</Text>
+                  <Text style={{ fontSize: 12 }} type="danger">原因: {item.reason}</Text>
+                  <Text style={{ fontSize: 12 }}>建议: {item.hint}</Text>
+                </Space>
+              </List.Item>
+            )}
+          />
         </Space>
       </Drawer>
     </Layout>

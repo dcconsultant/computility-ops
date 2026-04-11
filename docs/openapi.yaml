@@ -25,6 +25,9 @@ paths:
   /system/mysql/test:
     post:
       summary: Test mysql connectivity with DSN or host/user/password/database
+  /system/import-errors:
+    get:
+      summary: List recent import errors with analyzed hints
   /renewals/plan:
     post:
       summary: Create renewal plan

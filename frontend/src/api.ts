@@ -13,7 +13,8 @@ import type {
   PackageModelFailureRate,
   RenewalPlan,
   ServerItem,
-  SpecialRule
+  SpecialRule,
+  ImportErrorInsight
 } from './types';
 
 const http = axios.create({ baseURL: '/api/v1' });
@@ -160,5 +161,10 @@ export interface MySQLTestResult {
 
 export async function testMySQLConnection(payload: MySQLTestPayload) {
   const { data } = await http.post<ApiResp<MySQLTestResult>>('/system/mysql/test', payload);
+  return data;
+}
+
+export async function listImportErrors(limit = 20) {
+  const { data } = await http.get<ApiResp<ListData<ImportErrorInsight>>>(`/system/import-errors?limit=${limit}`);
   return data;
 }

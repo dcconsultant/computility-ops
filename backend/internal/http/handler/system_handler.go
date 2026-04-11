@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
+	"computility-ops/backend/internal/diagnose"
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -24,6 +26,18 @@ type mysqlTestRequest struct {
 	Password string `json:"password"`
 	Database string `json:"database"`
 	Params   string `json:"params"`
+}
+
+func (h *SystemHandler) ListImportErrors(c *gin.Context) {
+	c.Set("audit_action", "system.import_errors.list")
+	limit := 20
+	if q := strings.TrimSpace(c.Query("limit")); q != "" {
+		if v, err := strconv.Atoi(q); err == nil {
+			limit = v
+		}
+	}
+	rows := diagnose.ListImportErrors(limit)
+	ok(c, gin.H{"list": rows, "total": len(rows), "page": 1, "page_size": len(rows)})
 }
 
 func (h *SystemHandler) TestMySQLConnection(c *gin.Context) {

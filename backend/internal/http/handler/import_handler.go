@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"fmt"
 	"strings"
 
+	"computility-ops/backend/internal/diagnose"
 	"computility-ops/backend/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/xuri/excelize/v2"
@@ -13,6 +15,13 @@ type ImportHandler struct {
 }
 
 func NewImportHandler(s *service.ImportService) *ImportHandler { return &ImportHandler{service: s} }
+
+func (h *ImportHandler) failImport(c *gin.Context, action string, err error) {
+	requestID, _ := c.Get("request_id")
+	rid, _ := requestID.(string)
+	diagnose.RecordImportError(action, rid, err)
+	fail(c, 50001, fmt.Sprintf("导入失败：%s", diagnose.AnalyzeReason(err.Error())))
+}
 
 func (h *ImportHandler) ImportServers(c *gin.Context) {
 	c.Set("audit_action", "servers.import")
@@ -28,7 +37,7 @@ func (h *ImportHandler) ImportServers(c *gin.Context) {
 	mapped := mapRows(headers, rows)
 	result, err := h.service.ValidateAndReplaceServers(c.Request.Context(), mapped)
 	if err != nil {
-		fail(c, 50001, "导入失败，请稍后重试")
+		h.failImport(c, "servers.import", err)
 		return
 	}
 	ok(c, result)
@@ -57,7 +66,7 @@ func (h *ImportHandler) ImportHostPackages(c *gin.Context) {
 	}
 	result, err := h.service.ValidateAndReplaceHostPackages(c.Request.Context(), mapRows(headers, rows))
 	if err != nil {
-		fail(c, 50001, "导入失败，请稍后重试")
+		h.failImport(c, "host_packages.import", err)
 		return
 	}
 	ok(c, result)
@@ -86,7 +95,7 @@ func (h *ImportHandler) ImportSpecialRules(c *gin.Context) {
 	}
 	result, err := h.service.ValidateAndReplaceSpecialRules(c.Request.Context(), mapRows(headers, rows))
 	if err != nil {
-		fail(c, 50001, "导入失败，请稍后重试")
+		h.failImport(c, "special_rules.import", err)
 		return
 	}
 	ok(c, result)
@@ -115,7 +124,7 @@ func (h *ImportHandler) ImportModelFailureRates(c *gin.Context) {
 	}
 	result, err := h.service.ValidateAndReplaceModelFailureRates(c.Request.Context(), mapRows(headers, rows))
 	if err != nil {
-		fail(c, 50001, "导入失败，请稍后重试")
+		h.failImport(c, "failure_model.import", err)
 		return
 	}
 	ok(c, result)
@@ -144,7 +153,7 @@ func (h *ImportHandler) ImportPackageFailureRates(c *gin.Context) {
 	}
 	result, err := h.service.ValidateAndReplacePackageFailureRates(c.Request.Context(), mapRows(headers, rows))
 	if err != nil {
-		fail(c, 50001, "导入失败，请稍后重试")
+		h.failImport(c, "failure_package.import", err)
 		return
 	}
 	ok(c, result)
@@ -173,7 +182,7 @@ func (h *ImportHandler) ImportPackageModelFailureRates(c *gin.Context) {
 	}
 	result, err := h.service.ValidateAndReplacePackageModelFailureRates(c.Request.Context(), mapRows(headers, rows))
 	if err != nil {
-		fail(c, 50001, "导入失败，请稍后重试")
+		h.failImport(c, "failure_package_model.import", err)
 		return
 	}
 	ok(c, result)
@@ -232,7 +241,7 @@ func (h *ImportHandler) AnalyzeFaultRates(c *gin.Context) {
 	}
 	result, err := h.service.AnalyzeFaultRates(c.Request.Context(), mapRows(headers, rows))
 	if err != nil {
-		fail(c, 50001, err.Error())
+		h.failImport(c, "failure_rates.analyze", err)
 		return
 	}
 	ok(c, result)
