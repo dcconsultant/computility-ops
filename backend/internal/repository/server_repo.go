@@ -30,4 +30,10 @@ type DatasetRepo interface {
 
 	ReplaceOverallFailureRates(ctx context.Context, rows []domain.FailureRateSummary) error
 	ListOverallFailureRates(ctx context.Context) ([]domain.FailureRateSummary, error)
+
+	ReplaceFailureOverviewCards(ctx context.Context, rows []domain.FailureOverviewCard) error
+	ListFailureOverviewCards(ctx context.Context) ([]domain.FailureOverviewCard, error)
+
+	ReplaceFailureAgeTrendPoints(ctx context.Context, rows []domain.FailureAgeTrendPoint) error
+	ListFailureAgeTrendPoints(ctx context.Context) ([]domain.FailureAgeTrendPoint, error)
 }

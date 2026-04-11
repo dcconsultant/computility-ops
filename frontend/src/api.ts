@@ -129,3 +129,24 @@ export async function deletePlan(planId: string) {
 export function exportPlan(planId: string, format: 'xlsx' | 'csv') {
   window.open(`/api/v1/renewals/plans/${planId}/export?format=${format}`, '_blank');
 }
+
+export interface MySQLTestPayload {
+  dsn?: string;
+  host?: string;
+  port?: number;
+  user?: string;
+  password?: string;
+  database?: string;
+  params?: string;
+}
+
+export interface MySQLTestResult {
+  reachable: boolean;
+  latency_ms: number;
+  message: string;
+}
+
+export async function testMySQLConnection(payload: MySQLTestPayload) {
+  const { data } = await http.post<ApiResp<MySQLTestResult>>('/system/mysql/test', payload);
+  return data;
+}

@@ -16,6 +16,8 @@ type DatasetRepo struct {
 	pkgFailureRates   []domain.PackageFailureRate
 	pkgModelRates     []domain.PackageModelFailureRate
 	overallRates      []domain.FailureRateSummary
+	overviewCards     []domain.FailureOverviewCard
+	ageTrendPoints    []domain.FailureAgeTrendPoint
 }
 
 func NewDatasetRepo() *DatasetRepo { return &DatasetRepo{} }
@@ -91,4 +93,30 @@ func (r *DatasetRepo) ListOverallFailureRates(_ context.Context) ([]domain.Failu
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return append([]domain.FailureRateSummary(nil), r.overallRates...), nil
+}
+
+func (r *DatasetRepo) ReplaceFailureOverviewCards(_ context.Context, rows []domain.FailureOverviewCard) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.overviewCards = append([]domain.FailureOverviewCard(nil), rows...)
+	return nil
+}
+
+func (r *DatasetRepo) ListFailureOverviewCards(_ context.Context) ([]domain.FailureOverviewCard, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return append([]domain.FailureOverviewCard(nil), r.overviewCards...), nil
+}
+
+func (r *DatasetRepo) ReplaceFailureAgeTrendPoints(_ context.Context, rows []domain.FailureAgeTrendPoint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ageTrendPoints = append([]domain.FailureAgeTrendPoint(nil), rows...)
+	return nil
+}
+
+func (r *DatasetRepo) ListFailureAgeTrendPoints(_ context.Context) ([]domain.FailureAgeTrendPoint, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return append([]domain.FailureAgeTrendPoint(nil), r.ageTrendPoints...), nil
 }

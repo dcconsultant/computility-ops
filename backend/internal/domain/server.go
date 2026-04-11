@@ -69,3 +69,22 @@ type FailureRateSummary struct {
 	ServerYears          float64 `json:"server_years"`
 	OverWarrantyYears    float64 `json:"over_warranty_years"`
 }
+
+type FailureOverviewCard struct {
+	Segment                string  `json:"segment"`
+	Year                   int     `json:"year"`
+	CurrentYearFaultRate   float64 `json:"current_year_fault_rate"`
+	HistoryAvgFaultRate    float64 `json:"history_avg_fault_rate"`
+	CurrentYearFaultCount  int     `json:"current_year_fault_count"`
+	CurrentYearDenominator float64 `json:"current_year_denominator"`
+	HistoryFaultCount      int     `json:"history_fault_count"`
+	HistoryDenominator     float64 `json:"history_denominator"`
+}
+
+type FailureAgeTrendPoint struct {
+	Segment             string  `json:"segment"`
+	AgeBucket           int     `json:"age_bucket"`
+	NumeratorFaultCount int     `json:"numerator_fault_count"`
+	DenominatorExposure float64 `json:"denominator_exposure"`
+	FaultRate           float64 `json:"fault_rate"`
+}

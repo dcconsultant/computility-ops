@@ -199,6 +199,26 @@ func (h *ImportHandler) ListOverallFailureRates(c *gin.Context) {
 	ok(c, gin.H{"list": rows, "total": len(rows), "page": 1, "page_size": len(rows)})
 }
 
+func (h *ImportHandler) ListFailureOverviewCards(c *gin.Context) {
+	c.Set("audit_action", "failure_rates.overview_cards.list")
+	rows, err := h.service.ListFailureOverviewCards(c.Request.Context())
+	if err != nil {
+		fail(c, 50001, "查询失败")
+		return
+	}
+	ok(c, gin.H{"list": rows, "total": len(rows), "page": 1, "page_size": len(rows)})
+}
+
+func (h *ImportHandler) ListFailureAgeTrendPoints(c *gin.Context) {
+	c.Set("audit_action", "failure_rates.age_trend.list")
+	rows, err := h.service.ListFailureAgeTrendPoints(c.Request.Context())
+	if err != nil {
+		fail(c, 50001, "查询失败")
+		return
+	}
+	ok(c, gin.H{"list": rows, "total": len(rows), "page": 1, "page_size": len(rows)})
+}
+
 func (h *ImportHandler) AnalyzeFaultRates(c *gin.Context) {
 	c.Set("audit_action", "failure_rates.analyze")
 	headers, rows, okRead := h.readRows(c)

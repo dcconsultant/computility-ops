@@ -31,6 +31,7 @@ func TestNewRouter_Healthz(t *testing.T) {
 	r := NewRouter(Handlers{
 		Import:        handler.NewImportHandler(importSvc),
 		Renewal:       handler.NewRenewalHandler(renewalSvc),
+		System:        handler.NewSystemHandler(),
 		StorageDriver: "memory",
 	})
 

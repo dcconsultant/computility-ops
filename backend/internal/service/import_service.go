@@ -456,6 +456,18 @@ func (s *ImportService) ListOverallFailureRates(ctx context.Context) ([]domain.F
 	return s.datasetRepo.ListOverallFailureRates(ctx)
 }
 
+func (s *ImportService) ListFailureOverviewCards(ctx context.Context) ([]domain.FailureOverviewCard, error) {
+	return s.datasetRepo.ListFailureOverviewCards(ctx)
+}
+
+func (s *ImportService) ListFailureAgeTrendPoints(ctx context.Context) ([]domain.FailureAgeTrendPoint, error) {
+	rows, err := s.datasetRepo.ListFailureAgeTrendPoints(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
 func validatePackageModelFailureRow(raw map[string]string) (domain.PackageModelFailureRate, error) {
 	get := func(k string) string { return strings.TrimSpace(raw[k]) }
 	cfg, m, model := get("config_type"), get("manufacturer"), get("model")
@@ -477,12 +489,174 @@ func validatePackageModelFailureRow(raw map[string]string) (domain.PackageModelF
 }
 
 type FaultAnalysisResult struct {
-	TotalFaultRows             int                         `json:"total_fault_rows"`
-	MatchedFaultRows           int                         `json:"matched_fault_rows"`
-	GeneratedModelRates        int                         `json:"generated_model_rates"`
-	GeneratedPackageRates      int                         `json:"generated_package_rates"`
-	GeneratedPackageModelRates int                         `json:"generated_package_model_rates"`
-	OverallRates               []domain.FailureRateSummary `json:"overall_rates,omitempty"`
+	TotalFaultRows             int                           `json:"total_fault_rows"`
+	MatchedFaultRows           int                           `json:"matched_fault_rows"`
+	GeneratedModelRates        int                           `json:"generated_model_rates"`
+	GeneratedPackageRates      int                           `json:"generated_package_rates"`
+	GeneratedPackageModelRates int                           `json:"generated_package_model_rates"`
+	OverallRates               []domain.FailureRateSummary   `json:"overall_rates,omitempty"`
+	OverviewCards              []domain.FailureOverviewCard  `json:"overview_cards,omitempty"`
+	AgeTrendPoints             []domain.FailureAgeTrendPoint `json:"age_trend_points,omitempty"`
+}
+
+type faultEvent struct {
+	createdAt *time.Time
+}
+
+type ageMetricAccumulator struct {
+	numerator   float64
+	denominator float64
+}
+
+func buildFailureAgeMetrics(
+	servers []domain.Server,
+	faultEventsBySN map[string][]faultEvent,
+	pkgMap map[string]domain.HostPackageConfig,
+	now time.Time,
+) ([]domain.FailureAgeTrendPoint, []domain.FailureOverviewCard) {
+	const maxAgeBucket = 10
+
+	observationStart := now
+	for _, events := range faultEventsBySN {
+		for _, ev := range events {
+			if ev.createdAt == nil {
+				continue
+			}
+			if ev.createdAt.Before(observationStart) {
+				observationStart = *ev.createdAt
+			}
+		}
+	}
+	if observationStart.After(now) {
+		observationStart = now
+	}
+	yearStart := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
+
+	history := map[string]map[int]*ageMetricAccumulator{
+		"storage":     {},
+		"non_storage": {},
+	}
+	yearly := map[string]*ageMetricAccumulator{
+		"storage":     &ageMetricAccumulator{},
+		"non_storage": &ageMetricAccumulator{},
+	}
+
+	for _, srv := range servers {
+		pkg, ok := pkgMap[strings.TrimSpace(srv.ConfigType)]
+		if !ok {
+			continue
+		}
+		purchaseDate, ok := parseFlexibleDate(srv.LaunchDate)
+		if !ok {
+			continue
+		}
+
+		segment := "non_storage"
+		weight := 1.0
+		bucket := normalizeBucket(pkg.SceneCategory)
+		if bucket == "warm_storage" || bucket == "hot_storage" {
+			segment = "storage"
+			weight = 1 + float64(pkg.DataDiskCount)
+		}
+
+		for age := 1; age <= maxAgeBucket; age++ {
+			start, end := ageBucketRange(purchaseDate, age)
+			if intervalsOverlap(start, end, observationStart, now) {
+				if history[segment][age] == nil {
+					history[segment][age] = &ageMetricAccumulator{}
+				}
+				history[segment][age].denominator += weight
+			}
+			if intervalsOverlap(start, end, yearStart, now) {
+				yearly[segment].denominator += weight
+			}
+		}
+
+		events := faultEventsBySN[srv.SN]
+		for _, ev := range events {
+			if ev.createdAt == nil {
+				continue
+			}
+			ts := *ev.createdAt
+			if ts.Before(observationStart) || ts.After(now) {
+				continue
+			}
+			age := ageBucketForEvent(purchaseDate, ts)
+			if age >= 1 && age <= maxAgeBucket {
+				if history[segment][age] == nil {
+					history[segment][age] = &ageMetricAccumulator{}
+				}
+				history[segment][age].numerator += 1
+			}
+			if !ts.Before(yearStart) {
+				yearly[segment].numerator += 1
+			}
+		}
+	}
+
+	trend := make([]domain.FailureAgeTrendPoint, 0, maxAgeBucket*2)
+	cards := make([]domain.FailureOverviewCard, 0, 2)
+	for _, segment := range []string{"storage", "non_storage"} {
+		historyNumerator := 0.0
+		historyDenominator := 0.0
+		for age := 1; age <= maxAgeBucket; age++ {
+			acc := history[segment][age]
+			if acc == nil {
+				acc = &ageMetricAccumulator{}
+			}
+			rate := 0.0
+			if acc.denominator > 0 {
+				rate = acc.numerator / acc.denominator
+			}
+			trend = append(trend, domain.FailureAgeTrendPoint{
+				Segment:             segment,
+				AgeBucket:           age,
+				NumeratorFaultCount: int(acc.numerator),
+				DenominatorExposure: acc.denominator,
+				FaultRate:           rate,
+			})
+			historyNumerator += acc.numerator
+			historyDenominator += acc.denominator
+		}
+		yearlyRate := 0.0
+		if yearly[segment].denominator > 0 {
+			yearlyRate = yearly[segment].numerator / yearly[segment].denominator
+		}
+		historyRate := 0.0
+		if historyDenominator > 0 {
+			historyRate = historyNumerator / historyDenominator
+		}
+		cards = append(cards, domain.FailureOverviewCard{
+			Segment:                segment,
+			Year:                   now.Year(),
+			CurrentYearFaultRate:   yearlyRate,
+			HistoryAvgFaultRate:    historyRate,
+			CurrentYearFaultCount:  int(yearly[segment].numerator),
+			CurrentYearDenominator: yearly[segment].denominator,
+			HistoryFaultCount:      int(historyNumerator),
+			HistoryDenominator:     historyDenominator,
+		})
+	}
+
+	return trend, cards
+}
+
+func ageBucketRange(purchaseDate time.Time, age int) (time.Time, time.Time) {
+	start := purchaseDate.AddDate(age-1, 0, 0)
+	end := purchaseDate.AddDate(age, 0, 0)
+	return start, end
+}
+
+func intervalsOverlap(aStart, aEnd, bStart, bEnd time.Time) bool {
+	return aStart.Before(bEnd) && bStart.Before(aEnd)
+}
+
+func ageBucketForEvent(purchaseDate, eventTime time.Time) int {
+	if eventTime.Before(purchaseDate) {
+		return 0
+	}
+	years := eventTime.Sub(purchaseDate).Hours() / 24 / 365.2425
+	return int(years) + 1
 }
 
 var faultListHeaderMap = map[string]string{
@@ -535,9 +709,6 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		pkgMap[strings.TrimSpace(p.ConfigType)] = p
 	}
 
-	type faultEvent struct {
-		createdAt *time.Time
-	}
 	faultEventsBySN := map[string][]faultEvent{}
 	totalFaultRows := 0
 	matchedFaultRows := 0
@@ -794,6 +965,14 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		return FaultAnalysisResult{}, err
 	}
 
+	ageTrendPoints, overviewCards := buildFailureAgeMetrics(servers, faultEventsBySN, pkgMap, now)
+	if err := s.datasetRepo.ReplaceFailureAgeTrendPoints(ctx, ageTrendPoints); err != nil {
+		return FaultAnalysisResult{}, err
+	}
+	if err := s.datasetRepo.ReplaceFailureOverviewCards(ctx, overviewCards); err != nil {
+		return FaultAnalysisResult{}, err
+	}
+
 	return FaultAnalysisResult{
 		TotalFaultRows:             totalFaultRows,
 		MatchedFaultRows:           matchedFaultRows,
@@ -801,6 +980,8 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		GeneratedPackageRates:      len(packageRates),
 		GeneratedPackageModelRates: len(packageModelRates),
 		OverallRates:               overallRates,
+		OverviewCards:              overviewCards,
+		AgeTrendPoints:             ageTrendPoints,
 	}, nil
 }
 

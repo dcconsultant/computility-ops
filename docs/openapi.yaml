@@ -16,6 +16,15 @@ paths:
   /servers:
     get:
       summary: List servers
+  /failure-rates/overview-cards:
+    get:
+      summary: List failure overview cards (current year vs history average)
+  /failure-rates/age-trend:
+    get:
+      summary: List failure age trend points (1-10 years, storage/non-storage)
+  /system/mysql/test:
+    post:
+      summary: Test mysql connectivity with DSN or host/user/password/database
   /renewals/plan:
     post:
       summary: Create renewal plan

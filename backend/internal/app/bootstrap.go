@@ -25,6 +25,7 @@ func Build(cfg config.Config) (*gin.Engine, error) {
 	h := httpapi.Handlers{
 		Import:        handler.NewImportHandler(importSvc),
 		Renewal:       handler.NewRenewalHandler(renewalSvc),
+		System:        handler.NewSystemHandler(),
 		StorageDriver: driver,
 	}
 	return httpapi.NewRouter(h), nil

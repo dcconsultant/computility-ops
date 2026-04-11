@@ -9,6 +9,7 @@ import (
 type Handlers struct {
 	Import        *handler.ImportHandler
 	Renewal       *handler.RenewalHandler
+	System        *handler.SystemHandler
 	StorageDriver string
 }
 
@@ -42,7 +43,11 @@ func NewRouter(h Handlers) *gin.Engine {
 		v1.POST("/failure-rates/package-model/import", h.Import.ImportPackageModelFailureRates)
 		v1.GET("/failure-rates/package-model", h.Import.ListPackageModelFailureRates)
 		v1.GET("/failure-rates/overall", h.Import.ListOverallFailureRates)
+		v1.GET("/failure-rates/overview-cards", h.Import.ListFailureOverviewCards)
+		v1.GET("/failure-rates/age-trend", h.Import.ListFailureAgeTrendPoints)
 		v1.POST("/failure-rates/analyze/import", h.Import.AnalyzeFaultRates)
+
+		v1.POST("/system/mysql/test", h.System.TestMySQLConnection)
 
 		v1.POST("/renewals/plan", h.Renewal.CreatePlan)
 		v1.GET("/renewals/plans", h.Renewal.ListPlans)
