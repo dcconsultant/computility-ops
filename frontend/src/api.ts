@@ -7,6 +7,8 @@ import type {
   ModelFailureRate,
   FaultAnalysisResult,
   FailureRateSummary,
+  FailureOverviewCard,
+  FailureAgeTrendPoint,
   PackageFailureRate,
   PackageModelFailureRate,
   RenewalPlan,
@@ -86,6 +88,16 @@ export async function analyzeFaultRates(file: File) {
 
 export async function listOverallFailureRates() {
   const { data } = await http.get<ApiResp<ListData<FailureRateSummary>>>('/failure-rates/overall');
+  return data;
+}
+
+export async function listFailureOverviewCards() {
+  const { data } = await http.get<ApiResp<ListData<FailureOverviewCard>>>('/failure-rates/overview-cards');
+  return data;
+}
+
+export async function listFailureAgeTrendPoints() {
+  const { data } = await http.get<ApiResp<ListData<FailureAgeTrendPoint>>>('/failure-rates/age-trend');
   return data;
 }
 

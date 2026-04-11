@@ -93,6 +93,25 @@ export interface FailureRateSummary {
   over_warranty_years: number;
 }
 
+export interface FailureOverviewCard {
+  segment: 'storage' | 'non_storage' | string;
+  year: number;
+  current_year_fault_rate: number;
+  history_avg_fault_rate: number;
+  current_year_fault_count: number;
+  current_year_denominator: number;
+  history_fault_count: number;
+  history_denominator: number;
+}
+
+export interface FailureAgeTrendPoint {
+  segment: 'storage' | 'non_storage' | string;
+  age_bucket: number;
+  numerator_fault_count: number;
+  denominator_exposure: number;
+  fault_rate: number;
+}
+
 export interface FaultAnalysisResult {
   total_fault_rows: number;
   matched_fault_rows: number;
