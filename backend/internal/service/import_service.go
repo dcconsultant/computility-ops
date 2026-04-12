@@ -477,6 +477,14 @@ func (s *ImportService) ListFailureFeatureFacts(ctx context.Context) ([]domain.F
 	return rows, nil
 }
 
+func (s *ImportService) ListStorageTopServerRates(ctx context.Context) ([]domain.StorageTopServerRate, error) {
+	rows, err := s.datasetRepo.ListStorageTopServerRates(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
 func validatePackageModelFailureRow(raw map[string]string) (domain.PackageModelFailureRate, error) {
 	get := func(k string) string { return strings.TrimSpace(raw[k]) }
 	cfg, m, model := get("config_type"), get("manufacturer"), get("model")
@@ -506,7 +514,8 @@ type FaultAnalysisResult struct {
 	OverallRates               []domain.FailureRateSummary   `json:"overall_rates,omitempty"`
 	OverviewCards              []domain.FailureOverviewCard  `json:"overview_cards,omitempty"`
 	AgeTrendPoints             []domain.FailureAgeTrendPoint `json:"age_trend_points,omitempty"`
-	FailureFeatureFacts        []domain.FailureFeatureFact   `json:"failure_feature_facts,omitempty"`
+	FailureFeatureFacts        []domain.FailureFeatureFact    `json:"failure_feature_facts,omitempty"`
+	StorageTopServerRates      []domain.StorageTopServerRate  `json:"storage_top_server_rates,omitempty"`
 }
 
 type faultEvent struct {
@@ -665,6 +674,67 @@ func buildFailureAgeMetrics(
 type failureFeatureAgg struct {
 	denominator float64
 	faultCount  float64
+}
+
+func buildStorageTopServerRates(
+	servers []domain.Server,
+	faultEventsBySN map[string][]faultEvent,
+	pkgMap map[string]domain.HostPackageConfig,
+	now time.Time,
+) []domain.StorageTopServerRate {
+	windowStart := now.AddDate(-1, 0, 0)
+	out := make([]domain.StorageTopServerRate, 0)
+	for _, srv := range servers {
+		pkg, ok := pkgMap[strings.TrimSpace(srv.ConfigType)]
+		if !ok {
+			continue
+		}
+		bucket := normalizeBucket(pkg.SceneCategory)
+		if bucket != "warm_storage" && bucket != "hot_storage" {
+			continue
+		}
+		den := 1 + float64(pkg.DataDiskCount)
+		if den <= 0 {
+			continue
+		}
+		faultCount := 0
+		for _, ev := range faultEventsBySN[srv.SN] {
+			if ev.createdAt == nil {
+				continue
+			}
+			ts := *ev.createdAt
+			if ts.Before(windowStart) || ts.After(now) {
+				continue
+			}
+			faultCount++
+		}
+		rate := float64(faultCount) / den
+		out = append(out, domain.StorageTopServerRate{
+			SN:            srv.SN,
+			Manufacturer:  srv.Manufacturer,
+			Model:         srv.Model,
+			ConfigType:    srv.ConfigType,
+			Environment:   srv.Environment,
+			IDC:           srv.IDC,
+			DataDiskCount: pkg.DataDiskCount,
+			FaultCount:    faultCount,
+			Denominator:   den,
+			FaultRate:     rate,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].FaultRate != out[j].FaultRate {
+			return out[i].FaultRate > out[j].FaultRate
+		}
+		if out[i].FaultCount != out[j].FaultCount {
+			return out[i].FaultCount > out[j].FaultCount
+		}
+		return out[i].SN < out[j].SN
+	})
+	if len(out) > 100 {
+		out = out[:100]
+	}
+	return out
 }
 
 func buildFailureFeatureFacts(
@@ -1283,6 +1353,10 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 	if err := s.datasetRepo.ReplaceFailureFeatureFacts(ctx, featureFacts); err != nil {
 		return FaultAnalysisResult{}, err
 	}
+	storageTopRates := buildStorageTopServerRates(servers, faultEventsBySN, pkgMap, now)
+	if err := s.datasetRepo.ReplaceStorageTopServerRates(ctx, storageTopRates); err != nil {
+		return FaultAnalysisResult{}, err
+	}
 
 	return FaultAnalysisResult{
 		TotalFaultRows:             totalFaultRows,
@@ -1294,6 +1368,7 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		OverviewCards:              overviewCards,
 		AgeTrendPoints:             ageTrendPoints,
 		FailureFeatureFacts:        featureFacts,
+		StorageTopServerRates:      storageTopRates,
 	}, nil
 }
 

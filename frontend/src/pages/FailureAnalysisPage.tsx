@@ -11,6 +11,7 @@ import {
   listModelFailureRates,
   listOverallFailureRates,
   listFailureFeatureFacts,
+  listStorageTopServerRates,
   listPackageFailureRates,
   listPackageModelFailureRates
 } from '../api';
@@ -18,6 +19,7 @@ import { ensureApiOk, parseApiError } from '../error';
 import type {
   FaultAnalysisResult,
   FailureFeatureFact,
+  StorageTopServerRate,
   ModelFailureRate,
   PackageFailureRate,
   PackageModelFailureRate
@@ -35,24 +37,27 @@ export default function FailureAnalysisPage() {
 
   const [overallRates, setOverallRates] = useState<FaultAnalysisResult['overall_rates']>([]);
   const [featureFacts, setFeatureFacts] = useState<FailureFeatureFact[]>([]);
+  const [storageTopRates, setStorageTopRates] = useState<StorageTopServerRate[]>([]);
   const [fm, setFm] = useState<ModelFailureRate[]>([]);
   const [fp, setFp] = useState<PackageFailureRate[]>([]);
   const [fpm, setFpm] = useState<PackageModelFailureRate[]>([]);
 
   async function reloadAll() {
     try {
-      const [s0, s1, s2, s3, s4] = await Promise.all([
+      const [s0, s1, s2, s3, s4, s5] = await Promise.all([
         listOverallFailureRates(),
         listModelFailureRates(),
         listPackageFailureRates(),
         listPackageModelFailureRates(),
-        listFailureFeatureFacts()
+        listFailureFeatureFacts(),
+        listStorageTopServerRates()
       ]);
       setOverallRates(ensureApiOk(s0).data.list || []);
       setFm(ensureApiOk(s1).data.list);
       setFp(ensureApiOk(s2).data.list);
       setFpm(ensureApiOk(s3).data.list);
       setFeatureFacts(ensureApiOk(s4).data.list || []);
+      setStorageTopRates(ensureApiOk(s5).data.list || []);
     } catch (e) {
       message.error(parseApiError(e, '加载失败'));
     }
@@ -107,6 +112,7 @@ export default function FailureAnalysisPage() {
             setAnalysisResult(resp.data);
             setOverallRates(resp.data.overall_rates || []);
             setFeatureFacts(resp.data.failure_feature_facts || []);
+            setStorageTopRates(resp.data.storage_top_server_rates || []);
             await reloadAll();
             message.success(`故障分析完成：命中故障 ${resp.data.matched_fault_rows}/${resp.data.total_fault_rows} 条`);
           } else {
@@ -249,6 +255,26 @@ export default function FailureAnalysisPage() {
                   ]} />
                 </Card>
               </Space>
+            )
+          },
+          {
+            key: 'storage-top100',
+            label: '存储高故障率TOP100',
+            children: (
+              <Card title="最近1年存储高故障率服务器TOP100">
+                <Text type="secondary">公式：最近1年故障次数 / (1 + 数据盘数量)</Text>
+                <Table rowKey="sn" dataSource={storageTopRates} pagination={{ pageSize: 20 }} columns={[
+                  { title: 'SN', dataIndex: 'sn' },
+                  { title: '厂商', dataIndex: 'manufacturer' },
+                  { title: '型号', dataIndex: 'model' },
+                  { title: '配置类型', dataIndex: 'config_type' },
+                  { title: '环境', dataIndex: 'environment' },
+                  { title: '数据盘数量', dataIndex: 'data_disk_count', render: (v: number) => formatInt(v) },
+                  { title: '最近1年故障次数', dataIndex: 'fault_count', render: (v: number) => formatInt(v) },
+                  { title: '分母(1+盘数)', dataIndex: 'denominator', render: (v: number) => formatFloat(v) },
+                  { title: '故障率', dataIndex: 'fault_rate', render: (v: number) => formatPercent(v) }
+                ]} />
+              </Card>
             )
           }
         ]}

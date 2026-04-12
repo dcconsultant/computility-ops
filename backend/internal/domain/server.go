@@ -104,3 +104,16 @@ type FailureFeatureFact struct {
 	FaultCount          int     `json:"fault_count"`
 	FaultRate           float64 `json:"fault_rate"`
 }
+
+type StorageTopServerRate struct {
+	SN            string  `json:"sn"`
+	Manufacturer  string  `json:"manufacturer,omitempty"`
+	Model         string  `json:"model,omitempty"`
+	ConfigType    string  `json:"config_type,omitempty"`
+	Environment   string  `json:"environment,omitempty"`
+	IDC           string  `json:"idc,omitempty"`
+	DataDiskCount int     `json:"data_disk_count"`
+	FaultCount    int     `json:"fault_count"`
+	Denominator   float64 `json:"denominator"`
+	FaultRate     float64 `json:"fault_rate"`
+}

@@ -39,4 +39,7 @@ type DatasetRepo interface {
 
 	ReplaceFailureFeatureFacts(ctx context.Context, rows []domain.FailureFeatureFact) error
 	ListFailureFeatureFacts(ctx context.Context) ([]domain.FailureFeatureFact, error)
+
+	ReplaceStorageTopServerRates(ctx context.Context, rows []domain.StorageTopServerRate) error
+	ListStorageTopServerRates(ctx context.Context) ([]domain.StorageTopServerRate, error)
 }

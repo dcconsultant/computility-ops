@@ -566,3 +566,58 @@ func (r *DatasetRepo) ListFailureFeatureFacts(ctx context.Context) ([]domain.Fai
 	}
 	return out, rows.Err()
 }
+
+func (r *DatasetRepo) ReplaceStorageTopServerRates(ctx context.Context, rows []domain.StorageTopServerRate) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ops_storage_top_server_rates`); err != nil {
+		return err
+	}
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO ops_storage_top_server_rates (
+			sn, manufacturer, model, config_type, environment, idc,
+			data_disk_count, fault_count, denominator, fault_rate
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, x := range rows {
+		if _, err := stmt.ExecContext(ctx,
+			x.SN, x.Manufacturer, x.Model, x.ConfigType, x.Environment, x.IDC,
+			x.DataDiskCount, x.FaultCount, x.Denominator, x.FaultRate,
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *DatasetRepo) ListStorageTopServerRates(ctx context.Context) ([]domain.StorageTopServerRate, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT sn, manufacturer, model, config_type, environment, idc,
+			data_disk_count, fault_count, denominator, fault_rate
+		FROM ops_storage_top_server_rates
+		ORDER BY fault_rate DESC, fault_count DESC, sn ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]domain.StorageTopServerRate, 0)
+	for rows.Next() {
+		var x domain.StorageTopServerRate
+		if err := rows.Scan(
+			&x.SN, &x.Manufacturer, &x.Model, &x.ConfigType, &x.Environment, &x.IDC,
+			&x.DataDiskCount, &x.FaultCount, &x.Denominator, &x.FaultRate,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
+}

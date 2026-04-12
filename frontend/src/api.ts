@@ -15,6 +15,7 @@ import type {
   RenewalPlan,
   ServerItem,
   SpecialRule,
+  StorageTopServerRate,
   ImportErrorInsight
 } from './types';
 
@@ -108,6 +109,11 @@ export async function listFailureAgeTrendPoints() {
 
 export async function listFailureFeatureFacts() {
   const { data } = await http.get<ApiResp<ListData<FailureFeatureFact>>>('/failure-rates/features');
+  return data;
+}
+
+export async function listStorageTopServerRates() {
+  const { data } = await http.get<ApiResp<ListData<StorageTopServerRate>>>('/failure-rates/storage-top-servers');
   return data;
 }
 

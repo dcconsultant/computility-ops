@@ -46,6 +46,7 @@ func NewRouter(h Handlers) *gin.Engine {
 		v1.GET("/failure-rates/overview-cards", h.Import.ListFailureOverviewCards)
 		v1.GET("/failure-rates/age-trend", h.Import.ListFailureAgeTrendPoints)
 		v1.GET("/failure-rates/features", h.Import.ListFailureFeatureFacts)
+		v1.GET("/failure-rates/storage-top-servers", h.Import.ListStorageTopServerRates)
 		v1.POST("/failure-rates/analyze/import", h.Import.AnalyzeFaultRates)
 
 		v1.POST("/system/mysql/test", h.System.TestMySQLConnection)

@@ -136,6 +136,19 @@ export interface FailureFeatureFact {
   fault_rate: number;
 }
 
+export interface StorageTopServerRate {
+  sn: string;
+  manufacturer?: string;
+  model?: string;
+  config_type?: string;
+  environment?: string;
+  idc?: string;
+  data_disk_count: number;
+  fault_count: number;
+  denominator: number;
+  fault_rate: number;
+}
+
 export interface FaultAnalysisResult {
   total_fault_rows: number;
   matched_fault_rows: number;
@@ -144,6 +157,7 @@ export interface FaultAnalysisResult {
   generated_package_model_rates: number;
   overall_rates?: FailureRateSummary[];
   failure_feature_facts?: FailureFeatureFact[];
+  storage_top_server_rates?: StorageTopServerRate[];
 }
 
 export interface PlanItem {

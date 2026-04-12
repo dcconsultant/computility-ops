@@ -19,6 +19,7 @@ type DatasetRepo struct {
 	overviewCards     []domain.FailureOverviewCard
 	ageTrendPoints    []domain.FailureAgeTrendPoint
 	featureFacts      []domain.FailureFeatureFact
+	storageTopRates   []domain.StorageTopServerRate
 }
 
 func NewDatasetRepo() *DatasetRepo { return &DatasetRepo{} }
@@ -133,4 +134,17 @@ func (r *DatasetRepo) ListFailureFeatureFacts(_ context.Context) ([]domain.Failu
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return append([]domain.FailureFeatureFact(nil), r.featureFacts...), nil
+}
+
+func (r *DatasetRepo) ReplaceStorageTopServerRates(_ context.Context, rows []domain.StorageTopServerRate) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.storageTopRates = append([]domain.StorageTopServerRate(nil), rows...)
+	return nil
+}
+
+func (r *DatasetRepo) ListStorageTopServerRates(_ context.Context) ([]domain.StorageTopServerRate, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return append([]domain.StorageTopServerRate(nil), r.storageTopRates...), nil
 }
