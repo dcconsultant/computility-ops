@@ -560,11 +560,12 @@ func buildFailureAgeMetrics(
 			weight = 1 + float64(pkg.DataDiskCount)
 		}
 
-		analysisEnd := now
 		warrantyEndAt, hasWarrantyEnd := parseFlexibleDate(srv.WarrantyEndDate)
-		if excludeOverWarranty && hasWarrantyEnd && warrantyEndAt.Before(analysisEnd) {
-			analysisEnd = warrantyEndAt
+		isOverWarranty := hasWarrantyEnd && warrantyEndAt.Before(now)
+		if excludeOverWarranty && isOverWarranty {
+			continue
 		}
+		analysisEnd := now
 		if !analysisEnd.After(purchaseDate) {
 			continue
 		}
@@ -589,9 +590,6 @@ func buildFailureAgeMetrics(
 			}
 			ts := *ev.createdAt
 			if ts.Before(observationStart) || ts.After(now) {
-				continue
-			}
-			if excludeOverWarranty && hasWarrantyEnd && ts.After(warrantyEndAt) {
 				continue
 			}
 			age := ageBucketForEvent(purchaseDate, ts)
@@ -795,11 +793,12 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		overallBaseDen[k] += weight
 		overallBaseDen["all|"+segment] += weight
 
-		analysisEnd := now
-		warrantyEndAt, hasWarrantyEnd := parseFlexibleDate(srv.WarrantyEndDate)
-		if excludeOverWarranty && hasWarrantyEnd && warrantyEndAt.Before(analysisEnd) {
-			analysisEnd = warrantyEndAt
+	warrantyEndAt, hasWarrantyEnd := parseFlexibleDate(srv.WarrantyEndDate)
+		isOverWarranty := hasWarrantyEnd && warrantyEndAt.Before(now)
+		if excludeOverWarranty && isOverWarranty {
+			continue
 		}
+		analysisEnd := now
 		years := yearsBetween(launchAt, analysisEnd)
 		if years <= 0 {
 			continue
@@ -845,9 +844,6 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 
 		events := faultEventsBySN[srv.SN]
 		totalFaultN := float64(len(events))
-		if excludeOverWarranty {
-			totalFaultN = 0
-		}
 		overFaultN := 0.0
 		yearFaultN := 0.0
 		yearOverFaultN := 0.0
@@ -857,12 +853,6 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 			}
 			if ev.createdAt.After(now) {
 				continue
-			}
-			if excludeOverWarranty && hasWarrantyEnd && ev.createdAt.After(warrantyEndAt) {
-				continue
-			}
-			if excludeOverWarranty {
-				totalFaultN += 1
 			}
 			evYear := ev.createdAt.Year()
 			if evYear <= now.Year() {

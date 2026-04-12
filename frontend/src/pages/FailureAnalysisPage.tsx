@@ -106,7 +106,7 @@ export default function FailureAnalysisPage() {
       )}
 
       <Card
-        title="整体故障率（按存储/非存储 + 全周期/过保）"
+        title="整体故障率（按存储/非存储 + 全周期/超5年）"
         extra={<Button type="primary" onClick={() => navigate('/failure/dashboard')}>打开分析看板</Button>}
       >
         <Table
@@ -118,7 +118,7 @@ export default function FailureAnalysisPage() {
             { title: '环境范围', dataIndex: 'scope', render: (v: string) => scopeLabel(v) },
             { title: '分类', dataIndex: 'segment', render: (v: string) => (v === 'storage' ? '存储' : '非存储') },
             { title: '全周期故障率', dataIndex: 'full_cycle_failure_rate', render: (v: number) => formatPercent(v) },
-            { title: '过保故障率', dataIndex: 'over_warranty_failure_rate', render: (v: number) => formatPercent(v) },
+            { title: '超5年故障率', dataIndex: 'over_warranty_failure_rate', render: (v: number) => formatPercent(v) },
             { title: '故障数', dataIndex: 'fault_count', render: (v: number) => formatInt(v) },
             { title: '过保故障数', dataIndex: 'over_warranty_fault_count', render: (v: number) => formatInt(v) },
             { title: '全周期台年', dataIndex: 'server_years', render: (v: number) => formatFloat(v) },
