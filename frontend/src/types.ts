@@ -67,12 +67,16 @@ export interface ModelFailureRate {
 }
 
 export interface PackageFailureRate {
+  period?: string;
+  year?: number;
   config_type: string;
   failure_rate: number;
   over_warranty_failure_rate?: number;
 }
 
 export interface PackageModelFailureRate {
+  period?: string;
+  year?: number;
   config_type: string;
   manufacturer: string;
   model: string;

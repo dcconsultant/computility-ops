@@ -99,38 +99,104 @@ export default function FailureDashboardPage() {
     return m;
   }, [hostPackages]);
 
+  const pkgConfigMap = useMemo(() => {
+    const m = new Map<string, HostPackageConfig>();
+    hostPackages.forEach((x) => m.set((x.config_type || '').trim(), x));
+    return m;
+  }, [hostPackages]);
+
   const activeGroup = bucketGroups[groupIndex];
 
+  const fpHistory = useMemo(() => fp.filter((x) => (x.period || 'history') === 'history'), [fp]);
+  const fpYear = useMemo(() => fp.filter((x) => x.period === 'year' && x.year === currentYear), [fp, currentYear]);
+  const fpmHistory = useMemo(() => fpm.filter((x) => (x.period || 'history') === 'history'), [fpm]);
+  const fpmYear = useMemo(() => fpm.filter((x) => x.period === 'year' && x.year === currentYear), [fpm, currentYear]);
+
   const topPackage = useMemo(() => {
-    return fp
+    return fpHistory
       .filter((x) => pkgBucketMap.get((x.config_type || '').trim()) === activeGroup.key)
       .sort((a, b) => b.failure_rate - a.failure_rate)
       .slice(0, 8)
-      .map((x) => ({ name: x.config_type, rate: x.failure_rate }));
-  }, [fp, pkgBucketMap, activeGroup.key]);
+      .map((x) => ({
+        name: x.config_type,
+        rate: x.failure_rate,
+        scale: scaleLabelByConfig((x.config_type || '').trim(), activeGroup.key, pkgConfigMap)
+      }));
+  }, [fpHistory, pkgBucketMap, activeGroup.key, pkgConfigMap]);
+
+  const topPackageYear = useMemo(() => {
+    return fpYear
+      .filter((x) => pkgBucketMap.get((x.config_type || '').trim()) === activeGroup.key)
+      .sort((a, b) => b.failure_rate - a.failure_rate)
+      .slice(0, 8)
+      .map((x) => ({
+        name: x.config_type,
+        rate: x.failure_rate,
+        scale: scaleLabelByConfig((x.config_type || '').trim(), activeGroup.key, pkgConfigMap)
+      }));
+  }, [fpYear, pkgBucketMap, activeGroup.key, pkgConfigMap]);
 
   const topPackageModel = useMemo(() => {
-    return fpm
+    return fpmHistory
       .filter((x) => pkgBucketMap.get((x.config_type || '').trim()) === activeGroup.key)
       .sort((a, b) => b.failure_rate - a.failure_rate)
       .slice(0, 8)
-      .map((x) => ({ name: `${x.config_type}/${x.model}`, rate: x.failure_rate }));
-  }, [fpm, pkgBucketMap, activeGroup.key]);
+      .map((x) => ({
+        name: `${x.config_type}/${x.model}`,
+        rate: x.failure_rate,
+        scale: scaleLabelByConfig((x.config_type || '').trim(), activeGroup.key, pkgConfigMap)
+      }));
+  }, [fpmHistory, pkgBucketMap, activeGroup.key, pkgConfigMap]);
+
+  const topPackageModelYear = useMemo(() => {
+    return fpmYear
+      .filter((x) => pkgBucketMap.get((x.config_type || '').trim()) === activeGroup.key)
+      .sort((a, b) => b.failure_rate - a.failure_rate)
+      .slice(0, 8)
+      .map((x) => ({
+        name: `${x.config_type}/${x.model}`,
+        rate: x.failure_rate,
+        scale: scaleLabelByConfig((x.config_type || '').trim(), activeGroup.key, pkgConfigMap)
+      }));
+  }, [fpmYear, pkgBucketMap, activeGroup.key, pkgConfigMap]);
 
   const topModel = useMemo(() => {
-    const grouped = new Map<string, number>();
-    fpm
+    const grouped = new Map<string, { rate: number; scale: string }>();
+    fpmHistory
       .filter((x) => pkgBucketMap.get((x.config_type || '').trim()) === activeGroup.key)
       .forEach((x) => {
         const k = `${x.manufacturer}/${x.model}`;
-        const old = grouped.get(k) ?? 0;
-        if (x.failure_rate > old) grouped.set(k, x.failure_rate);
+        const candidate = {
+          rate: x.failure_rate,
+          scale: scaleLabelByConfig((x.config_type || '').trim(), activeGroup.key, pkgConfigMap)
+        };
+        const old = grouped.get(k);
+        if (!old || candidate.rate > old.rate) grouped.set(k, candidate);
       });
     return Array.from(grouped.entries())
-      .map(([name, rate]) => ({ name, rate }))
+      .map(([name, v]) => ({ name, rate: v.rate, scale: v.scale }))
       .sort((a, b) => b.rate - a.rate)
       .slice(0, 8);
-  }, [fpm, pkgBucketMap, activeGroup.key]);
+  }, [fpmHistory, pkgBucketMap, activeGroup.key, pkgConfigMap]);
+
+  const topModelYear = useMemo(() => {
+    const grouped = new Map<string, { rate: number; scale: string }>();
+    fpmYear
+      .filter((x) => pkgBucketMap.get((x.config_type || '').trim()) === activeGroup.key)
+      .forEach((x) => {
+        const k = `${x.manufacturer}/${x.model}`;
+        const candidate = {
+          rate: x.failure_rate,
+          scale: scaleLabelByConfig((x.config_type || '').trim(), activeGroup.key, pkgConfigMap)
+        };
+        const old = grouped.get(k);
+        if (!old || candidate.rate > old.rate) grouped.set(k, candidate);
+      });
+    return Array.from(grouped.entries())
+      .map(([name, v]) => ({ name, rate: v.rate, scale: v.scale }))
+      .sort((a, b) => b.rate - a.rate)
+      .slice(0, 8);
+  }, [fpmYear, pkgBucketMap, activeGroup.key, pkgConfigMap]);
 
   async function toggleFullscreen() {
     if (!document.fullscreenElement) {
@@ -188,7 +254,7 @@ export default function FailureDashboardPage() {
         </Card>
 
         <Card
-          title={<span style={{ color: '#dbeafe' }}>TOP故障率清单：{activeGroup.label}</span>}
+          title={<span style={{ color: '#dbeafe' }}>历史TOP故障率清单：{activeGroup.label}</span>}
           className="oc-neon-panel"
           style={{ background: 'rgba(2,6,23,0.65)', border: '1px solid #334155' }}
           bodyStyle={{ paddingTop: 10 }}
@@ -198,6 +264,19 @@ export default function FailureDashboardPage() {
             <Col span={8}><RankCard title="型号 TOP8" rows={topModel} /></Col>
             <Col span={8}><RankCard title="套餐 TOP8" rows={topPackage} /></Col>
             <Col span={8}><RankCard title="套餐型号 TOP8" rows={topPackageModel} /></Col>
+          </Row>
+        </Card>
+
+        <Card
+          title={<span style={{ color: '#dbeafe' }}>{currentYear}年TOP故障率清单：{activeGroup.label}</span>}
+          className="oc-neon-panel"
+          style={{ background: 'rgba(2,6,23,0.65)', border: '1px solid #334155' }}
+          bodyStyle={{ paddingTop: 10 }}
+        >
+          <Row gutter={12}>
+            <Col span={8}><RankCard title="型号 TOP8" rows={topModelYear} /></Col>
+            <Col span={8}><RankCard title="套餐 TOP8" rows={topPackageYear} /></Col>
+            <Col span={8}><RankCard title="套餐型号 TOP8" rows={topPackageModelYear} /></Col>
           </Row>
         </Card>
       </Space>
@@ -339,7 +418,7 @@ function YearTrendCard({ title, points }: { title: string; points: YearTrendPoin
   );
 }
 
-function RankCard({ title, rows }: { title: string; rows: Array<{ name: string; rate: number }> }) {
+function RankCard({ title, rows }: { title: string; rows: Array<{ name: string; rate: number; scale?: string }> }) {
   return (
     <Card className="oc-neon-card" style={{ background: 'rgba(15,23,42,0.75)', border: '1px solid #334155' }} bodyStyle={{ padding: 10 }}>
       <Text style={{ color: '#93c5fd' }}>{title}</Text>
@@ -347,7 +426,10 @@ function RankCard({ title, rows }: { title: string; rows: Array<{ name: string; 
         {rows.map((x, idx) => (
           <div key={x.name} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 8px', borderRadius: 6, background: idx % 2 ? 'rgba(30,41,59,0.55)' : 'rgba(15,23,42,0.75)', marginBottom: 4 }}>
             <span style={{ color: '#e2e8f0', maxWidth: '72%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{idx + 1}. {x.name}</span>
-            <span style={{ color: '#22d3ee', fontWeight: 700 }}>{formatPercent(x.rate)}</span>
+            <span style={{ display: 'inline-flex', gap: 8, alignItems: 'baseline' }}>
+              <span style={{ color: '#22d3ee', fontWeight: 700 }}>{formatPercent(x.rate)}</span>
+              <span style={{ color: '#94a3b8', fontSize: 12 }}>{x.scale || ''}</span>
+            </span>
           </div>
         ))}
       </div>
@@ -403,6 +485,20 @@ function fillAges(rows: FailureAgeTrendPoint[]) {
     });
   }
   return out;
+}
+
+function scaleLabelByConfig(configType: string, bucket: string, pkgMap: Map<string, HostPackageConfig>) {
+  const cfg = pkgMap.get(configType);
+  if (!cfg) return '';
+  if (bucket === 'warm_storage' || bucket === 'hot_storage' || bucket === 'storage') {
+    const tb = Number(cfg.storage_capacity_tb || 0);
+    const pb = tb / 1000;
+    return `${pb.toFixed(2)}PB`;
+  }
+  if (bucket === 'gpu') {
+    return `${Number(cfg.gpu_card_count || 0)}卡`;
+  }
+  return `${Number(cfg.cpu_logical_cores || 0)}核`;
 }
 
 function normalizeBucket(scene?: string) {

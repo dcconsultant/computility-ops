@@ -44,12 +44,16 @@ type ModelFailureRate struct {
 }
 
 type PackageFailureRate struct {
+	Period                  string  `json:"period,omitempty"`
+	Year                    int     `json:"year,omitempty"`
 	ConfigType              string  `json:"config_type"`
 	FailureRate             float64 `json:"failure_rate"`
 	OverWarrantyFailureRate float64 `json:"over_warranty_failure_rate,omitempty"`
 }
 
 type PackageModelFailureRate struct {
+	Period                  string  `json:"period,omitempty"`
+	Year                    int     `json:"year,omitempty"`
 	ConfigType              string  `json:"config_type"`
 	Manufacturer            string  `json:"manufacturer"`
 	Model                   string  `json:"model"`

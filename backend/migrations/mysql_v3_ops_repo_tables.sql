@@ -66,16 +66,21 @@ CREATE TABLE IF NOT EXISTS ops_model_failure_rates (
 
 CREATE TABLE IF NOT EXISTS ops_package_failure_rates (
   id                          BIGINT        NOT NULL AUTO_INCREMENT,
+  period                      VARCHAR(32)   NOT NULL DEFAULT 'history',
+  stat_year                   INT           NOT NULL DEFAULT 0,
   config_type                 VARCHAR(128)  NOT NULL,
   failure_rate                DECIMAL(18,8) NOT NULL,
   over_warranty_failure_rate  DECIMAL(18,8) NOT NULL DEFAULT 0,
   created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
+  KEY idx_period_year_cfg (period, stat_year, config_type),
   KEY idx_config_type (config_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS ops_package_model_failure_rates (
   id                          BIGINT        NOT NULL AUTO_INCREMENT,
+  period                      VARCHAR(32)   NOT NULL DEFAULT 'history',
+  stat_year                   INT           NOT NULL DEFAULT 0,
   config_type                 VARCHAR(128)  NOT NULL,
   manufacturer                VARCHAR(128)  NOT NULL,
   model                       VARCHAR(128)  NOT NULL,
@@ -83,6 +88,7 @@ CREATE TABLE IF NOT EXISTS ops_package_model_failure_rates (
   over_warranty_failure_rate  DECIMAL(18,8) NOT NULL DEFAULT 0,
   created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
+  KEY idx_period_year_cfg_model (period, stat_year, config_type, manufacturer, model),
   KEY idx_cfg_model (config_type, manufacturer, model)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

@@ -217,15 +217,15 @@ func (r *DatasetRepo) ReplacePackageFailureRates(ctx context.Context, rows []dom
 		return err
 	}
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO ops_package_failure_rates (config_type, failure_rate, over_warranty_failure_rate)
-		VALUES (?, ?, ?)
+		INSERT INTO ops_package_failure_rates (period, stat_year, config_type, failure_rate, over_warranty_failure_rate)
+		VALUES (?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 	for _, x := range rows {
-		if _, err := stmt.ExecContext(ctx, x.ConfigType, x.FailureRate, x.OverWarrantyFailureRate); err != nil {
+		if _, err := stmt.ExecContext(ctx, x.Period, x.Year, x.ConfigType, x.FailureRate, x.OverWarrantyFailureRate); err != nil {
 			return err
 		}
 	}
@@ -234,7 +234,7 @@ func (r *DatasetRepo) ReplacePackageFailureRates(ctx context.Context, rows []dom
 
 func (r *DatasetRepo) ListPackageFailureRates(ctx context.Context) ([]domain.PackageFailureRate, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT config_type, failure_rate, over_warranty_failure_rate
+		SELECT period, stat_year, config_type, failure_rate, over_warranty_failure_rate
 		FROM ops_package_failure_rates
 		ORDER BY created_at DESC
 	`)
@@ -245,7 +245,7 @@ func (r *DatasetRepo) ListPackageFailureRates(ctx context.Context) ([]domain.Pac
 	out := make([]domain.PackageFailureRate, 0)
 	for rows.Next() {
 		var x domain.PackageFailureRate
-		if err := rows.Scan(&x.ConfigType, &x.FailureRate, &x.OverWarrantyFailureRate); err != nil {
+		if err := rows.Scan(&x.Period, &x.Year, &x.ConfigType, &x.FailureRate, &x.OverWarrantyFailureRate); err != nil {
 			return nil, err
 		}
 		out = append(out, x)
@@ -264,15 +264,15 @@ func (r *DatasetRepo) ReplacePackageModelFailureRates(ctx context.Context, rows 
 	}
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO ops_package_model_failure_rates (
-			config_type, manufacturer, model, failure_rate, over_warranty_failure_rate
-		) VALUES (?, ?, ?, ?, ?)
+			period, stat_year, config_type, manufacturer, model, failure_rate, over_warranty_failure_rate
+		) VALUES (?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 	for _, x := range rows {
-		if _, err := stmt.ExecContext(ctx, x.ConfigType, x.Manufacturer, x.Model, x.FailureRate, x.OverWarrantyFailureRate); err != nil {
+		if _, err := stmt.ExecContext(ctx, x.Period, x.Year, x.ConfigType, x.Manufacturer, x.Model, x.FailureRate, x.OverWarrantyFailureRate); err != nil {
 			return err
 		}
 	}
@@ -281,7 +281,7 @@ func (r *DatasetRepo) ReplacePackageModelFailureRates(ctx context.Context, rows 
 
 func (r *DatasetRepo) ListPackageModelFailureRates(ctx context.Context) ([]domain.PackageModelFailureRate, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT config_type, manufacturer, model, failure_rate, over_warranty_failure_rate
+		SELECT period, stat_year, config_type, manufacturer, model, failure_rate, over_warranty_failure_rate
 		FROM ops_package_model_failure_rates
 		ORDER BY created_at DESC
 	`)
@@ -292,7 +292,7 @@ func (r *DatasetRepo) ListPackageModelFailureRates(ctx context.Context) ([]domai
 	out := make([]domain.PackageModelFailureRate, 0)
 	for rows.Next() {
 		var x domain.PackageModelFailureRate
-		if err := rows.Scan(&x.ConfigType, &x.Manufacturer, &x.Model, &x.FailureRate, &x.OverWarrantyFailureRate); err != nil {
+		if err := rows.Scan(&x.Period, &x.Year, &x.ConfigType, &x.Manufacturer, &x.Model, &x.FailureRate, &x.OverWarrantyFailureRate); err != nil {
 			return nil, err
 		}
 		out = append(out, x)

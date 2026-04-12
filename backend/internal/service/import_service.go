@@ -733,11 +733,15 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 
 	pkgNum := map[string]float64{}
 	pkgDen := map[string]float64{}
+	pkgBaseDen := map[string]float64{}
+	pkgYearNum := map[string]float64{}
 	pkgOverNum := map[string]float64{}
 	pkgOverDen := map[string]float64{}
 
 	pkgModelNum := map[string]float64{}
 	pkgModelDen := map[string]float64{}
+	pkgModelBaseDen := map[string]float64{}
+	pkgModelYearNum := map[string]float64{}
 	pkgModelOverNum := map[string]float64{}
 	pkgModelOverDen := map[string]float64{}
 
@@ -796,7 +800,9 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		weightedYears := weight * years
 		modelDen[modelKey] += weightedYears
 		pkgDen[pkgKey] += weightedYears
+		pkgBaseDen[pkgKey] += weight
 		pkgModelDen[pkgModelKey] += weightedYears
+		pkgModelBaseDen[pkgModelKey] += weight
 		overallDenYears[k] += weightedYears
 		overallDenYears["all|"+segment] += weightedYears
 		if yearYears > 0 {
@@ -855,7 +861,9 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 
 		modelNum[modelKey] += totalFaultN
 		pkgNum[pkgKey] += totalFaultN
+		pkgYearNum[pkgKey] += yearFaultN
 		pkgModelNum[pkgModelKey] += totalFaultN
+		pkgModelYearNum[pkgModelKey] += yearFaultN
 
 		modelOverNum[modelKey] += overFaultN
 		pkgOverNum[pkgKey] += overFaultN
@@ -893,7 +901,7 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		})
 	}
 
-	packageRates := make([]domain.PackageFailureRate, 0, len(pkgDen))
+	packageRates := make([]domain.PackageFailureRate, 0, len(pkgDen)*2)
 	for k, den := range pkgDen {
 		if den <= 0 {
 			continue
@@ -903,13 +911,23 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 			overRate = pkgOverNum[k] / pkgOverDen[k]
 		}
 		packageRates = append(packageRates, domain.PackageFailureRate{
+			Period:                  "history",
+			Year:                    0,
 			ConfigType:              k,
 			FailureRate:             pkgNum[k] / den,
 			OverWarrantyFailureRate: overRate,
 		})
+		yearRate := safeDivide(pkgYearNum[k], pkgBaseDen[k]) * annualizationFactor(now.Year(), now)
+		packageRates = append(packageRates, domain.PackageFailureRate{
+			Period:                  "year",
+			Year:                    now.Year(),
+			ConfigType:              k,
+			FailureRate:             yearRate,
+			OverWarrantyFailureRate: 0,
+		})
 	}
 
-	packageModelRates := make([]domain.PackageModelFailureRate, 0, len(pkgModelDen))
+	packageModelRates := make([]domain.PackageModelFailureRate, 0, len(pkgModelDen)*2)
 	for k, den := range pkgModelDen {
 		if den <= 0 {
 			continue
@@ -923,11 +941,23 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 			overRate = pkgModelOverNum[k] / pkgModelOverDen[k]
 		}
 		packageModelRates = append(packageModelRates, domain.PackageModelFailureRate{
+			Period:                  "history",
+			Year:                    0,
 			ConfigType:              parts[0],
 			Manufacturer:            parts[1],
 			Model:                   parts[2],
 			FailureRate:             pkgModelNum[k] / den,
 			OverWarrantyFailureRate: overRate,
+		})
+		yearRate := safeDivide(pkgModelYearNum[k], pkgModelBaseDen[k]) * annualizationFactor(now.Year(), now)
+		packageModelRates = append(packageModelRates, domain.PackageModelFailureRate{
+			Period:                  "year",
+			Year:                    now.Year(),
+			ConfigType:              parts[0],
+			Manufacturer:            parts[1],
+			Model:                   parts[2],
+			FailureRate:             yearRate,
+			OverWarrantyFailureRate: 0,
 		})
 	}
 
