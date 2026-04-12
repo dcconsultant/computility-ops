@@ -788,7 +788,9 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		}
 		overStart := launchAt.AddDate(5, 0, 0)
 		overYears := yearsBetween(overStart, now)
-		if excludeOverWarranty && overYears > 0 {
+		warrantyEndAt, hasWarrantyEnd := parseFlexibleDate(srv.WarrantyEndDate)
+		isOverWarranty := hasWarrantyEnd && warrantyEndAt.Before(now)
+		if excludeOverWarranty && isOverWarranty {
 			continue
 		}
 		yearServiceStart := maxTime(launchAt, yearStart)

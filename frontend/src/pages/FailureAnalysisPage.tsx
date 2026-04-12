@@ -181,7 +181,7 @@ export default function FailureAnalysisPage() {
               <Card title="上传故障清单并自动分析" extra={<Upload {...makeUploadProps('fault_analysis')}><Button icon={<UploadOutlined />} loading={uploading === 'fault_analysis'}>上传并分析</Button></Upload>}>
                 <Space direction="vertical" size={8}>
                   <Checkbox checked={excludeOverWarranty} onChange={(e) => setExcludeOverWarranty(e.target.checked)}>
-                    排除过保服务器（超5年）
+                    排除过保服务器（按保修日期）
                   </Checkbox>
                   <Text type="secondary">
                     上传包含故障字段的清单后，系统会结合服务器管理表 + 主机套餐配置表自动重算型号/套餐/套餐型号故障率。
