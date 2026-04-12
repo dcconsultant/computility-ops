@@ -304,6 +304,7 @@ function ScopeGroup({ title, year, nonStorage, storage }: {
 type OverviewPair = {
   yearRate: number;
   historyRate: number;
+  historyOverRate: number;
   yearFault: number;
   yearDen: number;
   historyFault: number;
@@ -337,6 +338,7 @@ function MiniOverviewCard({ segmentLabel, year, data, glow }: {
           <Text style={{ color: '#94a3b8', fontSize: 12 }}>历史平均故障率</Text>
           <div style={{ color: '#a78bfa', fontSize: 20, fontWeight: 700 }}>{formatPercent(data.historyRate)}</div>
           <Text style={{ color: '#cbd5e1', fontSize: 12 }}>故障 {formatInt(data.historyFault)} / 分母 {formatFloat(data.historyDen)}</Text>
+          <div style={{ color: '#f0abfc', fontSize: 12, marginTop: 2 }}>过保故障率 {formatPercent(data.historyOverRate)}</div>
         </Col>
       </Row>
     </Card>
@@ -443,6 +445,7 @@ function buildOverviewPair(rows: FailureRateSummary[], scope: 'all' | 'product' 
   return {
     yearRate: y?.full_cycle_failure_rate || 0,
     historyRate: h?.full_cycle_failure_rate || 0,
+    historyOverRate: h?.over_warranty_failure_rate || 0,
     yearFault: y?.fault_count || 0,
     yearDen: y?.server_years || 0,
     historyFault: h?.fault_count || 0,

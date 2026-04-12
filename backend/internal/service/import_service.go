@@ -1002,6 +1002,8 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 				historyRateSum += safeDivide(fy, den) * annualizationFactor(y, now)
 			}
 			historyRate := historyRateSum / float64(yearCount)
+			historyOverRate := safeDivide(overallFaultOverNum[key], overallOverDenYears[key])
+			yearOverRate := safeDivide(overallYearFaultOverNum[key], overallYearOverDenYears[key])
 
 			overallRates = append(overallRates,
 				domain.FailureRateSummary{
@@ -1010,11 +1012,11 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 					Scope:                scope,
 					Segment:              segment,
 					FullCycleFailureRate: historyRate,
-					OverWarrantyRate:     0,
+					OverWarrantyRate:     historyOverRate,
 					FaultCount:           int(historyFaultCount),
-					OverWarrantyFaults:   0,
+					OverWarrantyFaults:   int(overallFaultOverNum[key]),
 					ServerYears:          den * float64(yearCount),
-					OverWarrantyYears:    0,
+					OverWarrantyYears:    overallOverDenYears[key],
 				},
 				domain.FailureRateSummary{
 					Period:               "year",
@@ -1022,11 +1024,11 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 					Scope:                scope,
 					Segment:              segment,
 					FullCycleFailureRate: yearRate,
-					OverWarrantyRate:     0,
+					OverWarrantyRate:     yearOverRate,
 					FaultCount:           int(yearFault),
-					OverWarrantyFaults:   0,
+					OverWarrantyFaults:   int(overallYearFaultOverNum[key]),
 					ServerYears:          den,
-					OverWarrantyYears:    0,
+					OverWarrantyYears:    overallYearOverDenYears[key],
 				},
 			)
 
