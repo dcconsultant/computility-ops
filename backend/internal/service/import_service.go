@@ -941,7 +941,7 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		return FaultAnalysisResult{}, err
 	}
 
-	overallRates := make([]domain.FailureRateSummary, 0, 12)
+	overallRates := make([]domain.FailureRateSummary, 0, 64)
 	getYearFault := func(year int, key string) float64 {
 		if overallFaultByYear[year] == nil {
 			return 0
@@ -999,6 +999,26 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 					OverWarrantyYears:    0,
 				},
 			)
+
+			trendStartYear := startYear
+			if trendStartYear < 2021 {
+				trendStartYear = 2021
+			}
+			for y := trendStartYear; y <= now.Year(); y++ {
+				fy := getYearFault(y, key)
+				overallRates = append(overallRates, domain.FailureRateSummary{
+					Period:               "year_trend",
+					Year:                 y,
+					Scope:                scope,
+					Segment:              segment,
+					FullCycleFailureRate: safeDivide(fy, den) * annualizationFactor(y, now),
+					OverWarrantyRate:     0,
+					FaultCount:           int(fy),
+					OverWarrantyFaults:   0,
+					ServerYears:          den,
+					OverWarrantyYears:    0,
+				})
+			}
 		}
 	}
 	if err := s.datasetRepo.ReplaceOverallFailureRates(ctx, overallRates); err != nil {

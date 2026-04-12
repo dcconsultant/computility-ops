@@ -84,6 +84,15 @@ export default function FailureDashboardPage() {
     [trendPoints]
   );
 
+  const storageYearTrend = useMemo(
+    () => buildYearTrend(overall, 'storage', currentYear),
+    [overall, currentYear]
+  );
+  const nonStorageYearTrend = useMemo(
+    () => buildYearTrend(overall, 'non_storage', currentYear),
+    [overall, currentYear]
+  );
+
   const pkgBucketMap = useMemo(() => {
     const m = new Map<string, string>();
     hostPackages.forEach((x) => m.set((x.config_type || '').trim(), normalizeBucket(x.scene_category || '')));
@@ -168,6 +177,10 @@ export default function FailureDashboardPage() {
           <Row gutter={12}>
             <Col span={12}><TrendCard title="存储（1-10年）" points={storageTrend} /></Col>
             <Col span={12}><TrendCard title="非存储（1-10年）" points={nonStorageTrend} /></Col>
+          </Row>
+          <Row gutter={12} style={{ marginTop: 12 }}>
+            <Col span={12}><YearTrendCard title="存储历年故障率（2021-至今）" points={storageYearTrend} /></Col>
+            <Col span={12}><YearTrendCard title="非存储历年故障率（2021-至今）" points={nonStorageYearTrend} /></Col>
           </Row>
           {storageTrend.every((x) => x.denominator_exposure === 0) && nonStorageTrend.every((x) => x.denominator_exposure === 0)
             ? <Alert style={{ marginTop: 12 }} type="info" showIcon message="暂无趋势数据，请先执行故障清单分析" />
@@ -287,6 +300,45 @@ function TrendCard({ title, points }: { title: string; points: FailureAgeTrendPo
   );
 }
 
+type YearTrendPoint = { year: number; rate: number; fault: number; denominator: number };
+
+function YearTrendCard({ title, points }: { title: string; points: YearTrendPoint[] }) {
+  const width = 520;
+  const height = 240;
+  const padding = 30;
+  const maxY = Math.max(0.01, ...points.map((p) => p.rate));
+  const n = Math.max(points.length - 1, 1);
+  const linePoints = points
+    .map((p, idx) => {
+      const x = padding + (idx * (width - padding * 2)) / n;
+      const y = height - padding - (p.rate / maxY) * (height - padding * 2);
+      return `${x},${y}`;
+    })
+    .join(' ');
+
+  return (
+    <Card className="oc-neon-card" style={{ background: 'rgba(15,23,42,0.75)', border: '1px solid #334155' }} bodyStyle={{ padding: 12 }}>
+      <Text style={{ color: '#93c5fd' }}>{title}</Text>
+      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: 240, marginTop: 8 }}>
+        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#334155" />
+        <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="#334155" />
+        <polyline fill="none" stroke="#a78bfa" strokeWidth="3" points={linePoints} />
+        {points.map((p, idx) => {
+          const x = padding + (idx * (width - padding * 2)) / n;
+          const y = height - padding - (p.rate / maxY) * (height - padding * 2);
+          return (
+            <g key={`${p.year}`}>
+              <circle cx={x} cy={y} r={4} fill="#a78bfa" />
+              <text x={x} y={height - 10} textAnchor="middle" fill="#94a3b8" fontSize="11">{p.year}</text>
+              <text x={x} y={y - 8} textAnchor="middle" fill="#cbd5e1" fontSize="10">{(p.rate * 100).toFixed(1)}%</text>
+            </g>
+          );
+        })}
+      </svg>
+    </Card>
+  );
+}
+
 function RankCard({ title, rows }: { title: string; rows: Array<{ name: string; rate: number }> }) {
   return (
     <Card className="oc-neon-card" style={{ background: 'rgba(15,23,42,0.75)', border: '1px solid #334155' }} bodyStyle={{ padding: 10 }}>
@@ -314,6 +366,26 @@ function buildOverviewPair(rows: FailureRateSummary[], scope: 'all' | 'product' 
     historyFault: h?.fault_count || 0,
     historyDen: h?.server_years || 0
   };
+}
+
+function buildYearTrend(rows: FailureRateSummary[], segment: 'storage' | 'non_storage', currentYear: number): YearTrendPoint[] {
+  const m = new Map<number, FailureRateSummary>();
+  rows
+    .filter((x) => x.period === 'year_trend' && x.scope === 'all' && x.segment === segment && typeof x.year === 'number')
+    .forEach((x) => m.set(x.year as number, x));
+
+  const startYear = 2021;
+  const out: YearTrendPoint[] = [];
+  for (let y = startYear; y <= currentYear; y++) {
+    const row = m.get(y);
+    out.push({
+      year: y,
+      rate: row?.full_cycle_failure_rate || 0,
+      fault: row?.fault_count || 0,
+      denominator: row?.server_years || 0
+    });
+  }
+  return out;
 }
 
 function fillAges(rows: FailureAgeTrendPoint[]) {
