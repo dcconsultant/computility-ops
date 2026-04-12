@@ -136,6 +136,18 @@ export default function AppLayout() {
 
           <Divider style={{ margin: '4px 0' }} />
 
+          <Space direction="vertical" size={4} style={{ width: '100%' }}>
+            <Text strong>帮助文档</Text>
+            <a href="https://github.com/dcconsultant/computility-ops/blob/main/docs/fault_rate_advanced_feature_plan_v2.md" target="_blank" rel="noreferrer">
+              服务器故障率特性高级功能方案（V2）
+            </a>
+            <a href="https://github.com/dcconsultant/computility-ops/blob/main/docs/fault_rate_metric_spec.md" target="_blank" rel="noreferrer">
+              故障率口径说明（现有）
+            </a>
+          </Space>
+
+          <Divider style={{ margin: '4px 0' }} />
+
           <Space style={{ width: '100%', justifyContent: 'space-between' }}>
             <Text strong>导入异常分析（最近20条）</Text>
             <Button icon={<ReloadOutlined />} loading={loadingErrors} onClick={loadImportErrors}>刷新</Button>
