@@ -513,6 +513,7 @@ func buildFailureAgeMetrics(
 	faultEventsBySN map[string][]faultEvent,
 	pkgMap map[string]domain.HostPackageConfig,
 	now time.Time,
+	excludeOverWarranty bool,
 ) ([]domain.FailureAgeTrendPoint, []domain.FailureOverviewCard) {
 	const maxAgeBucket = 10
 
@@ -559,15 +560,24 @@ func buildFailureAgeMetrics(
 			weight = 1 + float64(pkg.DataDiskCount)
 		}
 
+		analysisEnd := now
+		warrantyEndAt, hasWarrantyEnd := parseFlexibleDate(srv.WarrantyEndDate)
+		if excludeOverWarranty && hasWarrantyEnd && warrantyEndAt.Before(analysisEnd) {
+			analysisEnd = warrantyEndAt
+		}
+		if !analysisEnd.After(purchaseDate) {
+			continue
+		}
+
 		for age := 1; age <= maxAgeBucket; age++ {
 			start, end := ageBucketRange(purchaseDate, age)
-			if intervalsOverlap(start, end, observationStart, now) {
+			if intervalsOverlap(start, end, observationStart, analysisEnd) {
 				if history[segment][age] == nil {
 					history[segment][age] = &ageMetricAccumulator{}
 				}
 				history[segment][age].denominator += weight
 			}
-			if intervalsOverlap(start, end, yearStart, now) {
+			if intervalsOverlap(start, end, yearStart, analysisEnd) {
 				yearly[segment].denominator += weight
 			}
 		}
@@ -581,6 +591,9 @@ func buildFailureAgeMetrics(
 			if ts.Before(observationStart) || ts.After(now) {
 				continue
 			}
+			if excludeOverWarranty && hasWarrantyEnd && ts.After(warrantyEndAt) {
+				continue
+			}
 			age := ageBucketForEvent(purchaseDate, ts)
 			if age >= 1 && age <= maxAgeBucket {
 				if history[segment][age] == nil {
@@ -588,7 +601,7 @@ func buildFailureAgeMetrics(
 				}
 				history[segment][age].numerator += 1
 			}
-			if !ts.Before(yearStart) {
+			if !ts.Before(yearStart) && !ts.After(analysisEnd) {
 				yearly[segment].numerator += 1
 			}
 		}
@@ -782,21 +795,21 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		overallBaseDen[k] += weight
 		overallBaseDen["all|"+segment] += weight
 
-		years := yearsBetween(launchAt, now)
+		analysisEnd := now
+		warrantyEndAt, hasWarrantyEnd := parseFlexibleDate(srv.WarrantyEndDate)
+		if excludeOverWarranty && hasWarrantyEnd && warrantyEndAt.Before(analysisEnd) {
+			analysisEnd = warrantyEndAt
+		}
+		years := yearsBetween(launchAt, analysisEnd)
 		if years <= 0 {
 			continue
 		}
 		overStart := launchAt.AddDate(5, 0, 0)
-		overYears := yearsBetween(overStart, now)
-		warrantyEndAt, hasWarrantyEnd := parseFlexibleDate(srv.WarrantyEndDate)
-		isOverWarranty := hasWarrantyEnd && warrantyEndAt.Before(now)
-		if excludeOverWarranty && isOverWarranty {
-			continue
-		}
+		overYears := yearsBetween(overStart, analysisEnd)
 		yearServiceStart := maxTime(launchAt, yearStart)
-		yearYears := yearsBetween(yearServiceStart, now)
+		yearYears := yearsBetween(yearServiceStart, analysisEnd)
 		yearOverStart := maxTime(overStart, yearStart)
-		yearOverYears := yearsBetween(yearOverStart, now)
+		yearOverYears := yearsBetween(yearOverStart, analysisEnd)
 
 		modelKey := strings.Join([]string{strings.TrimSpace(srv.Manufacturer), strings.TrimSpace(srv.Model)}, "|")
 		pkgKey := strings.TrimSpace(srv.ConfigType)
@@ -832,6 +845,9 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 
 		events := faultEventsBySN[srv.SN]
 		totalFaultN := float64(len(events))
+		if excludeOverWarranty {
+			totalFaultN = 0
+		}
 		overFaultN := 0.0
 		yearFaultN := 0.0
 		yearOverFaultN := 0.0
@@ -841,6 +857,12 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 			}
 			if ev.createdAt.After(now) {
 				continue
+			}
+			if excludeOverWarranty && hasWarrantyEnd && ev.createdAt.After(warrantyEndAt) {
+				continue
+			}
+			if excludeOverWarranty {
+				totalFaultN += 1
 			}
 			evYear := ev.createdAt.Year()
 			if evYear <= now.Year() {
@@ -853,13 +875,13 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 					minFaultYear = evYear
 				}
 			}
-			if !ev.createdAt.Before(yearStart) {
+			if !ev.createdAt.Before(yearStart) && !ev.createdAt.After(analysisEnd) {
 				yearFaultN += 1
 			}
-			if overYears > 0 && !ev.createdAt.Before(overStart) {
+			if overYears > 0 && !ev.createdAt.Before(overStart) && !ev.createdAt.After(analysisEnd) {
 				overFaultN += 1
 			}
-			if yearOverYears > 0 && !ev.createdAt.Before(yearOverStart) {
+			if yearOverYears > 0 && !ev.createdAt.Before(yearOverStart) && !ev.createdAt.After(analysisEnd) {
 				yearOverFaultN += 1
 			}
 		}
@@ -1062,7 +1084,7 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		return FaultAnalysisResult{}, err
 	}
 
-	ageTrendPoints, overviewCards := buildFailureAgeMetrics(servers, faultEventsBySN, pkgMap, now)
+	ageTrendPoints, overviewCards := buildFailureAgeMetrics(servers, faultEventsBySN, pkgMap, now, excludeOverWarranty)
 	if err := s.datasetRepo.ReplaceFailureAgeTrendPoints(ctx, ageTrendPoints); err != nil {
 		return FaultAnalysisResult{}, err
 	}
