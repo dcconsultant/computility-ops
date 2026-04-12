@@ -102,8 +102,8 @@ func (r *DatasetRepo) ReplaceSpecialRules(ctx context.Context, rows []domain.Spe
 	}
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO ops_special_rules (
-			sn, manufacturer, model, psa, idc, package_type, warranty_end_date, launch_date, policy
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			sn, manufacturer, model, psa, psa_hash, idc, package_type, warranty_end_date, launch_date, policy
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -115,6 +115,7 @@ func (r *DatasetRepo) ReplaceSpecialRules(ctx context.Context, rows []domain.Spe
 			nullIfEmpty(x.Manufacturer),
 			nullIfEmpty(x.Model),
 			nullIfEmpty(x.PSA),
+			nullPSAHash(x.PSA),
 			nullIfEmpty(x.IDC),
 			nullIfEmpty(x.PackageType),
 			nullIfEmpty(x.WarrantyEndDate),

@@ -33,8 +33,8 @@ func (r *ServerRepo) ReplaceAll(ctx context.Context, servers []domain.Server) er
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO ops_servers (
-			sn, manufacturer, model, psa, idc, environment, config_type, warranty_end_date, launch_date
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			sn, manufacturer, model, psa, psa_hash, idc, environment, config_type, warranty_end_date, launch_date
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -47,6 +47,7 @@ func (r *ServerRepo) ReplaceAll(ctx context.Context, servers []domain.Server) er
 			s.Manufacturer,
 			s.Model,
 			s.PSA,
+			psaHash(s.PSA),
 			nullIfEmpty(s.IDC),
 			nullIfEmpty(s.Environment),
 			s.ConfigType,

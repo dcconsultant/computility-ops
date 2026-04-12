@@ -4,7 +4,8 @@ CREATE TABLE IF NOT EXISTS ops_servers (
   sn                  VARCHAR(64)   NOT NULL,
   manufacturer        VARCHAR(128)  NULL,
   model               VARCHAR(128)  NULL,
-  psa                 VARCHAR(64)   NOT NULL,
+  psa                 LONGTEXT      NOT NULL,
+  psa_hash            CHAR(64)      NOT NULL,
   idc                 VARCHAR(128)  NULL,
   environment         VARCHAR(64)   NULL,
   config_type         VARCHAR(128)  NOT NULL,
@@ -12,6 +13,7 @@ CREATE TABLE IF NOT EXISTS ops_servers (
   launch_date         VARCHAR(32)   NULL,
   created_at          TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (sn),
+  KEY idx_psa_hash (psa_hash),
   KEY idx_config_type (config_type),
   KEY idx_environment (environment)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -37,7 +39,8 @@ CREATE TABLE IF NOT EXISTS ops_special_rules (
   sn                  VARCHAR(64)   NOT NULL,
   manufacturer        VARCHAR(128)  NULL,
   model               VARCHAR(128)  NULL,
-  psa                 VARCHAR(64)   NULL,
+  psa                 LONGTEXT      NULL,
+  psa_hash            CHAR(64)      NULL,
   idc                 VARCHAR(128)  NULL,
   package_type        VARCHAR(128)  NULL,
   warranty_end_date   VARCHAR(32)   NULL,
@@ -46,6 +49,7 @@ CREATE TABLE IF NOT EXISTS ops_special_rules (
   created_at          TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_sn (sn),
+  KEY idx_psa_hash (psa_hash),
   KEY idx_policy (policy)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

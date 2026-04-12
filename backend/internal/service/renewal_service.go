@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strconv"
@@ -90,14 +92,14 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		excludedSet[normalizeEnv("测试")] = true
 	}
 
-	excludedPSASet := make(map[string]bool)
+	excludedPSAMatcher := newPSAExactMatcher()
 	excludedPSACanonical := make([]string, 0, len(in.ExcludedPSAs))
 	for _, psa := range in.ExcludedPSAs {
 		n := normalizeText(psa)
-		if n == "" || excludedPSASet[n] {
+		if n == "" || excludedPSAMatcher.HasNormalized(n) {
 			continue
 		}
-		excludedPSASet[n] = true
+		excludedPSAMatcher.AddNormalized(n)
 		excludedPSACanonical = append(excludedPSACanonical, strings.TrimSpace(psa))
 	}
 
@@ -142,7 +144,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		if excludedSet[normalizeEnv(srv.Environment)] {
 			continue
 		}
-		if excludedPSASet[normalizeText(srv.PSA)] {
+		if excludedPSAMatcher.MatchRaw(srv.PSA) {
 			psa, _ := parsePSAValue(srv.PSA)
 			nonRenewalItems = append(nonRenewalItems, domain.NonRenewalItem{
 				SN:           srv.SN,
@@ -633,6 +635,42 @@ func parsePSAValue(raw string) (float64, bool) {
 		return 0, false
 	}
 	return f, true
+}
+
+type psaExactMatcher struct {
+	byHash map[string][]string
+}
+
+func newPSAExactMatcher() *psaExactMatcher {
+	return &psaExactMatcher{byHash: map[string][]string{}}
+}
+
+func (m *psaExactMatcher) AddNormalized(v string) {
+	h := textHash(v)
+	m.byHash[h] = append(m.byHash[h], v)
+}
+
+func (m *psaExactMatcher) HasNormalized(v string) bool {
+	h := textHash(v)
+	for _, c := range m.byHash[h] {
+		if c == v {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *psaExactMatcher) MatchRaw(raw string) bool {
+	n := normalizeText(raw)
+	if n == "" {
+		return false
+	}
+	return m.HasNormalized(n)
+}
+
+func textHash(v string) string {
+	sum := sha256.Sum256([]byte(v))
+	return hex.EncodeToString(sum[:])
 }
 
 func containsNormalized(list []string, target string) bool {
