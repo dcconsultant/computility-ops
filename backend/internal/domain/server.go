@@ -92,3 +92,15 @@ type FailureAgeTrendPoint struct {
 	DenominatorExposure float64 `json:"denominator_exposure"`
 	FaultRate           float64 `json:"fault_rate"`
 }
+
+type FailureFeatureFact struct {
+	RecordYearIndex     int     `json:"record_year_index"`
+	RecordYearStart     string  `json:"record_year_start"`
+	RecordYearEnd       string  `json:"record_year_end"`
+	Scope               string  `json:"scope"`
+	SceneGroup          string  `json:"scene_group"`
+	AgeBucket           int     `json:"age_bucket"`
+	DenominatorWeighted float64 `json:"denominator_weighted"`
+	FaultCount          int     `json:"fault_count"`
+	FaultRate           float64 `json:"fault_rate"`
+}

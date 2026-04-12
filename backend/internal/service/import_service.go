@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -468,6 +469,14 @@ func (s *ImportService) ListFailureAgeTrendPoints(ctx context.Context) ([]domain
 	return rows, nil
 }
 
+func (s *ImportService) ListFailureFeatureFacts(ctx context.Context) ([]domain.FailureFeatureFact, error) {
+	rows, err := s.datasetRepo.ListFailureFeatureFacts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
 func validatePackageModelFailureRow(raw map[string]string) (domain.PackageModelFailureRate, error) {
 	get := func(k string) string { return strings.TrimSpace(raw[k]) }
 	cfg, m, model := get("config_type"), get("manufacturer"), get("model")
@@ -497,6 +506,7 @@ type FaultAnalysisResult struct {
 	OverallRates               []domain.FailureRateSummary   `json:"overall_rates,omitempty"`
 	OverviewCards              []domain.FailureOverviewCard  `json:"overview_cards,omitempty"`
 	AgeTrendPoints             []domain.FailureAgeTrendPoint `json:"age_trend_points,omitempty"`
+	FailureFeatureFacts        []domain.FailureFeatureFact   `json:"failure_feature_facts,omitempty"`
 }
 
 type faultEvent struct {
@@ -650,6 +660,193 @@ func buildFailureAgeMetrics(
 	}
 
 	return trend, cards
+}
+
+type failureFeatureAgg struct {
+	denominator float64
+	faultCount  float64
+}
+
+func buildFailureFeatureFacts(
+	servers []domain.Server,
+	faultEventsBySN map[string][]faultEvent,
+	pkgMap map[string]domain.HostPackageConfig,
+	now time.Time,
+) []domain.FailureFeatureFact {
+	anchor := time.Date(2021, 4, 7, 0, 0, 0, 0, now.Location())
+	if now.Before(anchor) {
+		return nil
+	}
+	type recordYearWindow struct {
+		index int
+		start time.Time
+		end   time.Time
+	}
+	windows := make([]recordYearWindow, 0)
+	for i := 1; ; i++ {
+		start := anchor.AddDate(i-1, 0, 0)
+		if start.After(now) {
+			break
+		}
+		end := anchor.AddDate(i, 0, 0).Add(-time.Nanosecond)
+		windows = append(windows, recordYearWindow{index: i, start: start, end: end})
+	}
+	if len(windows) == 0 {
+		return nil
+	}
+
+	type key struct {
+		yearIndex int
+		yearStart string
+		yearEnd   string
+		scope     string
+		scene     string
+		ageBucket int
+	}
+	agg := map[key]*failureFeatureAgg{}
+	addDen := func(k key, v float64) {
+		if agg[k] == nil {
+			agg[k] = &failureFeatureAgg{}
+		}
+		agg[k].denominator += v
+	}
+	addFault := func(k key, v float64) {
+		if agg[k] == nil {
+			agg[k] = &failureFeatureAgg{}
+		}
+		agg[k].faultCount += v
+	}
+
+	rangeSceneGroups := func(bucket string) []string {
+		out := []string{bucket}
+		if bucket == "warm_storage" || bucket == "hot_storage" {
+			out = append(out, "storage")
+		} else {
+			out = append(out, "non_storage")
+		}
+		return out
+	}
+	ageBucket := func(age int) int {
+		if age <= 0 {
+			return 0
+		}
+		if age >= 9 {
+			return 9
+		}
+		return age
+	}
+
+	for _, srv := range servers {
+		pkg, ok := pkgMap[strings.TrimSpace(srv.ConfigType)]
+		if !ok {
+			continue
+		}
+		launchAt, ok := parseFlexibleDate(srv.LaunchDate)
+		if !ok {
+			continue
+		}
+		warrantyEndAt, ok := parseFlexibleDate(srv.WarrantyEndDate)
+		if !ok {
+			continue
+		}
+
+		scope := classifyScopeByEnv(srv.Environment)
+		scopes := []string{"all"}
+		if scope != "all" {
+			scopes = append(scopes, scope)
+		}
+		bucket := normalizeBucket(pkg.SceneCategory)
+		sceneGroups := rangeSceneGroups(bucket)
+		weight := 1.0
+		if bucket == "warm_storage" || bucket == "hot_storage" {
+			weight = 1 + float64(pkg.DataDiskCount)
+		}
+
+		for _, w := range windows {
+			if warrantyEndAt.Before(w.start) {
+				continue
+			}
+			age := int(w.start.Sub(launchAt).Hours()/24/365.2425) + 1
+			ab := ageBucket(age)
+			if ab == 0 {
+				continue
+			}
+			yStart := w.start.Format("2006-01-02")
+			yEnd := w.end.Format("2006-01-02")
+			for _, sc := range scopes {
+				for _, sg := range sceneGroups {
+					addDen(key{yearIndex: w.index, yearStart: yStart, yearEnd: yEnd, scope: sc, scene: sg, ageBucket: ab}, weight)
+				}
+			}
+		}
+
+		events := faultEventsBySN[srv.SN]
+		for _, ev := range events {
+			if ev.createdAt == nil {
+				continue
+			}
+			ts := *ev.createdAt
+			if ts.Before(anchor) || ts.After(now) {
+				continue
+			}
+			var matched *recordYearWindow
+			for i := range windows {
+				if !ts.Before(windows[i].start) && !ts.After(windows[i].end) {
+					matched = &windows[i]
+					break
+				}
+			}
+			if matched == nil {
+				continue
+			}
+			if warrantyEndAt.Before(matched.start) {
+				continue
+			}
+			ab := ageBucket(int(matched.start.Sub(launchAt).Hours()/24/365.2425) + 1)
+			if ab == 0 {
+				continue
+			}
+			yStart := matched.start.Format("2006-01-02")
+			yEnd := matched.end.Format("2006-01-02")
+			for _, sc := range scopes {
+				for _, sg := range sceneGroups {
+					addFault(key{yearIndex: matched.index, yearStart: yStart, yearEnd: yEnd, scope: sc, scene: sg, ageBucket: ab}, 1)
+				}
+			}
+		}
+	}
+
+	out := make([]domain.FailureFeatureFact, 0, len(agg))
+	for k, v := range agg {
+		rate := 0.0
+		if v.denominator > 0 {
+			rate = v.faultCount / v.denominator
+		}
+		out = append(out, domain.FailureFeatureFact{
+			RecordYearIndex:     k.yearIndex,
+			RecordYearStart:     k.yearStart,
+			RecordYearEnd:       k.yearEnd,
+			Scope:               k.scope,
+			SceneGroup:          k.scene,
+			AgeBucket:           k.ageBucket,
+			DenominatorWeighted: v.denominator,
+			FaultCount:          int(v.faultCount),
+			FaultRate:           rate,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].RecordYearIndex != out[j].RecordYearIndex {
+			return out[i].RecordYearIndex < out[j].RecordYearIndex
+		}
+		if out[i].Scope != out[j].Scope {
+			return out[i].Scope < out[j].Scope
+		}
+		if out[i].SceneGroup != out[j].SceneGroup {
+			return out[i].SceneGroup < out[j].SceneGroup
+		}
+		return out[i].AgeBucket < out[j].AgeBucket
+	})
+	return out
 }
 
 func ageBucketRange(purchaseDate time.Time, age int) (time.Time, time.Time) {
@@ -1082,6 +1279,11 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		return FaultAnalysisResult{}, err
 	}
 
+	featureFacts := buildFailureFeatureFacts(servers, faultEventsBySN, pkgMap, now)
+	if err := s.datasetRepo.ReplaceFailureFeatureFacts(ctx, featureFacts); err != nil {
+		return FaultAnalysisResult{}, err
+	}
+
 	return FaultAnalysisResult{
 		TotalFaultRows:             totalFaultRows,
 		MatchedFaultRows:           matchedFaultRows,
@@ -1091,6 +1293,7 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		OverallRates:               overallRates,
 		OverviewCards:              overviewCards,
 		AgeTrendPoints:             ageTrendPoints,
+		FailureFeatureFacts:        featureFacts,
 	}, nil
 }
 

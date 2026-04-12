@@ -228,6 +228,16 @@ func (h *ImportHandler) ListFailureAgeTrendPoints(c *gin.Context) {
 	ok(c, gin.H{"list": rows, "total": len(rows), "page": 1, "page_size": len(rows)})
 }
 
+func (h *ImportHandler) ListFailureFeatureFacts(c *gin.Context) {
+	c.Set("audit_action", "failure_rates.features.list")
+	rows, err := h.service.ListFailureFeatureFacts(c.Request.Context())
+	if err != nil {
+		fail(c, 50001, "查询失败")
+		return
+	}
+	ok(c, gin.H{"list": rows, "total": len(rows), "page": 1, "page_size": len(rows)})
+}
+
 func (h *ImportHandler) AnalyzeFaultRates(c *gin.Context) {
 	c.Set("audit_action", "failure_rates.analyze")
 	headers, rows, okRead := h.readRows(c)

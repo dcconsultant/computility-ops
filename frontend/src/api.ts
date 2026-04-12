@@ -9,6 +9,7 @@ import type {
   FailureRateSummary,
   FailureOverviewCard,
   FailureAgeTrendPoint,
+  FailureFeatureFact,
   PackageFailureRate,
   PackageModelFailureRate,
   RenewalPlan,
@@ -102,6 +103,11 @@ export async function listFailureOverviewCards() {
 
 export async function listFailureAgeTrendPoints() {
   const { data } = await http.get<ApiResp<ListData<FailureAgeTrendPoint>>>('/failure-rates/age-trend');
+  return data;
+}
+
+export async function listFailureFeatureFacts() {
+  const { data } = await http.get<ApiResp<ListData<FailureFeatureFact>>>('/failure-rates/features');
   return data;
 }
 

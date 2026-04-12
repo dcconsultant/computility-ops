@@ -36,4 +36,7 @@ type DatasetRepo interface {
 
 	ReplaceFailureAgeTrendPoints(ctx context.Context, rows []domain.FailureAgeTrendPoint) error
 	ListFailureAgeTrendPoints(ctx context.Context) ([]domain.FailureAgeTrendPoint, error)
+
+	ReplaceFailureFeatureFacts(ctx context.Context, rows []domain.FailureFeatureFact) error
+	ListFailureFeatureFacts(ctx context.Context) ([]domain.FailureFeatureFact, error)
 }

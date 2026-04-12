@@ -124,6 +124,18 @@ export interface ImportErrorInsight {
   hint: string;
 }
 
+export interface FailureFeatureFact {
+  record_year_index: number;
+  record_year_start: string;
+  record_year_end: string;
+  scope: string;
+  scene_group: string;
+  age_bucket: number;
+  denominator_weighted: number;
+  fault_count: number;
+  fault_rate: number;
+}
+
 export interface FaultAnalysisResult {
   total_fault_rows: number;
   matched_fault_rows: number;
@@ -131,6 +143,7 @@ export interface FaultAnalysisResult {
   generated_package_rates: number;
   generated_package_model_rates: number;
   overall_rates?: FailureRateSummary[];
+  failure_feature_facts?: FailureFeatureFact[];
 }
 
 export interface PlanItem {

@@ -496,3 +496,73 @@ func (r *DatasetRepo) ListFailureAgeTrendPoints(ctx context.Context) ([]domain.F
 	}
 	return out, rows.Err()
 }
+
+func (r *DatasetRepo) ReplaceFailureFeatureFacts(ctx context.Context, rows []domain.FailureFeatureFact) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ops_failure_feature_facts`); err != nil {
+		return err
+	}
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO ops_failure_feature_facts (
+			record_year_index, record_year_start, record_year_end,
+			scope, scene_group, age_bucket,
+			denominator_weighted, fault_count, fault_rate
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, x := range rows {
+		if _, err := stmt.ExecContext(ctx,
+			x.RecordYearIndex,
+			x.RecordYearStart,
+			x.RecordYearEnd,
+			x.Scope,
+			x.SceneGroup,
+			x.AgeBucket,
+			x.DenominatorWeighted,
+			x.FaultCount,
+			x.FaultRate,
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *DatasetRepo) ListFailureFeatureFacts(ctx context.Context) ([]domain.FailureFeatureFact, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT record_year_index, DATE_FORMAT(record_year_start, '%Y-%m-%d'), DATE_FORMAT(record_year_end, '%Y-%m-%d'),
+			scope, scene_group, age_bucket, denominator_weighted, fault_count, fault_rate
+		FROM ops_failure_feature_facts
+		ORDER BY record_year_index ASC, scope ASC, scene_group ASC, age_bucket ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]domain.FailureFeatureFact, 0)
+	for rows.Next() {
+		var x domain.FailureFeatureFact
+		if err := rows.Scan(
+			&x.RecordYearIndex,
+			&x.RecordYearStart,
+			&x.RecordYearEnd,
+			&x.Scope,
+			&x.SceneGroup,
+			&x.AgeBucket,
+			&x.DenominatorWeighted,
+			&x.FaultCount,
+			&x.FaultRate,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
+}

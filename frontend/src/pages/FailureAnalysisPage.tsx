@@ -10,12 +10,14 @@ import {
   importPackageModelFailureRates,
   listModelFailureRates,
   listOverallFailureRates,
+  listFailureFeatureFacts,
   listPackageFailureRates,
   listPackageModelFailureRates
 } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
 import type {
   FaultAnalysisResult,
+  FailureFeatureFact,
   ModelFailureRate,
   PackageFailureRate,
   PackageModelFailureRate
@@ -32,22 +34,25 @@ export default function FailureAnalysisPage() {
   const [excludeOverWarranty, setExcludeOverWarranty] = useState(false);
 
   const [overallRates, setOverallRates] = useState<FaultAnalysisResult['overall_rates']>([]);
+  const [featureFacts, setFeatureFacts] = useState<FailureFeatureFact[]>([]);
   const [fm, setFm] = useState<ModelFailureRate[]>([]);
   const [fp, setFp] = useState<PackageFailureRate[]>([]);
   const [fpm, setFpm] = useState<PackageModelFailureRate[]>([]);
 
   async function reloadAll() {
     try {
-      const [s0, s1, s2, s3] = await Promise.all([
+      const [s0, s1, s2, s3, s4] = await Promise.all([
         listOverallFailureRates(),
         listModelFailureRates(),
         listPackageFailureRates(),
-        listPackageModelFailureRates()
+        listPackageModelFailureRates(),
+        listFailureFeatureFacts()
       ]);
       setOverallRates(ensureApiOk(s0).data.list || []);
       setFm(ensureApiOk(s1).data.list);
       setFp(ensureApiOk(s2).data.list);
       setFpm(ensureApiOk(s3).data.list);
+      setFeatureFacts(ensureApiOk(s4).data.list || []);
     } catch (e) {
       message.error(parseApiError(e, '加载失败'));
     }
@@ -76,6 +81,7 @@ export default function FailureAnalysisPage() {
             const resp = ensureApiOk(await analyzeFaultRates(file, { excludeOverWarranty }));
             setAnalysisResult(resp.data);
             setOverallRates(resp.data.overall_rates || []);
+            setFeatureFacts(resp.data.failure_feature_facts || []);
             await reloadAll();
             message.success(`故障分析完成：命中故障 ${resp.data.matched_fault_rows}/${resp.data.total_fault_rows} 条`);
           } else {
@@ -187,6 +193,23 @@ export default function FailureAnalysisPage() {
                     上传包含故障字段的清单后，系统会结合服务器管理表 + 主机套餐配置表自动重算型号/套餐/套餐型号故障率。
                   </Text>
                 </Space>
+              </Card>
+            )
+          },
+          {
+            key: 'phase1',
+            label: '高级特性Phase1',
+            children: (
+              <Card title="记录年 x 机龄桶（Phase1 预览）">
+                <Table rowKey={(r) => `${r.record_year_index}-${r.scope}-${r.scene_group}-${r.age_bucket}`} dataSource={featureFacts} pagination={{ pageSize: 12 }} columns={[
+                  { title: '记录年', dataIndex: 'record_year_index', render: (_: number, r: FailureFeatureFact) => `Y${r.record_year_index} (${r.record_year_start}~${r.record_year_end})` },
+                  { title: '范围', dataIndex: 'scope', render: (v: string) => scopeLabel(v) },
+                  { title: '场景', dataIndex: 'scene_group' },
+                  { title: '机龄桶', dataIndex: 'age_bucket', render: (v: number) => v >= 9 ? '8+' : `${v}` },
+                  { title: '分母(加权)', dataIndex: 'denominator_weighted', render: (v: number) => formatFloat(v) },
+                  { title: '故障次数', dataIndex: 'fault_count', render: (v: number) => formatInt(v) },
+                  { title: '故障率', dataIndex: 'fault_rate', render: (v: number) => formatPercent(v) }
+                ]} />
               </Card>
             )
           }
