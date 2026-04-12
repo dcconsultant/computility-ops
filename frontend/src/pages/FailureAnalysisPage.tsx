@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Card, message, Space, Table, Tabs, Typography, Upload } from 'antd';
+import { Alert, Button, Card, Checkbox, message, Space, Table, Tabs, Typography, Upload } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import type { UploadProps } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
@@ -29,6 +29,7 @@ export default function FailureAnalysisPage() {
   const navigate = useNavigate();
   const [analysisResult, setAnalysisResult] = useState<FaultAnalysisResult | null>(null);
   const [uploading, setUploading] = useState<DataKey | null>(null);
+  const [excludeOverWarranty, setExcludeOverWarranty] = useState(false);
 
   const [overallRates, setOverallRates] = useState<FaultAnalysisResult['overall_rates']>([]);
   const [fm, setFm] = useState<ModelFailureRate[]>([]);
@@ -72,7 +73,7 @@ export default function FailureAnalysisPage() {
         setUploading(kind);
         try {
           if (kind === 'fault_analysis') {
-            const resp = ensureApiOk(await analyzeFaultRates(file));
+            const resp = ensureApiOk(await analyzeFaultRates(file, { excludeOverWarranty }));
             setAnalysisResult(resp.data);
             setOverallRates(resp.data.overall_rates || []);
             await reloadAll();
@@ -178,9 +179,14 @@ export default function FailureAnalysisPage() {
             label: '故障清单分析',
             children: (
               <Card title="上传故障清单并自动分析" extra={<Upload {...makeUploadProps('fault_analysis')}><Button icon={<UploadOutlined />} loading={uploading === 'fault_analysis'}>上传并分析</Button></Upload>}>
-                <Text type="secondary">
-                  上传包含故障字段的清单后，系统会结合服务器管理表 + 主机套餐配置表自动重算型号/套餐/套餐型号故障率。
-                </Text>
+                <Space direction="vertical" size={8}>
+                  <Checkbox checked={excludeOverWarranty} onChange={(e) => setExcludeOverWarranty(e.target.checked)}>
+                    排除过保服务器（超5年）
+                  </Checkbox>
+                  <Text type="secondary">
+                    上传包含故障字段的清单后，系统会结合服务器管理表 + 主机套餐配置表自动重算型号/套餐/套餐型号故障率。
+                  </Text>
+                </Space>
               </Card>
             )
           }

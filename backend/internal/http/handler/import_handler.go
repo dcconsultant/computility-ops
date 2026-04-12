@@ -239,7 +239,8 @@ func (h *ImportHandler) AnalyzeFaultRates(c *gin.Context) {
 		fail(c, 40004, err.Error())
 		return
 	}
-	result, err := h.service.AnalyzeFaultRates(c.Request.Context(), mapRows(headers, rows))
+	excludeOverWarranty := parseBoolLoose(c.PostForm("exclude_over_warranty"))
+	result, err := h.service.AnalyzeFaultRates(c.Request.Context(), mapRows(headers, rows), excludeOverWarranty)
 	if err != nil {
 		h.failImport(c, "failure_rates.analyze", err)
 		return
@@ -280,6 +281,15 @@ func (h *ImportHandler) readRows(c *gin.Context) ([]string, [][]string, bool) {
 		return nil, nil, false
 	}
 	return rows[0], rows[1:], true
+}
+
+func parseBoolLoose(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "y", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func mapRows(headers []string, rows [][]string) []map[string]string {

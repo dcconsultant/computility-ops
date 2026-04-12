@@ -688,7 +688,7 @@ var faultListHeaderMap = map[string]string{
 	"日志链接":  "log_link",
 }
 
-func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string]string) (FaultAnalysisResult, error) {
+func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string]string, excludeOverWarranty bool) (FaultAnalysisResult, error) {
 	servers, err := s.serverRepo.List(ctx)
 	if err != nil {
 		return FaultAnalysisResult{}, err
@@ -788,6 +788,9 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		}
 		overStart := launchAt.AddDate(5, 0, 0)
 		overYears := yearsBetween(overStart, now)
+		if excludeOverWarranty && overYears > 0 {
+			continue
+		}
 		yearServiceStart := maxTime(launchAt, yearStart)
 		yearYears := yearsBetween(yearServiceStart, now)
 		yearOverStart := maxTime(overStart, yearStart)

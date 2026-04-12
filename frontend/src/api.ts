@@ -76,10 +76,13 @@ export async function listPackageModelFailureRates() {
   return data;
 }
 
-export async function analyzeFaultRates(file: File) {
+export async function analyzeFaultRates(file: File, opts?: { excludeOverWarranty?: boolean }) {
   const { data } = await http.post<ApiResp<FaultAnalysisResult>>('/failure-rates/analyze/import', (() => {
     const form = new FormData();
     form.append('file', file);
+    if (opts?.excludeOverWarranty) {
+      form.append('exclude_over_warranty', 'true');
+    }
     return form;
   })(), {
     headers: { 'Content-Type': 'multipart/form-data' }

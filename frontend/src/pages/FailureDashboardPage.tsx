@@ -6,7 +6,8 @@ import {
   listHostPackages,
   listOverallFailureRates,
   listPackageFailureRates,
-  listPackageModelFailureRates
+  listPackageModelFailureRates,
+  listServers
 } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
 import type {
@@ -14,7 +15,8 @@ import type {
   FailureRateSummary,
   HostPackageConfig,
   PackageFailureRate,
-  PackageModelFailureRate
+  PackageModelFailureRate,
+  ServerItem
 } from '../types';
 
 const { Title, Text } = Typography;
@@ -36,6 +38,7 @@ export default function FailureDashboardPage() {
   const [overall, setOverall] = useState<FailureRateSummary[]>([]);
   const [trendPoints, setTrendPoints] = useState<FailureAgeTrendPoint[]>([]);
   const [hostPackages, setHostPackages] = useState<HostPackageConfig[]>([]);
+  const [servers, setServers] = useState<ServerItem[]>([]);
   const [fp, setFp] = useState<PackageFailureRate[]>([]);
   const [fpm, setFpm] = useState<PackageModelFailureRate[]>([]);
   const [fullScreen, setFullScreen] = useState(false);
@@ -43,16 +46,18 @@ export default function FailureDashboardPage() {
 
   async function reload() {
     try {
-      const [o, t, hp, p, pm] = await Promise.all([
+      const [o, t, hp, s, p, pm] = await Promise.all([
         listOverallFailureRates(),
         listFailureAgeTrendPoints(),
         listHostPackages(),
+        listServers(),
         listPackageFailureRates(),
         listPackageModelFailureRates()
       ]);
       setOverall(ensureApiOk(o).data.list || []);
       setTrendPoints(ensureApiOk(t).data.list || []);
       setHostPackages(ensureApiOk(hp).data.list || []);
+      setServers(ensureApiOk(s).data.list || []);
       setFp(ensureApiOk(p).data.list || []);
       setFpm(ensureApiOk(pm).data.list || []);
     } catch (e) {
@@ -107,6 +112,31 @@ export default function FailureDashboardPage() {
 
   const activeGroup = bucketGroups[groupIndex];
 
+  const scaleTotals = useMemo(() => {
+    const byConfig = new Map<string, number>();
+    const byConfigModel = new Map<string, number>();
+    const byModel = new Map<string, number>();
+
+    servers.forEach((srv) => {
+      const cfg = pkgConfigMap.get((srv.config_type || '').trim());
+      if (!cfg) return;
+      const bucket = normalizeBucket(cfg.scene_category || '');
+      const weight = perServerScale(bucket, cfg);
+      const configType = (srv.config_type || '').trim();
+      byConfig.set(configType, (byConfig.get(configType) || 0) + weight);
+
+      const model = (srv.model || '').trim();
+      const manufacturer = (srv.manufacturer || '').trim();
+      const cfgModelKey = `${configType}|${model}`;
+      byConfigModel.set(cfgModelKey, (byConfigModel.get(cfgModelKey) || 0) + weight);
+
+      const modelKey = `${manufacturer}|${model}`;
+      byModel.set(modelKey, (byModel.get(modelKey) || 0) + weight);
+    });
+
+    return { byConfig, byConfigModel, byModel };
+  }, [servers, pkgConfigMap]);
+
   const fpHistory = useMemo(() => fp.filter((x) => (x.period || 'history') === 'history'), [fp]);
   const fpYear = useMemo(() => fp.filter((x) => x.period === 'year' && x.year === currentYear), [fp, currentYear]);
   const fpmHistory = useMemo(() => fpm.filter((x) => (x.period || 'history') === 'history'), [fpm]);
@@ -117,86 +147,112 @@ export default function FailureDashboardPage() {
       .filter((x) => pkgBucketMap.get((x.config_type || '').trim()) === activeGroup.key)
       .sort((a, b) => b.failure_rate - a.failure_rate)
       .slice(0, 8)
-      .map((x) => ({
-        name: x.config_type,
-        rate: x.failure_rate,
-        scale: scaleLabelByConfig((x.config_type || '').trim(), activeGroup.key, pkgConfigMap)
-      }));
-  }, [fpHistory, pkgBucketMap, activeGroup.key, pkgConfigMap]);
+      .map((x) => {
+        const cfg = (x.config_type || '').trim();
+        return {
+          name: x.config_type,
+          rate: x.failure_rate,
+          scale: scaleLabelByConfig(cfg, activeGroup.key, pkgConfigMap),
+          totalScale: formatScaleByBucket(activeGroup.key, scaleTotals.byConfig.get(cfg) || 0)
+        };
+      });
+  }, [fpHistory, pkgBucketMap, activeGroup.key, pkgConfigMap, scaleTotals]);
 
   const topPackageYear = useMemo(() => {
     return fpYear
       .filter((x) => pkgBucketMap.get((x.config_type || '').trim()) === activeGroup.key)
       .sort((a, b) => b.failure_rate - a.failure_rate)
       .slice(0, 8)
-      .map((x) => ({
-        name: x.config_type,
-        rate: x.failure_rate,
-        scale: scaleLabelByConfig((x.config_type || '').trim(), activeGroup.key, pkgConfigMap)
-      }));
-  }, [fpYear, pkgBucketMap, activeGroup.key, pkgConfigMap]);
+      .map((x) => {
+        const cfg = (x.config_type || '').trim();
+        return {
+          name: x.config_type,
+          rate: x.failure_rate,
+          scale: scaleLabelByConfig(cfg, activeGroup.key, pkgConfigMap),
+          totalScale: formatScaleByBucket(activeGroup.key, scaleTotals.byConfig.get(cfg) || 0)
+        };
+      });
+  }, [fpYear, pkgBucketMap, activeGroup.key, pkgConfigMap, scaleTotals]);
 
   const topPackageModel = useMemo(() => {
     return fpmHistory
       .filter((x) => pkgBucketMap.get((x.config_type || '').trim()) === activeGroup.key)
       .sort((a, b) => b.failure_rate - a.failure_rate)
       .slice(0, 8)
-      .map((x) => ({
-        name: `${x.config_type}/${x.model}`,
-        rate: x.failure_rate,
-        scale: scaleLabelByConfig((x.config_type || '').trim(), activeGroup.key, pkgConfigMap)
-      }));
-  }, [fpmHistory, pkgBucketMap, activeGroup.key, pkgConfigMap]);
+      .map((x) => {
+        const cfg = (x.config_type || '').trim();
+        const model = (x.model || '').trim();
+        return {
+          name: `${x.config_type}/${x.model}`,
+          rate: x.failure_rate,
+          scale: scaleLabelByConfig(cfg, activeGroup.key, pkgConfigMap),
+          totalScale: formatScaleByBucket(activeGroup.key, scaleTotals.byConfigModel.get(`${cfg}|${model}`) || 0)
+        };
+      });
+  }, [fpmHistory, pkgBucketMap, activeGroup.key, pkgConfigMap, scaleTotals]);
 
   const topPackageModelYear = useMemo(() => {
     return fpmYear
       .filter((x) => pkgBucketMap.get((x.config_type || '').trim()) === activeGroup.key)
       .sort((a, b) => b.failure_rate - a.failure_rate)
       .slice(0, 8)
-      .map((x) => ({
-        name: `${x.config_type}/${x.model}`,
-        rate: x.failure_rate,
-        scale: scaleLabelByConfig((x.config_type || '').trim(), activeGroup.key, pkgConfigMap)
-      }));
-  }, [fpmYear, pkgBucketMap, activeGroup.key, pkgConfigMap]);
+      .map((x) => {
+        const cfg = (x.config_type || '').trim();
+        const model = (x.model || '').trim();
+        return {
+          name: `${x.config_type}/${x.model}`,
+          rate: x.failure_rate,
+          scale: scaleLabelByConfig(cfg, activeGroup.key, pkgConfigMap),
+          totalScale: formatScaleByBucket(activeGroup.key, scaleTotals.byConfigModel.get(`${cfg}|${model}`) || 0)
+        };
+      });
+  }, [fpmYear, pkgBucketMap, activeGroup.key, pkgConfigMap, scaleTotals]);
 
   const topModel = useMemo(() => {
-    const grouped = new Map<string, { rate: number; scale: string }>();
+    const grouped = new Map<string, { rate: number; scale: string; totalScale: string }>();
     fpmHistory
       .filter((x) => pkgBucketMap.get((x.config_type || '').trim()) === activeGroup.key)
       .forEach((x) => {
-        const k = `${x.manufacturer}/${x.model}`;
+        const cfg = (x.config_type || '').trim();
+        const manufacturer = (x.manufacturer || '').trim();
+        const model = (x.model || '').trim();
+        const k = `${manufacturer}/${model}`;
         const candidate = {
           rate: x.failure_rate,
-          scale: scaleLabelByConfig((x.config_type || '').trim(), activeGroup.key, pkgConfigMap)
+          scale: scaleLabelByConfig(cfg, activeGroup.key, pkgConfigMap),
+          totalScale: formatScaleByBucket(activeGroup.key, scaleTotals.byModel.get(`${manufacturer}|${model}`) || 0)
         };
         const old = grouped.get(k);
         if (!old || candidate.rate > old.rate) grouped.set(k, candidate);
       });
     return Array.from(grouped.entries())
-      .map(([name, v]) => ({ name, rate: v.rate, scale: v.scale }))
+      .map(([name, v]) => ({ name, rate: v.rate, scale: v.scale, totalScale: v.totalScale }))
       .sort((a, b) => b.rate - a.rate)
       .slice(0, 8);
-  }, [fpmHistory, pkgBucketMap, activeGroup.key, pkgConfigMap]);
+  }, [fpmHistory, pkgBucketMap, activeGroup.key, pkgConfigMap, scaleTotals]);
 
   const topModelYear = useMemo(() => {
-    const grouped = new Map<string, { rate: number; scale: string }>();
+    const grouped = new Map<string, { rate: number; scale: string; totalScale: string }>();
     fpmYear
       .filter((x) => pkgBucketMap.get((x.config_type || '').trim()) === activeGroup.key)
       .forEach((x) => {
-        const k = `${x.manufacturer}/${x.model}`;
+        const cfg = (x.config_type || '').trim();
+        const manufacturer = (x.manufacturer || '').trim();
+        const model = (x.model || '').trim();
+        const k = `${manufacturer}/${model}`;
         const candidate = {
           rate: x.failure_rate,
-          scale: scaleLabelByConfig((x.config_type || '').trim(), activeGroup.key, pkgConfigMap)
+          scale: scaleLabelByConfig(cfg, activeGroup.key, pkgConfigMap),
+          totalScale: formatScaleByBucket(activeGroup.key, scaleTotals.byModel.get(`${manufacturer}|${model}`) || 0)
         };
         const old = grouped.get(k);
         if (!old || candidate.rate > old.rate) grouped.set(k, candidate);
       });
     return Array.from(grouped.entries())
-      .map(([name, v]) => ({ name, rate: v.rate, scale: v.scale }))
+      .map(([name, v]) => ({ name, rate: v.rate, scale: v.scale, totalScale: v.totalScale }))
       .sort((a, b) => b.rate - a.rate)
       .slice(0, 8);
-  }, [fpmYear, pkgBucketMap, activeGroup.key, pkgConfigMap]);
+  }, [fpmYear, pkgBucketMap, activeGroup.key, pkgConfigMap, scaleTotals]);
 
   async function toggleFullscreen() {
     if (!document.fullscreenElement) {
@@ -338,7 +394,7 @@ function MiniOverviewCard({ segmentLabel, year, data, glow }: {
           <Text style={{ color: '#94a3b8', fontSize: 12 }}>历史平均故障率</Text>
           <div style={{ color: '#a78bfa', fontSize: 20, fontWeight: 700 }}>{formatPercent(data.historyRate)}</div>
           <Text style={{ color: '#cbd5e1', fontSize: 12 }}>故障 {formatInt(data.historyFault)} / 分母 {formatFloat(data.historyDen)}</Text>
-          <div style={{ color: '#f0abfc', fontSize: 12, marginTop: 2 }}>过保故障率 {formatPercent(data.historyOverRate)}</div>
+          <div style={{ color: '#f0abfc', fontSize: 12, marginTop: 2 }}>超5年故障率 {formatPercent(data.historyOverRate)}</div>
         </Col>
       </Row>
     </Card>
@@ -420,7 +476,7 @@ function YearTrendCard({ title, points }: { title: string; points: YearTrendPoin
   );
 }
 
-function RankCard({ title, rows }: { title: string; rows: Array<{ name: string; rate: number; scale?: string }> }) {
+function RankCard({ title, rows }: { title: string; rows: Array<{ name: string; rate: number; scale?: string; totalScale?: string }> }) {
   return (
     <Card className="oc-neon-card" style={{ background: 'rgba(15,23,42,0.75)', border: '1px solid #334155' }} bodyStyle={{ padding: 10 }}>
       <Text style={{ color: '#93c5fd' }}>{title}</Text>
@@ -431,6 +487,7 @@ function RankCard({ title, rows }: { title: string; rows: Array<{ name: string; 
             <span style={{ display: 'inline-flex', gap: 8, alignItems: 'baseline' }}>
               <span style={{ color: '#22d3ee', fontWeight: 700 }}>{formatPercent(x.rate)}</span>
               <span style={{ color: '#94a3b8', fontSize: 12 }}>{x.scale || ''}</span>
+              <span style={{ color: '#64748b', fontSize: 12 }}>{x.totalScale ? `总${x.totalScale}` : ''}</span>
             </span>
           </div>
         ))}
@@ -490,18 +547,30 @@ function fillAges(rows: FailureAgeTrendPoint[]) {
   return out;
 }
 
+function perServerScale(bucket: string, cfg: HostPackageConfig) {
+  if (bucket === 'warm_storage' || bucket === 'hot_storage' || bucket === 'storage') {
+    return Number(cfg.storage_capacity_tb || 0) / 1000;
+  }
+  if (bucket === 'gpu') {
+    return Number(cfg.gpu_card_count || 0);
+  }
+  return Number(cfg.cpu_logical_cores || 0);
+}
+
+function formatScaleByBucket(bucket: string, value: number) {
+  if (bucket === 'warm_storage' || bucket === 'hot_storage' || bucket === 'storage') {
+    return `${Number(value || 0).toFixed(2)}PB`;
+  }
+  if (bucket === 'gpu') {
+    return `${Number(value || 0).toFixed(0)}卡`;
+  }
+  return `${Number(value || 0).toFixed(0)}核`;
+}
+
 function scaleLabelByConfig(configType: string, bucket: string, pkgMap: Map<string, HostPackageConfig>) {
   const cfg = pkgMap.get(configType);
   if (!cfg) return '';
-  if (bucket === 'warm_storage' || bucket === 'hot_storage' || bucket === 'storage') {
-    const tb = Number(cfg.storage_capacity_tb || 0);
-    const pb = tb / 1000;
-    return `${pb.toFixed(2)}PB`;
-  }
-  if (bucket === 'gpu') {
-    return `${Number(cfg.gpu_card_count || 0)}卡`;
-  }
-  return `${Number(cfg.cpu_logical_cores || 0)}核`;
+  return formatScaleByBucket(bucket, perServerScale(bucket, cfg));
 }
 
 function normalizeBucket(scene?: string) {
