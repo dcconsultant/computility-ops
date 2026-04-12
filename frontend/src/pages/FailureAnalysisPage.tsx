@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Card, Checkbox, message, Space, Table, Tabs, Typography, Upload } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import type { UploadProps } from 'antd';
@@ -61,6 +61,31 @@ export default function FailureAnalysisPage() {
   useEffect(() => {
     reloadAll();
   }, []);
+
+  const phase1SceneAgeSummary = useMemo(() => {
+    const sceneOrder = ['storage', 'non_storage', 'compute', 'warm_storage', 'hot_storage', 'gpu'];
+    const m = new Map<string, { scene_group: string; age_bucket: number; denominator_weighted: number; fault_count: number }>();
+    featureFacts
+      .filter((x) => x.scope === 'all')
+      .forEach((x) => {
+        const key = `${x.scene_group}|${x.age_bucket}`;
+        const old = m.get(key) || { scene_group: x.scene_group, age_bucket: x.age_bucket, denominator_weighted: 0, fault_count: 0 };
+        old.denominator_weighted += Number(x.denominator_weighted || 0);
+        old.fault_count += Number(x.fault_count || 0);
+        m.set(key, old);
+      });
+    const out = Array.from(m.values()).map((x) => ({
+      ...x,
+      fault_rate: x.denominator_weighted > 0 ? x.fault_count / x.denominator_weighted : 0
+    }));
+    out.sort((a, b) => {
+      const ai = sceneOrder.indexOf(a.scene_group);
+      const bi = sceneOrder.indexOf(b.scene_group);
+      if (ai !== bi) return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi);
+      return a.age_bucket - b.age_bucket;
+    });
+    return out;
+  }, [featureFacts]);
 
   function makeUploadProps(kind: DataKey): UploadProps {
     const importer = {
@@ -200,17 +225,30 @@ export default function FailureAnalysisPage() {
             key: 'phase1',
             label: '高级特性Phase1',
             children: (
-              <Card title="记录年 x 机龄桶（Phase1 预览）">
-                <Table rowKey={(r) => `${r.record_year_index}-${r.scope}-${r.scene_group}-${r.age_bucket}`} dataSource={featureFacts} pagination={{ pageSize: 12 }} columns={[
-                  { title: '记录年', dataIndex: 'record_year_index', render: (_: number, r: FailureFeatureFact) => `Y${r.record_year_index} (${r.record_year_start}~${r.record_year_end})` },
-                  { title: '范围', dataIndex: 'scope', render: (v: string) => scopeLabel(v) },
-                  { title: '场景', dataIndex: 'scene_group' },
-                  { title: '机龄桶', dataIndex: 'age_bucket', render: (v: number) => v >= 9 ? '8+' : `${v}` },
-                  { title: '分母(加权)', dataIndex: 'denominator_weighted', render: (v: number) => formatFloat(v) },
-                  { title: '故障次数', dataIndex: 'fault_count', render: (v: number) => formatInt(v) },
-                  { title: '故障率', dataIndex: 'fault_rate', render: (v: number) => formatPercent(v) }
-                ]} />
-              </Card>
+              <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                <Card title="分场景 x 机龄汇总（跨记录年求和）">
+                  <Text type="secondary">用于透明展示分子分母：按场景、机龄桶把所有记录年求和后再算故障率。</Text>
+                  <Table rowKey={(r) => `${r.scene_group}-${r.age_bucket}`} dataSource={phase1SceneAgeSummary} pagination={{ pageSize: 12 }} columns={[
+                    { title: '场景', dataIndex: 'scene_group', render: (v: string) => sceneLabel(v) },
+                    { title: '机龄桶', dataIndex: 'age_bucket', render: (v: number) => v >= 9 ? '8+' : `${v}` },
+                    { title: '分母(加权求和)', dataIndex: 'denominator_weighted', render: (v: number) => formatFloat(v) },
+                    { title: '分子(故障次数求和)', dataIndex: 'fault_count', render: (v: number) => formatInt(v) },
+                    { title: '故障率', dataIndex: 'fault_rate', render: (v: number) => formatPercent(v) }
+                  ]} />
+                </Card>
+
+                <Card title="记录年 x 机龄桶（Phase1 明细）">
+                  <Table rowKey={(r) => `${r.record_year_index}-${r.scope}-${r.scene_group}-${r.age_bucket}`} dataSource={featureFacts} pagination={{ pageSize: 12 }} columns={[
+                    { title: '记录年', dataIndex: 'record_year_index', render: (_: number, r: FailureFeatureFact) => `Y${r.record_year_index} (${r.record_year_start}~${r.record_year_end})` },
+                    { title: '范围', dataIndex: 'scope', render: (v: string) => scopeLabel(v) },
+                    { title: '场景', dataIndex: 'scene_group', render: (v: string) => sceneLabel(v) },
+                    { title: '机龄桶', dataIndex: 'age_bucket', render: (v: number) => v >= 9 ? '8+' : `${v}` },
+                    { title: '分母(加权)', dataIndex: 'denominator_weighted', render: (v: number) => formatFloat(v) },
+                    { title: '故障次数', dataIndex: 'fault_count', render: (v: number) => formatInt(v) },
+                    { title: '故障率', dataIndex: 'fault_rate', render: (v: number) => formatPercent(v) }
+                  ]} />
+                </Card>
+              </Space>
             )
           }
         ]}
@@ -229,6 +267,16 @@ function scopeLabel(v?: string) {
   if (v === 'all') return '整体';
   if (v === 'product') return '生产';
   if (v === 'devtest') return '开测';
+  return v || '-';
+}
+
+function sceneLabel(v?: string) {
+  if (v === 'storage') return '存储';
+  if (v === 'non_storage') return '非存储';
+  if (v === 'compute') return '计算';
+  if (v === 'warm_storage') return '温存储';
+  if (v === 'hot_storage') return '热存储';
+  if (v === 'gpu') return 'GPU';
   return v || '-';
 }
 
