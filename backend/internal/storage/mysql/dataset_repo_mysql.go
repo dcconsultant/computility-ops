@@ -576,22 +576,44 @@ func (r *DatasetRepo) ReplaceStorageTopServerRates(ctx context.Context, rows []d
 	if _, err := tx.ExecContext(ctx, `DELETE FROM ops_storage_top_server_rates`); err != nil {
 		return err
 	}
-	stmt, err := tx.PrepareContext(ctx, `
+	withCapacityCols, err := hasStorageTopCapacityColumns(ctx, tx)
+	if err != nil {
+		return err
+	}
+	insertSQL := `
 		INSERT INTO ops_storage_top_server_rates (
 			sn, manufacturer, model, config_type, environment, idc,
-			data_disk_count, single_disk_capacity_tb, total_capacity_tb,
-			fault_count, denominator, fault_rate
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`)
+			data_disk_count, fault_count, denominator, fault_rate
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
+	if withCapacityCols {
+		insertSQL = `
+			INSERT INTO ops_storage_top_server_rates (
+				sn, manufacturer, model, config_type, environment, idc,
+				data_disk_count, single_disk_capacity_tb, total_capacity_tb,
+				fault_count, denominator, fault_rate
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`
+	}
+	stmt, err := tx.PrepareContext(ctx, insertSQL)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 	for _, x := range rows {
+		if withCapacityCols {
+			if _, err := stmt.ExecContext(ctx,
+				x.SN, x.Manufacturer, x.Model, x.ConfigType, x.Environment, x.IDC,
+				x.DataDiskCount, x.SingleDiskCapacityTB, x.TotalCapacityTB,
+				x.FaultCount, x.Denominator, x.FaultRate,
+			); err != nil {
+				return err
+			}
+			continue
+		}
 		if _, err := stmt.ExecContext(ctx,
 			x.SN, x.Manufacturer, x.Model, x.ConfigType, x.Environment, x.IDC,
-			x.DataDiskCount, x.SingleDiskCapacityTB, x.TotalCapacityTB,
-			x.FaultCount, x.Denominator, x.FaultRate,
+			x.DataDiskCount, x.FaultCount, x.Denominator, x.FaultRate,
 		); err != nil {
 			return err
 		}
@@ -600,13 +622,26 @@ func (r *DatasetRepo) ReplaceStorageTopServerRates(ctx context.Context, rows []d
 }
 
 func (r *DatasetRepo) ListStorageTopServerRates(ctx context.Context) ([]domain.StorageTopServerRate, error) {
-	rows, err := r.db.QueryContext(ctx, `
+	withCapacityCols, err := hasStorageTopCapacityColumns(ctx, r.db)
+	if err != nil {
+		return nil, err
+	}
+	querySQL := `
 		SELECT sn, manufacturer, model, config_type, environment, idc,
-			data_disk_count, single_disk_capacity_tb, total_capacity_tb,
-			fault_count, denominator, fault_rate
+			data_disk_count, fault_count, denominator, fault_rate
 		FROM ops_storage_top_server_rates
 		ORDER BY fault_rate DESC, fault_count DESC, sn ASC
-	`)
+	`
+	if withCapacityCols {
+		querySQL = `
+			SELECT sn, manufacturer, model, config_type, environment, idc,
+				data_disk_count, single_disk_capacity_tb, total_capacity_tb,
+				fault_count, denominator, fault_rate
+			FROM ops_storage_top_server_rates
+			ORDER BY fault_rate DESC, fault_count DESC, sn ASC
+		`
+	}
+	rows, err := r.db.QueryContext(ctx, querySQL)
 	if err != nil {
 		return nil, err
 	}
@@ -614,14 +649,44 @@ func (r *DatasetRepo) ListStorageTopServerRates(ctx context.Context) ([]domain.S
 	out := make([]domain.StorageTopServerRate, 0)
 	for rows.Next() {
 		var x domain.StorageTopServerRate
-		if err := rows.Scan(
-			&x.SN, &x.Manufacturer, &x.Model, &x.ConfigType, &x.Environment, &x.IDC,
-			&x.DataDiskCount, &x.SingleDiskCapacityTB, &x.TotalCapacityTB,
-			&x.FaultCount, &x.Denominator, &x.FaultRate,
-		); err != nil {
-			return nil, err
+		if withCapacityCols {
+			if err := rows.Scan(
+				&x.SN, &x.Manufacturer, &x.Model, &x.ConfigType, &x.Environment, &x.IDC,
+				&x.DataDiskCount, &x.SingleDiskCapacityTB, &x.TotalCapacityTB,
+				&x.FaultCount, &x.Denominator, &x.FaultRate,
+			); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := rows.Scan(
+				&x.SN, &x.Manufacturer, &x.Model, &x.ConfigType, &x.Environment, &x.IDC,
+				&x.DataDiskCount, &x.FaultCount, &x.Denominator, &x.FaultRate,
+			); err != nil {
+				return nil, err
+			}
+			x.SingleDiskCapacityTB = 0
+			x.TotalCapacityTB = 0
 		}
 		out = append(out, x)
 	}
 	return out, rows.Err()
+}
+
+type rowQueryer interface {
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+}
+
+func hasStorageTopCapacityColumns(ctx context.Context, q rowQueryer) (bool, error) {
+	var count int
+	err := q.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM information_schema.COLUMNS
+		WHERE TABLE_SCHEMA = DATABASE()
+		  AND TABLE_NAME = 'ops_storage_top_server_rates'
+		  AND COLUMN_NAME IN ('single_disk_capacity_tb', 'total_capacity_tb')
+	`).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count == 2, nil
 }
