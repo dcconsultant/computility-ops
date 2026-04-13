@@ -143,6 +143,7 @@ export interface StorageTopServerRate {
   config_type?: string;
   environment?: string;
   idc?: string;
+  warranty_end_date?: string;
   data_disk_count: number;
   single_disk_capacity_tb: number;
   total_capacity_tb: number;

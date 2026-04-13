@@ -1,8 +1,13 @@
 package handler
 
 import (
+	"bytes"
+	"encoding/csv"
 	"fmt"
+	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"computility-ops/backend/internal/diagnose"
 	"computility-ops/backend/internal/service"
@@ -246,6 +251,90 @@ func (h *ImportHandler) ListStorageTopServerRates(c *gin.Context) {
 		return
 	}
 	ok(c, gin.H{"list": rows, "total": len(rows), "page": 1, "page_size": len(rows)})
+}
+
+func (h *ImportHandler) ExportWarmStorageServers(c *gin.Context) {
+	c.Set("audit_action", "failure_rates.storage_top_servers.export")
+	format := strings.ToLower(strings.TrimSpace(c.DefaultQuery("format", "xlsx")))
+	if format != "xlsx" && format != "csv" {
+		fail(c, 40001, "format must be xlsx or csv")
+		return
+	}
+	rows, err := h.service.ListWarmStorageServerRates(c.Request.Context())
+	if err != nil {
+		fail(c, 50001, "导出失败")
+		return
+	}
+	filename := fmt.Sprintf("warm-storage-servers-%s.%s", time.Now().Format("20060102-150405"), format)
+	if format == "csv" {
+		buf := &bytes.Buffer{}
+		w := csv.NewWriter(buf)
+		header := []string{"SN", "厂商", "型号", "配置类型", "环境", "机房", "保修截止日期", "数据盘数", "单盘容量(TB)", "单台总容量(TB)", "最近1年故障次数", "分母(1+盘数)", "故障率"}
+		if err := w.Write(header); err != nil {
+			fail(c, 50001, "导出失败")
+			return
+		}
+		for _, r := range rows {
+			record := []string{
+				r.SN,
+				r.Manufacturer,
+				r.Model,
+				r.ConfigType,
+				r.Environment,
+				r.IDC,
+				r.WarrantyEndDate,
+				strconv.Itoa(r.DataDiskCount),
+				fmt.Sprintf("%.4f", r.SingleDiskCapacityTB),
+				fmt.Sprintf("%.4f", r.TotalCapacityTB),
+				strconv.Itoa(r.FaultCount),
+				fmt.Sprintf("%.4f", r.Denominator),
+				fmt.Sprintf("%.8f", r.FaultRate),
+			}
+			if err := w.Write(record); err != nil {
+				fail(c, 50001, "导出失败")
+				return
+			}
+		}
+		w.Flush()
+		if err := w.Error(); err != nil {
+			fail(c, 50001, "导出失败")
+			return
+		}
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+		c.Data(http.StatusOK, "text/csv; charset=utf-8", buf.Bytes())
+		return
+	}
+
+	xf := excelize.NewFile()
+	sheet := xf.GetSheetName(0)
+	header := []string{"SN", "厂商", "型号", "配置类型", "环境", "机房", "保修截止日期", "数据盘数", "单盘容量(TB)", "单台总容量(TB)", "最近1年故障次数", "分母(1+盘数)", "故障率"}
+	for i, h := range header {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		_ = xf.SetCellValue(sheet, cell, h)
+	}
+	for idx, r := range rows {
+		row := idx + 2
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("A%d", row), r.SN)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("B%d", row), r.Manufacturer)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("C%d", row), r.Model)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("D%d", row), r.ConfigType)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("E%d", row), r.Environment)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("F%d", row), r.IDC)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("G%d", row), r.WarrantyEndDate)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("H%d", row), r.DataDiskCount)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("I%d", row), r.SingleDiskCapacityTB)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("J%d", row), r.TotalCapacityTB)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("K%d", row), r.FaultCount)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("L%d", row), r.Denominator)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("M%d", row), r.FaultRate)
+	}
+	buf, err := xf.WriteToBuffer()
+	if err != nil {
+		fail(c, 50001, "导出失败")
+		return
+	}
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buf.Bytes())
 }
 
 func (h *ImportHandler) AnalyzeFaultRates(c *gin.Context) {

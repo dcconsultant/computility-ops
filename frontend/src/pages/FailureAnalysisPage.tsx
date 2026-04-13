@@ -12,6 +12,7 @@ import {
   listOverallFailureRates,
   listFailureFeatureFacts,
   listStorageTopServerRates,
+  exportWarmStorageServers,
   listPackageFailureRates,
   listPackageModelFailureRates
 } from '../api';
@@ -261,8 +262,13 @@ export default function FailureAnalysisPage() {
             key: 'storage-top100',
             label: '温存储故障TOP100',
             children: (
-              <Card title="最近1年温存储故障服务器TOP100">
-                <Text type="secondary">仅统计温存储服务器；公式：最近1年故障次数 / (1 + 数据盘数量)</Text>
+              <Card
+                title="最近1年温存储故障服务器TOP100"
+                extra={<Space>
+                  <Button onClick={() => exportWarmStorageServers('xlsx')}>下载温存储详细数据</Button>
+                </Space>}
+              >
+                <Text type="secondary">仅统计温存储服务器；公式：最近1年故障次数 / (1 + 数据盘数量)。下载文件含全部温存储清单与保修截止日期。</Text>
                 <Table rowKey="sn" dataSource={storageTopRates} pagination={{ pageSize: 20 }} columns={[
                   { title: 'SN', dataIndex: 'sn' },
                   { title: '厂商', dataIndex: 'manufacturer' },

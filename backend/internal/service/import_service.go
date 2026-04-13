@@ -482,6 +482,42 @@ func (s *ImportService) ListStorageTopServerRates(ctx context.Context) ([]domain
 	if err != nil {
 		return nil, err
 	}
+	rows, err = s.enrichStorageTopRatesWithWarranty(ctx, rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) > 100 {
+		rows = rows[:100]
+	}
+	return rows, nil
+}
+
+func (s *ImportService) ListWarmStorageServerRates(ctx context.Context) ([]domain.StorageTopServerRate, error) {
+	rows, err := s.datasetRepo.ListStorageTopServerRates(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return s.enrichStorageTopRatesWithWarranty(ctx, rows)
+}
+
+func (s *ImportService) enrichStorageTopRatesWithWarranty(ctx context.Context, rows []domain.StorageTopServerRate) ([]domain.StorageTopServerRate, error) {
+	if len(rows) == 0 {
+		return rows, nil
+	}
+	servers, err := s.serverRepo.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	warrantyBySN := make(map[string]string, len(servers))
+	for _, srv := range servers {
+		warrantyBySN[strings.TrimSpace(srv.SN)] = strings.TrimSpace(srv.WarrantyEndDate)
+	}
+	for i := range rows {
+		if strings.TrimSpace(rows[i].WarrantyEndDate) != "" {
+			continue
+		}
+		rows[i].WarrantyEndDate = warrantyBySN[strings.TrimSpace(rows[i].SN)]
+	}
 	return rows, nil
 }
 
@@ -738,9 +774,6 @@ func buildStorageTopServerRates(
 		}
 		return out[i].SN < out[j].SN
 	})
-	if len(out) > 100 {
-		out = out[:100]
-	}
 	return out
 }
 

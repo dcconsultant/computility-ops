@@ -117,6 +117,10 @@ export async function listStorageTopServerRates() {
   return data;
 }
 
+export function exportWarmStorageServers(format: 'xlsx' | 'csv' = 'xlsx') {
+  window.open(`/api/v1/failure-rates/storage-top-servers/export?format=${format}`, '_blank');
+}
+
 export interface CreatePlanPayload {
   target_date: string;
   excluded_environments: string[];

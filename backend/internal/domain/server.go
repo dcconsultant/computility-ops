@@ -112,6 +112,7 @@ type StorageTopServerRate struct {
 	ConfigType           string  `json:"config_type,omitempty"`
 	Environment          string  `json:"environment,omitempty"`
 	IDC                  string  `json:"idc,omitempty"`
+	WarrantyEndDate      string  `json:"warranty_end_date,omitempty"`
 	DataDiskCount        int     `json:"data_disk_count"`
 	SingleDiskCapacityTB float64 `json:"single_disk_capacity_tb"`
 	TotalCapacityTB      float64 `json:"total_capacity_tb"`
