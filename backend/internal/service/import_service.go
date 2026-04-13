@@ -690,8 +690,13 @@ func buildStorageTopServerRates(
 			continue
 		}
 		bucket := normalizeBucket(pkg.SceneCategory)
-		if bucket != "warm_storage" && bucket != "hot_storage" {
+		if bucket != "warm_storage" {
 			continue
+		}
+		totalCapacityTB := pkg.StorageCapacityTB
+		singleDiskCapacityTB := 0.0
+		if pkg.DataDiskCount > 0 {
+			singleDiskCapacityTB = totalCapacityTB / float64(pkg.DataDiskCount)
 		}
 		den := 1 + float64(pkg.DataDiskCount)
 		if den <= 0 {
@@ -710,16 +715,18 @@ func buildStorageTopServerRates(
 		}
 		rate := float64(faultCount) / den
 		out = append(out, domain.StorageTopServerRate{
-			SN:            srv.SN,
-			Manufacturer:  srv.Manufacturer,
-			Model:         srv.Model,
-			ConfigType:    srv.ConfigType,
-			Environment:   srv.Environment,
-			IDC:           srv.IDC,
-			DataDiskCount: pkg.DataDiskCount,
-			FaultCount:    faultCount,
-			Denominator:   den,
-			FaultRate:     rate,
+			SN:                   srv.SN,
+			Manufacturer:         srv.Manufacturer,
+			Model:                srv.Model,
+			ConfigType:           srv.ConfigType,
+			Environment:          srv.Environment,
+			IDC:                  srv.IDC,
+			DataDiskCount:        pkg.DataDiskCount,
+			SingleDiskCapacityTB: singleDiskCapacityTB,
+			TotalCapacityTB:      totalCapacityTB,
+			FaultCount:           faultCount,
+			Denominator:          den,
+			FaultRate:            rate,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {

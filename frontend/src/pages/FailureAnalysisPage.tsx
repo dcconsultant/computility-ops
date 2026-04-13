@@ -259,17 +259,19 @@ export default function FailureAnalysisPage() {
           },
           {
             key: 'storage-top100',
-            label: '存储高故障率TOP100',
+            label: '温存储故障TOP100',
             children: (
-              <Card title="最近1年存储高故障率服务器TOP100">
-                <Text type="secondary">公式：最近1年故障次数 / (1 + 数据盘数量)</Text>
+              <Card title="最近1年温存储故障服务器TOP100">
+                <Text type="secondary">仅统计温存储服务器；公式：最近1年故障次数 / (1 + 数据盘数量)</Text>
                 <Table rowKey="sn" dataSource={storageTopRates} pagination={{ pageSize: 20 }} columns={[
                   { title: 'SN', dataIndex: 'sn' },
                   { title: '厂商', dataIndex: 'manufacturer' },
                   { title: '型号', dataIndex: 'model' },
                   { title: '配置类型', dataIndex: 'config_type' },
                   { title: '环境', dataIndex: 'environment' },
-                  { title: '数据盘数量', dataIndex: 'data_disk_count', render: (v: number) => formatInt(v) },
+                  { title: '数据盘数', dataIndex: 'data_disk_count', render: (v: number) => formatInt(v) },
+                  { title: '单盘容量(TB)', dataIndex: 'single_disk_capacity_tb', render: (v: number) => formatFloat(v) },
+                  { title: '单台总容量(TB)', dataIndex: 'total_capacity_tb', render: (v: number) => formatFloat(v) },
                   { title: '最近1年故障次数', dataIndex: 'fault_count', render: (v: number) => formatInt(v) },
                   { title: '分母(1+盘数)', dataIndex: 'denominator', render: (v: number) => formatFloat(v) },
                   { title: '故障率', dataIndex: 'fault_rate', render: (v: number) => formatPercent(v) }

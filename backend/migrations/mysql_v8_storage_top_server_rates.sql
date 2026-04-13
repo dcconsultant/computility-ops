@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS ops_storage_top_server_rates (
   environment     VARCHAR(64)   NULL,
   idc             VARCHAR(128)  NULL,
   data_disk_count INT           NOT NULL DEFAULT 0,
+  single_disk_capacity_tb DECIMAL(18,4) NOT NULL DEFAULT 0,
+  total_capacity_tb DECIMAL(18,4) NOT NULL DEFAULT 0,
   fault_count     INT           NOT NULL DEFAULT 0,
   denominator     DECIMAL(18,4) NOT NULL DEFAULT 0,
   fault_rate      DECIMAL(18,8) NOT NULL DEFAULT 0,

@@ -144,6 +144,8 @@ export interface StorageTopServerRate {
   environment?: string;
   idc?: string;
   data_disk_count: number;
+  single_disk_capacity_tb: number;
+  total_capacity_tb: number;
   fault_count: number;
   denominator: number;
   fault_rate: number;
