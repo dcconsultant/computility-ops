@@ -336,21 +336,24 @@ export default function PlanPage() {
           </Space>
         )}
       >
-        <Table
-          rowKey="sn"
-          loading={specialLoading}
-          dataSource={specialRules}
-          pagination={{ pageSize: 10 }}
-          columns={[
-            { title: 'SN', dataIndex: 'sn', width: 160 },
-            { title: '制造商', dataIndex: 'manufacturer', width: 120 },
-            { title: '型号', dataIndex: 'model', width: 140 },
-            { title: 'PSA', dataIndex: 'psa', width: 100 },
-            { title: '套餐', dataIndex: 'package_type', width: 140 },
-            { title: '策略', dataIndex: 'policy', width: 100 }
-          ]}
-          scroll={{ x: 900 }}
-        />
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Text type="secondary">导入模板仅需两列：SN、策略（加白/加黑）。其余字段会自动从服务器管理表按 SN 补全。</Text>
+          <Table
+            rowKey="sn"
+            loading={specialLoading}
+            dataSource={specialRules}
+            pagination={{ pageSize: 10 }}
+            columns={[
+              { title: 'SN', dataIndex: 'sn', width: 160 },
+              { title: '制造商', dataIndex: 'manufacturer', width: 120 },
+              { title: '型号', dataIndex: 'model', width: 140 },
+              { title: 'PSA', dataIndex: 'psa', width: 100 },
+              { title: '套餐', dataIndex: 'package_type', width: 140 },
+              { title: '策略', dataIndex: 'policy', width: 100 }
+            ]}
+            scroll={{ x: 900 }}
+          />
+        </Space>
       </Card>
     </Space>
   );

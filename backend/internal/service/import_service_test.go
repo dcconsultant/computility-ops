@@ -1,6 +1,12 @@
 package service
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	"computility-ops/backend/internal/domain"
+	"computility-ops/backend/internal/storage/memory"
+)
 
 func TestNormalizeHeaderName(t *testing.T) {
 	got := NormalizeHeaderName("  CPU_Logical-Cores ")
@@ -46,5 +52,70 @@ func TestNormalizeSpecialPolicy(t *testing.T) {
 		if got != want {
 			t.Fatalf("normalizeSpecialPolicy(%q)=%q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestValidateAndReplaceSpecialRules_OnlySNAndPolicy_EnrichFromServers(t *testing.T) {
+	ctx := context.Background()
+	serverRepo := memory.NewServerRepo()
+	datasetRepo := memory.NewDatasetRepo()
+	svc := NewImportService(serverRepo, datasetRepo)
+
+	if err := serverRepo.ReplaceAll(ctx, []domain.Server{{
+		SN:              "SN001",
+		Manufacturer:    "Dell",
+		Model:           "R760",
+		PSA:             "10",
+		IDC:             "SG1",
+		ConfigType:      "compute-a",
+		WarrantyEndDate: "2027-12-31",
+		LaunchDate:      "2023-01-01",
+	}}); err != nil {
+		t.Fatalf("seed servers failed: %v", err)
+	}
+
+	res, err := svc.ValidateAndReplaceSpecialRules(ctx, []map[string]string{{
+		"sn":     "SN001",
+		"policy": "加白",
+	}})
+	if err != nil {
+		t.Fatalf("ValidateAndReplaceSpecialRules error: %v", err)
+	}
+	if res.Success != 1 || res.Failed != 0 {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+
+	rules, err := datasetRepo.ListSpecialRules(ctx)
+	if err != nil {
+		t.Fatalf("ListSpecialRules error: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("rules len=%d, want 1", len(rules))
+	}
+	r := rules[0]
+	if r.SN != "SN001" || r.Policy != "whitelist" {
+		t.Fatalf("rule basic fields = %+v", r)
+	}
+	if r.Manufacturer != "Dell" || r.Model != "R760" || r.PSA != "10" || r.IDC != "SG1" || r.PackageType != "compute-a" || r.WarrantyEndDate != "2027-12-31" || r.LaunchDate != "2023-01-01" {
+		t.Fatalf("rule not enriched from server table: %+v", r)
+	}
+}
+
+func TestValidateAndReplaceSpecialRules_SNNotFound(t *testing.T) {
+	ctx := context.Background()
+	svc := NewImportService(memory.NewServerRepo(), memory.NewDatasetRepo())
+
+	res, err := svc.ValidateAndReplaceSpecialRules(ctx, []map[string]string{{
+		"sn":     "MISSING",
+		"policy": "blacklist",
+	}})
+	if err != nil {
+		t.Fatalf("ValidateAndReplaceSpecialRules error: %v", err)
+	}
+	if res.Success != 0 || res.Failed != 1 || len(res.Errors) != 1 {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+	if res.Errors[0].Reason != "SN 不存在于服务器管理表" {
+		t.Fatalf("unexpected error reason: %s", res.Errors[0].Reason)
 	}
 }
