@@ -40,9 +40,9 @@ func TestValidateRequiredHeaders(t *testing.T) {
 
 func TestNormalizeSpecialPolicy(t *testing.T) {
 	cases := map[string]string{
-		"白名单":      "whitelist",
+		"白名单":       "whitelist",
 		"renew":     "whitelist",
-		"黑名单":      "blacklist",
+		"黑名单":       "blacklist",
 		"norenew":   "blacklist",
 		"something": "",
 	}
@@ -77,6 +77,7 @@ func TestValidateAndReplaceSpecialRules_OnlySNAndPolicy_EnrichFromServers(t *tes
 	res, err := svc.ValidateAndReplaceSpecialRules(ctx, []map[string]string{{
 		"sn":     "SN001",
 		"policy": "加白",
+		"reason": "业务连续性保障",
 	}})
 	if err != nil {
 		t.Fatalf("ValidateAndReplaceSpecialRules error: %v", err)
@@ -93,7 +94,7 @@ func TestValidateAndReplaceSpecialRules_OnlySNAndPolicy_EnrichFromServers(t *tes
 		t.Fatalf("rules len=%d, want 1", len(rules))
 	}
 	r := rules[0]
-	if r.SN != "SN001" || r.Policy != "whitelist" {
+	if r.SN != "SN001" || r.Policy != "whitelist" || r.Reason != "业务连续性保障" {
 		t.Fatalf("rule basic fields = %+v", r)
 	}
 	if r.Manufacturer != "Dell" || r.Model != "R760" || r.PSA != "10" || r.IDC != "SG1" || r.PackageType != "compute-a" || r.WarrantyEndDate != "2027-12-31" || r.LaunchDate != "2023-01-01" {

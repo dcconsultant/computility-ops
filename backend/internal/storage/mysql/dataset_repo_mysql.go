@@ -100,16 +100,46 @@ func (r *DatasetRepo) ReplaceSpecialRules(ctx context.Context, rows []domain.Spe
 	if _, err := tx.ExecContext(ctx, `DELETE FROM ops_special_rules`); err != nil {
 		return err
 	}
-	stmt, err := tx.PrepareContext(ctx, `
+	withReasonCol, err := hasSpecialRuleReasonColumn(ctx, tx)
+	if err != nil {
+		return err
+	}
+	insertSQL := `
 		INSERT INTO ops_special_rules (
 			sn, manufacturer, model, psa, psa_hash, idc, package_type, warranty_end_date, launch_date, policy
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`)
+	`
+	if withReasonCol {
+		insertSQL = `
+			INSERT INTO ops_special_rules (
+				sn, manufacturer, model, psa, psa_hash, idc, package_type, warranty_end_date, launch_date, policy, reason
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`
+	}
+	stmt, err := tx.PrepareContext(ctx, insertSQL)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 	for _, x := range rows {
+		if withReasonCol {
+			if _, err := stmt.ExecContext(ctx,
+				x.SN,
+				nullIfEmpty(x.Manufacturer),
+				nullIfEmpty(x.Model),
+				nullIfEmpty(x.PSA),
+				nullPSAHash(x.PSA),
+				nullIfEmpty(x.IDC),
+				nullIfEmpty(x.PackageType),
+				nullIfEmpty(x.WarrantyEndDate),
+				nullIfEmpty(x.LaunchDate),
+				x.Policy,
+				nullIfEmpty(x.Reason),
+			); err != nil {
+				return fmt.Errorf("insert special rule %s failed: %w", x.SN, err)
+			}
+			continue
+		}
 		if _, err := stmt.ExecContext(ctx,
 			x.SN,
 			nullIfEmpty(x.Manufacturer),
@@ -129,13 +159,27 @@ func (r *DatasetRepo) ReplaceSpecialRules(ctx context.Context, rows []domain.Spe
 }
 
 func (r *DatasetRepo) ListSpecialRules(ctx context.Context) ([]domain.SpecialRule, error) {
-	rows, err := r.db.QueryContext(ctx, `
+	withReasonCol, err := hasSpecialRuleReasonColumn(ctx, r.db)
+	if err != nil {
+		return nil, err
+	}
+	querySQL := `
 		SELECT sn, COALESCE(manufacturer,''), COALESCE(model,''), COALESCE(psa,''),
 			COALESCE(idc,''), COALESCE(package_type,''), COALESCE(warranty_end_date,''),
 			COALESCE(launch_date,''), policy
 		FROM ops_special_rules
 		ORDER BY created_at DESC
-	`)
+	`
+	if withReasonCol {
+		querySQL = `
+			SELECT sn, COALESCE(manufacturer,''), COALESCE(model,''), COALESCE(psa,''),
+				COALESCE(idc,''), COALESCE(package_type,''), COALESCE(warranty_end_date,''),
+				COALESCE(launch_date,''), policy, COALESCE(reason,'')
+			FROM ops_special_rules
+			ORDER BY created_at DESC
+		`
+	}
+	rows, err := r.db.QueryContext(ctx, querySQL)
 	if err != nil {
 		return nil, err
 	}
@@ -143,18 +187,36 @@ func (r *DatasetRepo) ListSpecialRules(ctx context.Context) ([]domain.SpecialRul
 	out := make([]domain.SpecialRule, 0)
 	for rows.Next() {
 		var x domain.SpecialRule
-		if err := rows.Scan(
-			&x.SN,
-			&x.Manufacturer,
-			&x.Model,
-			&x.PSA,
-			&x.IDC,
-			&x.PackageType,
-			&x.WarrantyEndDate,
-			&x.LaunchDate,
-			&x.Policy,
-		); err != nil {
-			return nil, err
+		if withReasonCol {
+			if err := rows.Scan(
+				&x.SN,
+				&x.Manufacturer,
+				&x.Model,
+				&x.PSA,
+				&x.IDC,
+				&x.PackageType,
+				&x.WarrantyEndDate,
+				&x.LaunchDate,
+				&x.Policy,
+				&x.Reason,
+			); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := rows.Scan(
+				&x.SN,
+				&x.Manufacturer,
+				&x.Model,
+				&x.PSA,
+				&x.IDC,
+				&x.PackageType,
+				&x.WarrantyEndDate,
+				&x.LaunchDate,
+				&x.Policy,
+			); err != nil {
+				return nil, err
+			}
+			x.Reason = ""
 		}
 		out = append(out, x)
 	}
@@ -689,4 +751,19 @@ func hasStorageTopCapacityColumns(ctx context.Context, q rowQueryer) (bool, erro
 		return false, err
 	}
 	return count == 2, nil
+}
+
+func hasSpecialRuleReasonColumn(ctx context.Context, q rowQueryer) (bool, error) {
+	var count int
+	err := q.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM information_schema.COLUMNS
+		WHERE TABLE_SCHEMA = DATABASE()
+		  AND TABLE_NAME = 'ops_special_rules'
+		  AND COLUMN_NAME = 'reason'
+	`).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count == 1, nil
 }

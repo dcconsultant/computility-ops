@@ -250,6 +250,9 @@ var specialHeaderMap = map[string]string{
 	"策略":           "policy",
 	"标签":           "policy",
 	"黑白":           "policy",
+	"原因":           "reason",
+	"备注":           "reason",
+	"reason":       "reason",
 }
 
 func (s *ImportService) ValidateAndReplaceSpecialRules(ctx context.Context, rows []map[string]string) (ImportResult, error) {
@@ -313,7 +316,7 @@ func validateSpecialRuleRow(raw map[string]string) (domain.SpecialRule, error) {
 	if policy == "" {
 		return domain.SpecialRule{}, fmt.Errorf("策略必须是加白/加黑(whitelist/blacklist)")
 	}
-	return domain.SpecialRule{SN: sn, Policy: policy}, nil
+	return domain.SpecialRule{SN: sn, Policy: policy, Reason: get("reason")}, nil
 }
 
 func normalizeSpecialPolicy(v string) string {
@@ -577,8 +580,8 @@ type FaultAnalysisResult struct {
 	OverallRates               []domain.FailureRateSummary   `json:"overall_rates,omitempty"`
 	OverviewCards              []domain.FailureOverviewCard  `json:"overview_cards,omitempty"`
 	AgeTrendPoints             []domain.FailureAgeTrendPoint `json:"age_trend_points,omitempty"`
-	FailureFeatureFacts        []domain.FailureFeatureFact    `json:"failure_feature_facts,omitempty"`
-	StorageTopServerRates      []domain.StorageTopServerRate  `json:"storage_top_server_rates,omitempty"`
+	FailureFeatureFacts        []domain.FailureFeatureFact   `json:"failure_feature_facts,omitempty"`
+	StorageTopServerRates      []domain.StorageTopServerRate `json:"storage_top_server_rates,omitempty"`
 }
 
 type faultEvent struct {
@@ -1127,7 +1130,7 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		overallBaseDen[k] += weight
 		overallBaseDen["all|"+segment] += weight
 
-	warrantyEndAt, hasWarrantyEnd := parseFlexibleDate(srv.WarrantyEndDate)
+		warrantyEndAt, hasWarrantyEnd := parseFlexibleDate(srv.WarrantyEndDate)
 		isOverWarranty := hasWarrantyEnd && warrantyEndAt.Before(now)
 		if excludeOverWarranty && isOverWarranty {
 			continue

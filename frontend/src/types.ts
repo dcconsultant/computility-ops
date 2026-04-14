@@ -57,6 +57,7 @@ export interface SpecialRule {
   warranty_end_date?: string;
   launch_date?: string;
   policy: 'whitelist' | 'blacklist';
+  reason?: string;
 }
 
 export interface ModelFailureRate {
@@ -171,6 +172,7 @@ export interface PlanItem {
   model?: string;
   environment?: string;
   config_type: string;
+  scene_category?: string;
   cpu_logical_cores: number;
   gpu_card_count?: number;
   storage_capacity_tb?: number;

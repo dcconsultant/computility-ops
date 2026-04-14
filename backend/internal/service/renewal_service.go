@@ -113,12 +113,16 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		pkgAFRAvg[strings.TrimSpace(p.ConfigType)] = p.FailureRate
 	}
 
-	specialMap := map[string]string{}
+	type specialPolicyRule struct {
+		Policy string
+		Reason string
+	}
+	specialMap := map[string]specialPolicyRule{}
 	for _, sp := range specialRules {
 		if sp.SN == "" {
 			continue
 		}
-		specialMap[sp.SN] = sp.Policy
+		specialMap[sp.SN] = specialPolicyRule{Policy: sp.Policy, Reason: strings.TrimSpace(sp.Reason)}
 	}
 
 	bucketItems := map[string][]domain.RenewalItem{
@@ -219,6 +223,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			Model:                  srv.Model,
 			Environment:            srv.Environment,
 			ConfigType:             srv.ConfigType,
+			SceneCategory:          pkg.SceneCategory,
 			CPULogicalCores:        cores,
 			GPUCardCount:           gpuCards,
 			StorageCapacityTB:      pkg.StorageCapacityTB,
@@ -237,8 +242,13 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			}
 		}
 
-		specialPolicy := specialMap[srv.SN]
+		specialRule, hasSpecialRule := specialMap[srv.SN]
+		specialPolicy := specialRule.Policy
 		if specialPolicy == "blacklist" {
+			reasonDetail := "命中特殊名单黑名单策略"
+			if specialRule.Reason != "" {
+				reasonDetail = specialRule.Reason
+			}
 			nonRenewalItems = append(nonRenewalItems, domain.NonRenewalItem{
 				SN:           item.SN,
 				Bucket:       item.Bucket,
@@ -250,11 +260,11 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 				FinalScore:   item.FinalScore,
 				ReasonCode:   "blacklist",
 				Reason:       "黑名单",
-				ReasonDetail: "命中特殊名单黑名单策略",
+				ReasonDetail: reasonDetail,
 			})
 			continue
 		}
-		if specialPolicy == "whitelist" {
+		if hasSpecialRule && specialPolicy == "whitelist" {
 			item.SpecialPolicy = "whitelist"
 		}
 

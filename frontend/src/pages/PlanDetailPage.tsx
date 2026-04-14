@@ -102,12 +102,13 @@ export default function PlanDetailPage() {
                 { title: 'SN', dataIndex: 'sn', width: 160 },
                 { title: '服务器型号', dataIndex: 'model', width: 160 },
                 { title: '配置类型', dataIndex: 'config_type', width: 140 },
+                { title: '场景大类', dataIndex: 'scene_category', width: 120 },
                 { title: 'CPU核数', dataIndex: 'cpu_logical_cores', width: 100, render: (v: number) => formatInt(v) },
                 { title: 'GPU卡数', dataIndex: 'gpu_card_count', width: 100, render: (v: number) => formatInt(v) },
                 { title: '存储(TB)', dataIndex: 'storage_capacity_tb', width: 100, render: (v: number) => toTB(v) },
                 { title: '最终分', dataIndex: 'final_score', width: 110, render: (v: number) => formatFloat(v) }
               ]}
-              scroll={{ x: 1200 }}
+              scroll={{ x: 1320 }}
             />
           </Card>
 

@@ -34,6 +34,7 @@ type SpecialRule struct {
 	WarrantyEndDate string `json:"warranty_end_date,omitempty"`
 	LaunchDate      string `json:"launch_date,omitempty"`
 	Policy          string `json:"policy"` // whitelist | blacklist
+	Reason          string `json:"reason,omitempty"`
 }
 
 type ModelFailureRate struct {

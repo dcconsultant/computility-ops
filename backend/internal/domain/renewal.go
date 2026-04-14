@@ -53,6 +53,7 @@ type RenewalItem struct {
 	Model                  string  `json:"model"`
 	Environment            string  `json:"environment,omitempty"`
 	ConfigType             string  `json:"config_type"`
+	SceneCategory          string  `json:"scene_category,omitempty"`
 	CPULogicalCores        int     `json:"cpu_logical_cores"`
 	GPUCardCount           int     `json:"gpu_card_count,omitempty"`
 	StorageCapacityTB      float64 `json:"storage_capacity_tb,omitempty"`

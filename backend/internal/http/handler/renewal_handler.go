@@ -143,7 +143,7 @@ func buildCSV(plan domain.RenewalPlan) (*bytes.Buffer, error) {
 	if err := w.Write([]string{}); err != nil {
 		return nil, err
 	}
-	if err := w.Write([]string{"rank", "bucket", "sn", "manufacturer", "model", "environment", "config_type", "cpu_logical_cores", "gpu_card_count", "storage_capacity_tb", "psa", "arch_standardized_factor", "base_score", "afr_old", "afr_avg", "failure_adjust_factor", "final_score", "special_policy"}); err != nil {
+	if err := w.Write([]string{"rank", "bucket", "sn", "manufacturer", "model", "environment", "config_type", "scene_category", "cpu_logical_cores", "gpu_card_count", "storage_capacity_tb", "psa", "arch_standardized_factor", "base_score", "afr_old", "afr_avg", "failure_adjust_factor", "final_score", "special_policy"}); err != nil {
 		return nil, err
 	}
 	for _, item := range plan.Items {
@@ -155,6 +155,7 @@ func buildCSV(plan domain.RenewalPlan) (*bytes.Buffer, error) {
 			item.Model,
 			item.Environment,
 			item.ConfigType,
+			item.SceneCategory,
 			fmt.Sprint(item.CPULogicalCores),
 			fmt.Sprint(item.GPUCardCount),
 			fmt.Sprintf("%.4f", item.StorageCapacityTB),
@@ -187,12 +188,12 @@ func buildXLSX(plan domain.RenewalPlan) (*bytes.Buffer, error) {
 	if err := f.SetSheetRow(sheet, "A2", &[]any{plan.PlanID, plan.TargetDate, plan.TargetCores, plan.WarmTargetStorageTB, plan.HotTargetStorageTB, plan.UnmatchedConfigCount, strings.Join(plan.UnmatchedConfigTypes, "|"), plan.SelectedCores, plan.SelectedStorageTB, plan.SelectedCount}); err != nil {
 		return nil, err
 	}
-	if err := f.SetSheetRow(sheet, "A4", &[]string{"rank", "bucket", "sn", "manufacturer", "model", "environment", "config_type", "cpu_logical_cores", "gpu_card_count", "storage_capacity_tb", "psa", "arch_standardized_factor", "base_score", "afr_old", "afr_avg", "failure_adjust_factor", "final_score", "special_policy"}); err != nil {
+	if err := f.SetSheetRow(sheet, "A4", &[]string{"rank", "bucket", "sn", "manufacturer", "model", "environment", "config_type", "scene_category", "cpu_logical_cores", "gpu_card_count", "storage_capacity_tb", "psa", "arch_standardized_factor", "base_score", "afr_old", "afr_avg", "failure_adjust_factor", "final_score", "special_policy"}); err != nil {
 		return nil, err
 	}
 	for i, item := range plan.Items {
 		cell, _ := excelize.CoordinatesToCellName(1, i+5)
-		if err := f.SetSheetRow(sheet, cell, &[]any{item.Rank, item.Bucket, item.SN, item.Manufacturer, item.Model, item.Environment, item.ConfigType, item.CPULogicalCores, item.GPUCardCount, item.StorageCapacityTB, item.PSA, item.ArchStandardizedFactor, item.BaseScore, item.AFROld, item.AFRAvg, item.FailureAdjustFactor, item.FinalScore, item.SpecialPolicy}); err != nil {
+		if err := f.SetSheetRow(sheet, cell, &[]any{item.Rank, item.Bucket, item.SN, item.Manufacturer, item.Model, item.Environment, item.ConfigType, item.SceneCategory, item.CPULogicalCores, item.GPUCardCount, item.StorageCapacityTB, item.PSA, item.ArchStandardizedFactor, item.BaseScore, item.AFROld, item.AFRAvg, item.FailureAdjustFactor, item.FinalScore, item.SpecialPolicy}); err != nil {
 			return nil, err
 		}
 	}

@@ -76,6 +76,7 @@ export default function ResultPage() {
     { title: '型号', dataIndex: 'model' },
     { title: '环境', dataIndex: 'environment' },
     { title: '配置类型', dataIndex: 'config_type' },
+    { title: '场景大类', dataIndex: 'scene_category' },
     { title: 'CPU逻辑核数', dataIndex: 'cpu_logical_cores' },
     { title: '存储容量(TB)', dataIndex: 'storage_capacity_tb' },
     { title: '基础分', dataIndex: 'base_score' },

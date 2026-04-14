@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS ops_special_rules (
   warranty_end_date   VARCHAR(32)   NULL,
   launch_date         VARCHAR(32)   NULL,
   policy              VARCHAR(32)   NOT NULL,
+  reason              VARCHAR(255)  NULL,
   created_at          TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_sn (sn),
