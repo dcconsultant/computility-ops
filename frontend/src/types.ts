@@ -153,6 +153,8 @@ export interface StorageTopServerRate {
   fault_rate: number;
 }
 
+export type StorageBucket = 'warm_storage' | 'hot_storage';
+
 export interface FaultAnalysisResult {
   total_fault_rows: number;
   matched_fault_rows: number;

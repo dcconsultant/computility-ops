@@ -12,7 +12,7 @@ import {
   listOverallFailureRates,
   listFailureFeatureFacts,
   listStorageTopServerRates,
-  exportWarmStorageServers,
+  exportStorageTopServers,
   listPackageFailureRates,
   listPackageModelFailureRates
 } from '../api';
@@ -38,27 +38,30 @@ export default function FailureAnalysisPage() {
 
   const [overallRates, setOverallRates] = useState<FaultAnalysisResult['overall_rates']>([]);
   const [featureFacts, setFeatureFacts] = useState<FailureFeatureFact[]>([]);
-  const [storageTopRates, setStorageTopRates] = useState<StorageTopServerRate[]>([]);
+  const [warmStorageTopRates, setWarmStorageTopRates] = useState<StorageTopServerRate[]>([]);
+  const [hotStorageTopRates, setHotStorageTopRates] = useState<StorageTopServerRate[]>([]);
   const [fm, setFm] = useState<ModelFailureRate[]>([]);
   const [fp, setFp] = useState<PackageFailureRate[]>([]);
   const [fpm, setFpm] = useState<PackageModelFailureRate[]>([]);
 
   async function reloadAll() {
     try {
-      const [s0, s1, s2, s3, s4, s5] = await Promise.all([
+      const [s0, s1, s2, s3, s4, s5, s6] = await Promise.all([
         listOverallFailureRates(),
         listModelFailureRates(),
         listPackageFailureRates(),
         listPackageModelFailureRates(),
         listFailureFeatureFacts(),
-        listStorageTopServerRates()
+        listStorageTopServerRates('warm_storage'),
+        listStorageTopServerRates('hot_storage')
       ]);
       setOverallRates(ensureApiOk(s0).data.list || []);
       setFm(ensureApiOk(s1).data.list);
       setFp(ensureApiOk(s2).data.list);
       setFpm(ensureApiOk(s3).data.list);
       setFeatureFacts(ensureApiOk(s4).data.list || []);
-      setStorageTopRates(ensureApiOk(s5).data.list || []);
+      setWarmStorageTopRates(ensureApiOk(s5).data.list || []);
+      setHotStorageTopRates(ensureApiOk(s6).data.list || []);
     } catch (e) {
       message.error(parseApiError(e, '加载失败'));
     }
@@ -113,7 +116,6 @@ export default function FailureAnalysisPage() {
             setAnalysisResult(resp.data);
             setOverallRates(resp.data.overall_rates || []);
             setFeatureFacts(resp.data.failure_feature_facts || []);
-            setStorageTopRates(resp.data.storage_top_server_rates || []);
             await reloadAll();
             message.success(`故障分析完成：命中故障 ${resp.data.matched_fault_rows}/${resp.data.total_fault_rows} 条`);
           } else {
@@ -131,6 +133,20 @@ export default function FailureAnalysisPage() {
       }
     };
   }
+
+  const storageTopColumns = [
+    { title: 'SN', dataIndex: 'sn' },
+    { title: '厂商', dataIndex: 'manufacturer' },
+    { title: '型号', dataIndex: 'model' },
+    { title: '配置类型', dataIndex: 'config_type' },
+    { title: '环境', dataIndex: 'environment' },
+    { title: '数据盘数', dataIndex: 'data_disk_count', render: (v: number) => formatInt(v) },
+    { title: '单盘容量(TB)', dataIndex: 'single_disk_capacity_tb', render: (v: number) => formatFloat(v) },
+    { title: '单台总容量(TB)', dataIndex: 'total_capacity_tb', render: (v: number) => formatFloat(v) },
+    { title: '最近1年故障次数', dataIndex: 'fault_count', render: (v: number) => formatInt(v) },
+    { title: '分母(1+盘数)', dataIndex: 'denominator', render: (v: number) => formatFloat(v) },
+    { title: '故障率', dataIndex: 'fault_rate', render: (v: number) => formatPercent(v) }
+  ];
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -259,29 +275,32 @@ export default function FailureAnalysisPage() {
             )
           },
           {
-            key: 'storage-top100',
+            key: 'warm-storage-top100',
             label: '温存储故障TOP100',
             children: (
               <Card
                 title="最近1年温存储故障服务器TOP100"
                 extra={<Space>
-                  <Button onClick={() => exportWarmStorageServers('xlsx')}>下载温存储详细数据</Button>
+                  <Button onClick={() => exportStorageTopServers('warm_storage', 'xlsx')}>下载温存储详细数据</Button>
                 </Space>}
               >
                 <Text type="secondary">仅统计温存储服务器；公式：最近1年故障次数 / (1 + 数据盘数量)。下载文件含全部温存储清单与保修截止日期。</Text>
-                <Table rowKey="sn" dataSource={storageTopRates} pagination={{ pageSize: 20 }} columns={[
-                  { title: 'SN', dataIndex: 'sn' },
-                  { title: '厂商', dataIndex: 'manufacturer' },
-                  { title: '型号', dataIndex: 'model' },
-                  { title: '配置类型', dataIndex: 'config_type' },
-                  { title: '环境', dataIndex: 'environment' },
-                  { title: '数据盘数', dataIndex: 'data_disk_count', render: (v: number) => formatInt(v) },
-                  { title: '单盘容量(TB)', dataIndex: 'single_disk_capacity_tb', render: (v: number) => formatFloat(v) },
-                  { title: '单台总容量(TB)', dataIndex: 'total_capacity_tb', render: (v: number) => formatFloat(v) },
-                  { title: '最近1年故障次数', dataIndex: 'fault_count', render: (v: number) => formatInt(v) },
-                  { title: '分母(1+盘数)', dataIndex: 'denominator', render: (v: number) => formatFloat(v) },
-                  { title: '故障率', dataIndex: 'fault_rate', render: (v: number) => formatPercent(v) }
-                ]} />
+                <Table rowKey="sn" dataSource={warmStorageTopRates} pagination={{ pageSize: 20 }} columns={storageTopColumns} />
+              </Card>
+            )
+          },
+          {
+            key: 'hot-storage-top100',
+            label: '热存储故障TOP100',
+            children: (
+              <Card
+                title="最近1年热存储故障服务器TOP100"
+                extra={<Space>
+                  <Button onClick={() => exportStorageTopServers('hot_storage', 'xlsx')}>下载热存储详细数据</Button>
+                </Space>}
+              >
+                <Text type="secondary">仅统计热存储服务器；公式：最近1年故障次数 / (1 + 数据盘数量)。下载文件含全部热存储清单与保修截止日期。</Text>
+                <Table rowKey="sn" dataSource={hotStorageTopRates} pagination={{ pageSize: 20 }} columns={storageTopColumns} />
               </Card>
             )
           }

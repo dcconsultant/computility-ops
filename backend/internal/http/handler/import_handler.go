@@ -245,7 +245,8 @@ func (h *ImportHandler) ListFailureFeatureFacts(c *gin.Context) {
 
 func (h *ImportHandler) ListStorageTopServerRates(c *gin.Context) {
 	c.Set("audit_action", "failure_rates.storage_top_servers.list")
-	rows, err := h.service.ListStorageTopServerRates(c.Request.Context())
+	bucket := parseStorageTopBucket(c.Query("bucket"))
+	rows, err := h.service.ListStorageTopServerRatesByBucket(c.Request.Context(), bucket)
 	if err != nil {
 		fail(c, 50001, "查询失败")
 		return
@@ -260,12 +261,17 @@ func (h *ImportHandler) ExportWarmStorageServers(c *gin.Context) {
 		fail(c, 40001, "format must be xlsx or csv")
 		return
 	}
-	rows, err := h.service.ListWarmStorageServerRates(c.Request.Context())
+	bucket := parseStorageTopBucket(c.Query("bucket"))
+	rows, err := h.service.ListStorageServerRatesByBucketForExport(c.Request.Context(), bucket)
 	if err != nil {
 		fail(c, 50001, "导出失败")
 		return
 	}
-	filename := fmt.Sprintf("warm-storage-servers-%s.%s", time.Now().Format("20060102-150405"), format)
+	filenamePrefix := "warm-storage-servers"
+	if bucket == "hot_storage" {
+		filenamePrefix = "hot-storage-servers"
+	}
+	filename := fmt.Sprintf("%s-%s.%s", filenamePrefix, time.Now().Format("20060102-150405"), format)
 	if format == "csv" {
 		buf := &bytes.Buffer{}
 		w := csv.NewWriter(buf)
@@ -398,6 +404,15 @@ func parseBoolLoose(v string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func parseStorageTopBucket(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "hot_storage", "hotstorage", "hot":
+		return "hot_storage"
+	default:
+		return "warm_storage"
 	}
 }
 

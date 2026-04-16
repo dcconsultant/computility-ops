@@ -15,6 +15,7 @@ import type {
   RenewalPlan,
   ServerItem,
   SpecialRule,
+  StorageBucket,
   StorageTopServerRate,
   ImportErrorInsight
 } from './types';
@@ -112,13 +113,19 @@ export async function listFailureFeatureFacts() {
   return data;
 }
 
-export async function listStorageTopServerRates() {
-  const { data } = await http.get<ApiResp<ListData<StorageTopServerRate>>>('/failure-rates/storage-top-servers');
+export async function listStorageTopServerRates(bucket: StorageBucket = 'warm_storage') {
+  const { data } = await http.get<ApiResp<ListData<StorageTopServerRate>>>('/failure-rates/storage-top-servers', {
+    params: { bucket }
+  });
   return data;
 }
 
+export function exportStorageTopServers(bucket: StorageBucket = 'warm_storage', format: 'xlsx' | 'csv' = 'xlsx') {
+  window.open(`/api/v1/failure-rates/storage-top-servers/export?bucket=${bucket}&format=${format}`, '_blank');
+}
+
 export function exportWarmStorageServers(format: 'xlsx' | 'csv' = 'xlsx') {
-  window.open(`/api/v1/failure-rates/storage-top-servers/export?format=${format}`, '_blank');
+  exportStorageTopServers('warm_storage', format);
 }
 
 export interface CreatePlanPayload {

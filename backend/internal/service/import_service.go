@@ -508,11 +508,11 @@ func (s *ImportService) ListFailureFeatureFacts(ctx context.Context) ([]domain.F
 }
 
 func (s *ImportService) ListStorageTopServerRates(ctx context.Context) ([]domain.StorageTopServerRate, error) {
-	rows, err := s.datasetRepo.ListStorageTopServerRates(ctx)
-	if err != nil {
-		return nil, err
-	}
-	rows, err = s.enrichStorageTopRatesWithWarranty(ctx, rows)
+	return s.ListStorageTopServerRatesByBucket(ctx, "warm_storage")
+}
+
+func (s *ImportService) ListStorageTopServerRatesByBucket(ctx context.Context, bucket string) ([]domain.StorageTopServerRate, error) {
+	rows, err := s.listStorageServerRatesByBucket(ctx, bucket)
 	if err != nil {
 		return nil, err
 	}
@@ -523,11 +523,54 @@ func (s *ImportService) ListStorageTopServerRates(ctx context.Context) ([]domain
 }
 
 func (s *ImportService) ListWarmStorageServerRates(ctx context.Context) ([]domain.StorageTopServerRate, error) {
+	return s.ListStorageServerRatesByBucketForExport(ctx, "warm_storage")
+}
+
+func (s *ImportService) ListStorageServerRatesByBucketForExport(ctx context.Context, bucket string) ([]domain.StorageTopServerRate, error) {
+	return s.listStorageServerRatesByBucket(ctx, bucket)
+}
+
+func (s *ImportService) listStorageServerRatesByBucket(ctx context.Context, bucket string) ([]domain.StorageTopServerRate, error) {
+	bucket = normalizeStorageTopBucket(bucket)
 	rows, err := s.datasetRepo.ListStorageTopServerRates(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return s.enrichStorageTopRatesWithWarranty(ctx, rows)
+	rows, err = s.enrichStorageTopRatesWithWarranty(ctx, rows)
+	if err != nil {
+		return nil, err
+	}
+	packages, err := s.datasetRepo.ListHostPackages(ctx)
+	if err != nil {
+		return nil, err
+	}
+	bucketByConfigType := make(map[string]string, len(packages))
+	for _, pkg := range packages {
+		configType := strings.TrimSpace(pkg.ConfigType)
+		if configType == "" {
+			continue
+		}
+		sceneBucket := normalizeBucket(pkg.SceneCategory)
+		if sceneBucket == "warm_storage" || sceneBucket == "hot_storage" {
+			bucketByConfigType[configType] = sceneBucket
+		}
+	}
+	out := make([]domain.StorageTopServerRate, 0, len(rows))
+	for _, row := range rows {
+		if bucketByConfigType[strings.TrimSpace(row.ConfigType)] == bucket {
+			out = append(out, row)
+		}
+	}
+	return out, nil
+}
+
+func normalizeStorageTopBucket(bucket string) string {
+	switch normalizeText(bucket) {
+	case "hotstorage", "hot":
+		return "hot_storage"
+	default:
+		return "warm_storage"
+	}
 }
 
 func (s *ImportService) enrichStorageTopRatesWithWarranty(ctx context.Context, rows []domain.StorageTopServerRate) ([]domain.StorageTopServerRate, error) {
@@ -756,7 +799,7 @@ func buildStorageTopServerRates(
 			continue
 		}
 		bucket := normalizeBucket(pkg.SceneCategory)
-		if bucket != "warm_storage" {
+		if bucket != "warm_storage" && bucket != "hot_storage" {
 			continue
 		}
 		totalCapacityTB := pkg.StorageCapacityTB
