@@ -1135,6 +1135,13 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 			yearFaultRows = append(yearFaultRows, row)
 			continue
 		}
+		matchedFaultRows++
+		var createdAtPtr *time.Time
+		if ts, ok := parseFlexibleDateTime(createdRaw); ok {
+			createdAtPtr = &ts
+		}
+		faultEventsBySN[sn] = append(faultEventsBySN[sn], faultEvent{createdAt: createdAtPtr})
+
 		srv, ok := serverMap[sn]
 		if !ok {
 			row.Remark = "服务器管理表未找到该SN"
@@ -1155,12 +1162,12 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		row.Segment = segment
 		row.Scope = classifyScopeByEnv(srv.Environment)
 
-		ts, ok := parseFlexibleDateTime(createdRaw)
-		if !ok {
+		if createdAtPtr == nil {
 			row.Remark = fmt.Sprintf("创建时间为空或格式错误（仅统计%d年）", now.Year())
 			yearFaultRows = append(yearFaultRows, row)
 			continue
 		}
+		ts := *createdAtPtr
 		if ts.After(now) {
 			row.Remark = "创建时间晚于当前时间"
 			yearFaultRows = append(yearFaultRows, row)
@@ -1180,11 +1187,8 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		}
 
 		row.Matched = true
-		matchedFaultRows++
 		row.Remark = "命中"
 		yearFaultRows = append(yearFaultRows, row)
-		createdAt := ts
-		faultEventsBySN[sn] = append(faultEventsBySN[sn], faultEvent{createdAt: &createdAt})
 	}
 
 	modelNum := map[string]float64{}
