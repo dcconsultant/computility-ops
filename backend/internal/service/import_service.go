@@ -682,7 +682,7 @@ func buildFailureAgeMetrics(
 	}
 
 	for _, srv := range servers {
-		pkg, ok := pkgMap[strings.TrimSpace(srv.ConfigType)]
+		pkg, ok := getPackageByConfigType(pkgMap, srv.ConfigType)
 		if !ok {
 			continue
 		}
@@ -805,7 +805,7 @@ func buildStorageTopServerRates(
 	windowStart := now.AddDate(-1, 0, 0)
 	out := make([]domain.StorageTopServerRate, 0)
 	for _, srv := range servers {
-		pkg, ok := pkgMap[strings.TrimSpace(srv.ConfigType)]
+		pkg, ok := getPackageByConfigType(pkgMap, srv.ConfigType)
 		if !ok {
 			continue
 		}
@@ -931,7 +931,7 @@ func buildFailureFeatureFacts(
 	}
 
 	for _, srv := range servers {
-		pkg, ok := pkgMap[strings.TrimSpace(srv.ConfigType)]
+		pkg, ok := getPackageByConfigType(pkgMap, srv.ConfigType)
 		if !ok {
 			continue
 		}
@@ -1108,7 +1108,7 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 
 	pkgMap := map[string]domain.HostPackageConfig{}
 	for _, p := range packages {
-		pkgMap[strings.TrimSpace(p.ConfigType)] = p
+		pkgMap[normalizeConfigTypeForMatch(p.ConfigType)] = p
 	}
 	serverMap := map[string]domain.Server{}
 	for _, srv := range servers {
@@ -1148,7 +1148,7 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 			yearFaultRows = append(yearFaultRows, row)
 			continue
 		}
-		pkg, ok := pkgMap[strings.TrimSpace(srv.ConfigType)]
+		pkg, ok := getPackageByConfigType(pkgMap, srv.ConfigType)
 		if !ok {
 			row.Remark = "主机套餐配置缺失，无法归类场景"
 			yearFaultRows = append(yearFaultRows, row)
@@ -1225,7 +1225,7 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 	overallFaultByYear := map[int]map[string]float64{}
 	yearStart := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
 	for _, srv := range servers {
-		pkg, ok := pkgMap[strings.TrimSpace(srv.ConfigType)]
+		pkg, ok := getPackageByConfigType(pkgMap, srv.ConfigType)
 		if !ok {
 			continue
 		}
@@ -1264,7 +1264,7 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		yearOverYears := yearsBetween(yearOverStart, analysisEnd)
 
 		modelKey := strings.Join([]string{strings.TrimSpace(srv.Manufacturer), strings.TrimSpace(srv.Model)}, "|")
-		pkgKey := strings.TrimSpace(srv.ConfigType)
+		pkgKey := strings.TrimSpace(pkg.ConfigType)
 		pkgModelKey := strings.Join([]string{pkgKey, strings.TrimSpace(srv.Manufacturer), strings.TrimSpace(srv.Model)}, "|")
 
 		weightedYears := weight * years
@@ -1634,6 +1634,18 @@ func maxTime(a, b time.Time) time.Time {
 		return a
 	}
 	return b
+}
+
+func normalizeConfigTypeForMatch(v string) string {
+	return normalizeText(v)
+}
+
+func getPackageByConfigType(pkgMap map[string]domain.HostPackageConfig, configType string) (domain.HostPackageConfig, bool) {
+	if pkg, ok := pkgMap[normalizeConfigTypeForMatch(configType)]; ok {
+		return pkg, true
+	}
+	pkg, ok := pkgMap[strings.TrimSpace(configType)]
+	return pkg, ok
 }
 
 func classifyScopeByEnv(env string) string {
