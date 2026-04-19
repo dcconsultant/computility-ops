@@ -83,6 +83,7 @@ type RenewalItem struct {
 	Manufacturer           string  `json:"manufacturer"`
 	Model                  string  `json:"model"`
 	Environment            string  `json:"environment,omitempty"`
+	IDC                    string  `json:"idc,omitempty"`
 	ConfigType             string  `json:"config_type"`
 	SceneCategory          string  `json:"scene_category,omitempty"`
 	CPULogicalCores        int     `json:"cpu_logical_cores"`
@@ -104,6 +105,7 @@ type NonRenewalItem struct {
 	Manufacturer string  `json:"manufacturer,omitempty"`
 	Model        string  `json:"model,omitempty"`
 	Environment  string  `json:"environment,omitempty"`
+	IDC          string  `json:"idc,omitempty"`
 	ConfigType   string  `json:"config_type,omitempty"`
 	PSA          PSAString `json:"psa,omitempty"`
 	FinalScore   float64 `json:"final_score,omitempty"`

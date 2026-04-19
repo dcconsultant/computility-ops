@@ -20,6 +20,15 @@ interface SummaryRow {
   currentServers: number;
 }
 
+interface CostRow {
+  key: string;
+  region: string;
+  bucket: string;
+  unitPrice: number;
+  servers: number;
+  amount: number;
+}
+
 export default function PlanDetailPage() {
   const navigate = useNavigate();
   const { planId = '' } = useParams();
@@ -44,6 +53,8 @@ export default function PlanDetailPage() {
   }
 
   const summaryRows = useMemo(() => (plan ? buildSummaryRows(plan) : []), [plan]);
+  const costRows = useMemo(() => (plan ? buildCostRows(plan) : []), [plan]);
+  const totalRenewalAmount = useMemo(() => costRows.reduce((sum, r) => sum + r.amount, 0), [costRows]);
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -91,6 +102,25 @@ export default function PlanDetailPage() {
             />
           </Card>
 
+          <Card title="续保金额估算（按机房区分印度/国内）" loading={loading}>
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Text type="secondary">规则：机房以 IN 开头归类印度，单价 1000；其余归类国内（计算150、温存储300、热存储300、GPU800）。</Text>
+              <Text strong>续保总金额：{formatMoney(totalRenewalAmount)}</Text>
+              <Table<CostRow>
+                rowKey="key"
+                dataSource={costRows}
+                pagination={false}
+                columns={[
+                  { title: '区域', dataIndex: 'region', width: 120 },
+                  { title: '栏目', dataIndex: 'bucket', width: 120 },
+                  { title: '单价', dataIndex: 'unitPrice', width: 120, render: (v: number) => formatMoney(v) },
+                  { title: '台数', dataIndex: 'servers', width: 100, render: (v: number) => formatInt(v) },
+                  { title: '金额', dataIndex: 'amount', width: 140, render: (v: number) => formatMoney(v) }
+                ]}
+              />
+            </Space>
+          </Card>
+
           <Card title="续保清单" loading={loading}>
             <Table
               rowKey="sn"
@@ -100,6 +130,7 @@ export default function PlanDetailPage() {
                 { title: '排名', dataIndex: 'rank', width: 70, render: (v: number) => formatInt(v) },
                 { title: '栏目', dataIndex: 'bucket', width: 100 },
                 { title: 'SN', dataIndex: 'sn', width: 160 },
+                { title: '机房', dataIndex: 'idc', width: 110 },
                 { title: '服务器型号', dataIndex: 'model', width: 160 },
                 { title: '配置类型', dataIndex: 'config_type', width: 140 },
                 { title: '场景大类', dataIndex: 'scene_category', width: 120 },
@@ -119,6 +150,7 @@ export default function PlanDetailPage() {
               pagination={withTotalPagination(10)}
               columns={[
                 { title: 'SN', dataIndex: 'sn', width: 160 },
+                { title: '机房', dataIndex: 'idc', width: 110 },
                 { title: '栏目', dataIndex: 'bucket', width: 110 },
                 { title: '配置类型', dataIndex: 'config_type', width: 140 },
                 { title: 'PSA', dataIndex: 'psa', width: 120, render: (v?: string) => (v && v.trim() ? v : '-') },
@@ -211,6 +243,58 @@ function buildSummaryRows(plan: RenewalPlan): SummaryRow[] {
   ];
 }
 
+function buildCostRows(plan: RenewalPlan): CostRow[] {
+  const bucketLabel: Record<string, string> = {
+    compute: '计算型',
+    warm_storage: '温存储',
+    hot_storage: '热存储',
+    gpu: 'GPU'
+  };
+  const amountByKey = new Map<string, CostRow>();
+  for (const item of plan.items || []) {
+    const region = isIndiaIDC(item.idc) ? '印度' : '国内';
+    const bucket = item.bucket || 'compute';
+    const unitPrice = estimateUnitPrice(region, bucket);
+    const key = `${region}|${bucket}`;
+    const old = amountByKey.get(key) || {
+      key,
+      region,
+      bucket: bucketLabel[bucket] || bucket,
+      unitPrice,
+      servers: 0,
+      amount: 0
+    };
+    old.servers += 1;
+    old.amount += unitPrice;
+    amountByKey.set(key, old);
+  }
+  const rows = Array.from(amountByKey.values());
+  rows.sort((a, b) => {
+    if (a.region !== b.region) return a.region.localeCompare(b.region);
+    return a.bucket.localeCompare(b.bucket);
+  });
+  return rows;
+}
+
+function isIndiaIDC(idc?: string) {
+  const v = (idc || '').trim().toUpperCase();
+  return v.startsWith('IN');
+}
+
+function estimateUnitPrice(region: string, bucket: string) {
+  if (region === '印度') return 1000;
+  switch (bucket) {
+    case 'warm_storage':
+    case 'hot_storage':
+      return 300;
+    case 'gpu':
+      return 800;
+    case 'compute':
+    default:
+      return 150;
+  }
+}
+
 function toTB(v: number) {
   return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -221,4 +305,8 @@ function formatInt(v?: number) {
 
 function formatFloat(v?: number) {
   return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatMoney(v?: number) {
+  return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }

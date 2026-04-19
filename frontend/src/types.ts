@@ -186,6 +186,7 @@ export interface PlanItem {
   manufacturer?: string;
   model?: string;
   environment?: string;
+  idc?: string;
   config_type: string;
   scene_category?: string;
   cpu_logical_cores: number;
@@ -222,6 +223,7 @@ export interface NonRenewalItem {
   manufacturer?: string;
   model?: string;
   environment?: string;
+  idc?: string;
   config_type?: string;
   psa?: string;
   final_score?: number;
