@@ -19,6 +19,7 @@ import {
 import { ensureApiOk, parseApiError } from '../error';
 import type {
   FaultAnalysisResult,
+  FaultYearAnalysisRow,
   FailureFeatureFact,
   StorageTopServerRate,
   ModelFailureRate,
@@ -40,6 +41,7 @@ export default function FailureAnalysisPage() {
   const [featureFacts, setFeatureFacts] = useState<FailureFeatureFact[]>([]);
   const [warmStorageTopRates, setWarmStorageTopRates] = useState<StorageTopServerRate[]>([]);
   const [hotStorageTopRates, setHotStorageTopRates] = useState<StorageTopServerRate[]>([]);
+  const [yearFaultRows, setYearFaultRows] = useState<FaultYearAnalysisRow[]>([]);
   const [fm, setFm] = useState<ModelFailureRate[]>([]);
   const [fp, setFp] = useState<PackageFailureRate[]>([]);
   const [fpm, setFpm] = useState<PackageModelFailureRate[]>([]);
@@ -116,6 +118,7 @@ export default function FailureAnalysisPage() {
             setAnalysisResult(resp.data);
             setOverallRates(resp.data.overall_rates || []);
             setFeatureFacts(resp.data.failure_feature_facts || []);
+            setYearFaultRows(resp.data.year_fault_analysis_rows || []);
             await reloadAll();
             message.success(`故障分析完成：命中故障 ${resp.data.matched_fault_rows}/${resp.data.total_fault_rows} 条`);
           } else {
@@ -301,6 +304,30 @@ export default function FailureAnalysisPage() {
               >
                 <Text type="secondary">仅统计热存储服务器；公式：最近1年故障次数 / (1 + 数据盘数量)。下载文件含全部热存储清单与保修截止日期。</Text>
                 <Table rowKey="sn" dataSource={hotStorageTopRates} pagination={{ pageSize: 20 }} columns={storageTopColumns} />
+              </Card>
+            )
+          },
+          {
+            key: 'year-fault-analysis',
+            label: `${new Date().getFullYear()}年故障率分析`,
+            children: (
+              <Card title={`${new Date().getFullYear()}年故障率命中分析（基于导入故障清单）`}>
+                <Text type="secondary">用于核对“整体存储/整体非存储故障数”与样本清单差异。命中=参与当年故障率计算；未命中可查看备注原因。</Text>
+                <Table
+                  rowKey={(r) => `${r.row_no}-${r.sn || ''}-${r.created_at || ''}`}
+                  dataSource={yearFaultRows}
+                  pagination={{ pageSize: 20 }}
+                  columns={[
+                    { title: '行号', dataIndex: 'row_no', width: 80 },
+                    { title: 'SN', dataIndex: 'sn', width: 180, render: (v?: string) => v || '-' },
+                    { title: '创建时间', dataIndex: 'created_at', width: 180, render: (v?: string) => v || '-' },
+                    { title: '范围', dataIndex: 'scope', width: 100, render: (v?: string) => scopeLabel(v) },
+                    { title: '分类', dataIndex: 'segment', width: 100, render: (v?: string) => (v === 'storage' ? '存储' : v === 'non_storage' ? '非存储' : '-') },
+                    { title: '命中', dataIndex: 'matched', width: 90, render: (v: boolean) => (v ? '是' : '否') },
+                    { title: '备注', dataIndex: 'remark', width: 380, render: (v?: string) => v || '-' }
+                  ]}
+                  scroll={{ x: 1100 }}
+                />
               </Card>
             )
           }

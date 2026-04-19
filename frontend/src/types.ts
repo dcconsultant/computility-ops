@@ -155,6 +155,16 @@ export interface StorageTopServerRate {
 
 export type StorageBucket = 'warm_storage' | 'hot_storage';
 
+export interface FaultYearAnalysisRow {
+  row_no: number;
+  sn?: string;
+  created_at?: string;
+  scope?: string;
+  segment?: string;
+  matched: boolean;
+  remark?: string;
+}
+
 export interface FaultAnalysisResult {
   total_fault_rows: number;
   matched_fault_rows: number;
@@ -164,6 +174,7 @@ export interface FaultAnalysisResult {
   overall_rates?: FailureRateSummary[];
   failure_feature_facts?: FailureFeatureFact[];
   storage_top_server_rates?: StorageTopServerRate[];
+  year_fault_analysis_rows?: FaultYearAnalysisRow[];
 }
 
 export interface PlanItem {

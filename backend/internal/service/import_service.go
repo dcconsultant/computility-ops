@@ -625,6 +625,17 @@ type FaultAnalysisResult struct {
 	AgeTrendPoints             []domain.FailureAgeTrendPoint `json:"age_trend_points,omitempty"`
 	FailureFeatureFacts        []domain.FailureFeatureFact   `json:"failure_feature_facts,omitempty"`
 	StorageTopServerRates      []domain.StorageTopServerRate `json:"storage_top_server_rates,omitempty"`
+	YearFaultAnalysisRows      []FaultAnalysisRow            `json:"year_fault_analysis_rows,omitempty"`
+}
+
+type FaultAnalysisRow struct {
+	RowNo     int    `json:"row_no"`
+	SN        string `json:"sn,omitempty"`
+	CreatedAt string `json:"created_at,omitempty"`
+	Scope     string `json:"scope,omitempty"`
+	Segment   string `json:"segment,omitempty"`
+	Matched   bool   `json:"matched"`
+	Remark    string `json:"remark,omitempty"`
 }
 
 type faultEvent struct {
@@ -1099,22 +1110,81 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 	for _, p := range packages {
 		pkgMap[strings.TrimSpace(p.ConfigType)] = p
 	}
+	serverMap := map[string]domain.Server{}
+	for _, srv := range servers {
+		serverMap[strings.TrimSpace(srv.SN)] = srv
+	}
 
+	now := time.Now()
 	faultEventsBySN := map[string][]faultEvent{}
 	totalFaultRows := 0
 	matchedFaultRows := 0
-	for _, raw := range rows {
+	yearFaultRows := make([]FaultAnalysisRow, 0, len(rows))
+	for i, raw := range rows {
 		totalFaultRows++
 		sn := strings.TrimSpace(raw["sn"])
+		createdRaw := strings.TrimSpace(raw["created_at"])
+		row := FaultAnalysisRow{
+			RowNo:     i + 2,
+			SN:        sn,
+			CreatedAt: createdRaw,
+			Matched:   false,
+		}
 		if sn == "" {
+			row.Remark = "SN为空"
+			yearFaultRows = append(yearFaultRows, row)
 			continue
 		}
-		matchedFaultRows++
-		var createdAtPtr *time.Time
-		if ts, ok := parseFlexibleDateTime(raw["created_at"]); ok {
-			createdAtPtr = &ts
+		srv, ok := serverMap[sn]
+		if !ok {
+			row.Remark = "服务器管理表未找到该SN"
+			yearFaultRows = append(yearFaultRows, row)
+			continue
 		}
-		faultEventsBySN[sn] = append(faultEventsBySN[sn], faultEvent{createdAt: createdAtPtr})
+		pkg, ok := pkgMap[strings.TrimSpace(srv.ConfigType)]
+		if !ok {
+			row.Remark = "主机套餐配置缺失，无法归类场景"
+			yearFaultRows = append(yearFaultRows, row)
+			continue
+		}
+		bucket := normalizeBucket(pkg.SceneCategory)
+		segment := "non_storage"
+		if bucket == "warm_storage" || bucket == "hot_storage" {
+			segment = "storage"
+		}
+		row.Segment = segment
+		row.Scope = classifyScopeByEnv(srv.Environment)
+
+		ts, ok := parseFlexibleDateTime(createdRaw)
+		if !ok {
+			row.Remark = fmt.Sprintf("创建时间为空或格式错误（仅统计%d年）", now.Year())
+			yearFaultRows = append(yearFaultRows, row)
+			continue
+		}
+		if ts.After(now) {
+			row.Remark = "创建时间晚于当前时间"
+			yearFaultRows = append(yearFaultRows, row)
+			continue
+		}
+		if ts.Year() != now.Year() {
+			row.Remark = fmt.Sprintf("非%d年故障（事件年份=%d）", now.Year(), ts.Year())
+			yearFaultRows = append(yearFaultRows, row)
+			continue
+		}
+
+		warrantyEndAt, hasWarrantyEnd := parseFlexibleDate(srv.WarrantyEndDate)
+		if excludeOverWarranty && hasWarrantyEnd && warrantyEndAt.Before(now) {
+			row.Remark = "已过保且勾选了“排除过保服务器”"
+			yearFaultRows = append(yearFaultRows, row)
+			continue
+		}
+
+		row.Matched = true
+		matchedFaultRows++
+		row.Remark = "命中"
+		yearFaultRows = append(yearFaultRows, row)
+		createdAt := ts
+		faultEventsBySN[sn] = append(faultEventsBySN[sn], faultEvent{createdAt: &createdAt})
 	}
 
 	modelNum := map[string]float64{}
@@ -1146,7 +1216,6 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 	overallYearDenYears := map[string]float64{}
 	overallYearOverDenYears := map[string]float64{}
 
-	now := time.Now()
 	minFaultYear := now.Year()
 	overallBaseDen := map[string]float64{}
 	overallFaultByYear := map[int]map[string]float64{}
@@ -1482,6 +1551,7 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		AgeTrendPoints:             ageTrendPoints,
 		FailureFeatureFacts:        featureFacts,
 		StorageTopServerRates:      storageTopRates,
+		YearFaultAnalysisRows:      yearFaultRows,
 	}, nil
 }
 
