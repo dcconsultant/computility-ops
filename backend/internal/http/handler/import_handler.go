@@ -363,6 +363,53 @@ func (h *ImportHandler) AnalyzeFaultRates(c *gin.Context) {
 	ok(c, result)
 }
 
+func (h *ImportHandler) ExportYearFaultAnalysis(c *gin.Context) {
+	c.Set("audit_action", "failure_rates.year_fault_analysis.export")
+	var req ExportYearFaultAnalysisReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, 40001, "请求参数有误，请检查后重试")
+		return
+	}
+	if len(req.Rows) == 0 {
+		fail(c, 40001, "rows 不能为空")
+		return
+	}
+	year := req.Year
+	if year <= 0 {
+		year = time.Now().Year()
+	}
+
+	xf := excelize.NewFile()
+	sheet := xf.GetSheetName(0)
+	header := []string{"行号", "SN", "创建时间", "范围", "分类", "命中", "备注"}
+	for i, h := range header {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		_ = xf.SetCellValue(sheet, cell, h)
+	}
+	for idx, r := range req.Rows {
+		row := idx + 2
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("A%d", row), r.RowNo)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("B%d", row), r.SN)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("C%d", row), r.CreatedAt)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("D%d", row), scopeLabelCN(r.Scope))
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("E%d", row), segmentLabelCN(r.Segment))
+		if r.Matched {
+			_ = xf.SetCellValue(sheet, fmt.Sprintf("F%d", row), "是")
+		} else {
+			_ = xf.SetCellValue(sheet, fmt.Sprintf("F%d", row), "否")
+		}
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("G%d", row), r.Remark)
+	}
+	buf, err := xf.WriteToBuffer()
+	if err != nil {
+		fail(c, 50001, "导出失败")
+		return
+	}
+	filename := fmt.Sprintf("year-fault-analysis-%d-%s.xlsx", year, time.Now().Format("20060102-150405"))
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buf.Bytes())
+}
+
 func (h *ImportHandler) readRows(c *gin.Context) ([]string, [][]string, bool) {
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -413,6 +460,30 @@ func parseStorageTopBucket(v string) string {
 		return "hot_storage"
 	default:
 		return "warm_storage"
+	}
+}
+
+func scopeLabelCN(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "all":
+		return "整体"
+	case "product":
+		return "生产"
+	case "devtest":
+		return "开测"
+	default:
+		return strings.TrimSpace(v)
+	}
+}
+
+func segmentLabelCN(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "storage":
+		return "存储"
+	case "non_storage":
+		return "非存储"
+	default:
+		return strings.TrimSpace(v)
 	}
 }
 

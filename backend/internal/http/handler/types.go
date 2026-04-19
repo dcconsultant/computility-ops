@@ -1,5 +1,7 @@
 package handler
 
+import "computility-ops/backend/internal/service"
+
 type CreatePlanReq struct {
 	TargetDate           string   `json:"target_date" binding:"required"`
 	ExcludedEnvironments []string `json:"excluded_environments"`
@@ -15,4 +17,9 @@ type ListPlansReq struct {
 	TargetDateTo        string `form:"target_date_to"`
 	ExcludedPSA         string `form:"excluded_psa"`
 	ExcludedEnvironment string `form:"excluded_environment"`
+}
+
+type ExportYearFaultAnalysisReq struct {
+	Year int                       `json:"year"`
+	Rows []service.FaultAnalysisRow `json:"rows" binding:"required"`
 }

@@ -6,6 +6,7 @@ import type {
   ListData,
   ModelFailureRate,
   FaultAnalysisResult,
+  FaultYearAnalysisRow,
   FailureRateSummary,
   FailureOverviewCard,
   FailureAgeTrendPoint,
@@ -126,6 +127,13 @@ export function exportStorageTopServers(bucket: StorageBucket = 'warm_storage', 
 
 export function exportWarmStorageServers(format: 'xlsx' | 'csv' = 'xlsx') {
   exportStorageTopServers('warm_storage', format);
+}
+
+export async function exportYearFaultAnalysis(rows: FaultYearAnalysisRow[], year = new Date().getFullYear()) {
+  const { data } = await http.post('/failure-rates/year-fault-analysis/export', { year, rows }, {
+    responseType: 'blob'
+  });
+  return data as Blob;
 }
 
 export interface CreatePlanPayload {

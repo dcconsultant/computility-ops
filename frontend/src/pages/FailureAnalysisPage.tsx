@@ -13,6 +13,7 @@ import {
   listFailureFeatureFacts,
   listStorageTopServerRates,
   exportStorageTopServers,
+  exportYearFaultAnalysis,
   listPackageFailureRates,
   listPackageModelFailureRates
 } from '../api';
@@ -135,6 +136,27 @@ export default function FailureAnalysisPage() {
         }
       }
     };
+  }
+
+  async function handleExportYearFaultAnalysis() {
+    try {
+      if (!yearFaultRows.length) {
+        message.warning('暂无可导出的明细，请先上传并分析故障清单');
+        return;
+      }
+      const year = new Date().getFullYear();
+      const blob = await exportYearFaultAnalysis(yearFaultRows, year);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `year-fault-analysis-${year}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      message.error(parseApiError(e, '导出失败'));
+    }
   }
 
   const storageTopColumns = [
@@ -311,7 +333,10 @@ export default function FailureAnalysisPage() {
             key: 'year-fault-analysis',
             label: `${new Date().getFullYear()}年故障率分析`,
             children: (
-              <Card title={`${new Date().getFullYear()}年故障率命中分析（基于导入故障清单）`}>
+              <Card
+                title={`${new Date().getFullYear()}年故障率命中分析（基于导入故障清单）`}
+                extra={<Button onClick={handleExportYearFaultAnalysis}>导出Excel</Button>}
+              >
                 <Text type="secondary">用于核对“整体存储/整体非存储故障数”与样本清单差异。命中=参与当年故障率计算；未命中可查看备注原因。</Text>
                 <Table
                   rowKey={(r) => `${r.row_no}-${r.sn || ''}-${r.created_at || ''}`}
