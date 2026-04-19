@@ -1,5 +1,36 @@
 package domain
 
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+type PSAString string
+
+func (p *PSAString) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		*p = ""
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		*p = PSAString(s)
+		return nil
+	}
+	var n float64
+	if err := json.Unmarshal(data, &n); err == nil {
+		*p = PSAString(strconv.FormatFloat(n, 'f', -1, 64))
+		return nil
+	}
+	return fmt.Errorf("invalid psa value: %s", string(data))
+}
+
+func (p PSAString) MarshalJSON() ([]byte, error) {
+	return json.Marshal(strings.TrimSpace(string(p)))
+}
+
 type RenewalPlan struct {
 	PlanID               string               `json:"plan_id"`
 	TargetDate           string               `json:"target_date,omitempty"`
@@ -57,7 +88,7 @@ type RenewalItem struct {
 	CPULogicalCores        int     `json:"cpu_logical_cores"`
 	GPUCardCount           int     `json:"gpu_card_count,omitempty"`
 	StorageCapacityTB      float64 `json:"storage_capacity_tb,omitempty"`
-	PSA                    string  `json:"psa"`
+	PSA                    PSAString `json:"psa"`
 	ArchStandardizedFactor float64 `json:"arch_standardized_factor"`
 	BaseScore              float64 `json:"base_score,omitempty"`
 	AFROld                 float64 `json:"afr_old,omitempty"`
@@ -74,7 +105,7 @@ type NonRenewalItem struct {
 	Model        string  `json:"model,omitempty"`
 	Environment  string  `json:"environment,omitempty"`
 	ConfigType   string  `json:"config_type,omitempty"`
-	PSA          string  `json:"psa,omitempty"`
+	PSA          PSAString `json:"psa,omitempty"`
 	FinalScore   float64 `json:"final_score,omitempty"`
 	ReasonCode   string  `json:"reason_code"`
 	Reason       string  `json:"reason"`

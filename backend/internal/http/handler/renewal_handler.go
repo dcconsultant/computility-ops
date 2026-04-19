@@ -159,7 +159,7 @@ func buildCSV(plan domain.RenewalPlan) (*bytes.Buffer, error) {
 			fmt.Sprint(item.CPULogicalCores),
 			fmt.Sprint(item.GPUCardCount),
 			fmt.Sprintf("%.4f", item.StorageCapacityTB),
-			item.PSA,
+			string(item.PSA),
 			fmt.Sprintf("%.4f", item.ArchStandardizedFactor),
 			fmt.Sprintf("%.4f", item.BaseScore),
 			fmt.Sprintf("%.4f", item.AFROld),
