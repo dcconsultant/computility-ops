@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/csv"
 	"fmt"
 	"net/http"
@@ -17,6 +18,21 @@ import (
 
 type ImportHandler struct {
 	service *service.ImportService
+}
+
+type serverPackageStandardizedItem struct {
+	SN                     string `json:"sn"`
+	Manufacturer           string `json:"manufacturer"`
+	Model                  string `json:"model"`
+	PSA                    string `json:"psa"`
+	IDC                    string `json:"idc,omitempty"`
+	Environment            string `json:"environment,omitempty"`
+	ConfigType             string `json:"config_type"`
+	ConfigTypeStandardized string `json:"config_type_standardized"`
+	PackageStandardized    string `json:"package_standardized"`
+	PackageMatched         bool   `json:"package_standardized_matched"`
+	WarrantyEndDate        string `json:"warranty_end_date,omitempty"`
+	LaunchDate             string `json:"launch_date,omitempty"`
 }
 
 func NewImportHandler(s *service.ImportService) *ImportHandler { return &ImportHandler{service: s} }
@@ -50,12 +66,86 @@ func (h *ImportHandler) ImportServers(c *gin.Context) {
 
 func (h *ImportHandler) ListServers(c *gin.Context) {
 	c.Set("audit_action", "servers.list")
-	rows, err := h.service.ListServers(c.Request.Context())
+	rows, err := h.buildServerPackageStandardizedRows(c.Request.Context())
 	if err != nil {
 		fail(c, 50001, "查询失败")
 		return
 	}
 	ok(c, gin.H{"list": rows, "total": len(rows), "page": 1, "page_size": len(rows)})
+}
+
+func (h *ImportHandler) ExportServerPackageAnomalies(c *gin.Context) {
+	c.Set("audit_action", "servers.package_anomaly.export")
+	format := strings.ToLower(strings.TrimSpace(c.DefaultQuery("format", "xlsx")))
+	if format != "xlsx" && format != "csv" {
+		fail(c, 40001, "format must be xlsx or csv")
+		return
+	}
+	rows, err := h.buildServerPackageStandardizedRows(c.Request.Context())
+	if err != nil {
+		fail(c, 50001, "导出失败")
+		return
+	}
+	anomaly := make([]serverPackageStandardizedItem, 0, len(rows))
+	for _, r := range rows {
+		if !r.PackageMatched {
+			anomaly = append(anomaly, r)
+		}
+	}
+	filename := fmt.Sprintf("server-package-anomaly-%s.%s", time.Now().Format("20060102-150405"), format)
+	if format == "csv" {
+		buf := &bytes.Buffer{}
+		w := csv.NewWriter(buf)
+		header := []string{"SN", "制造商", "服务器型号", "PSA", "机房", "环境", "配置类型", "配置类型标准化", "套餐标准化", "保修结束日期", "投产日期"}
+		if err := w.Write(header); err != nil {
+			fail(c, 50001, "导出失败")
+			return
+		}
+		for _, r := range anomaly {
+			record := []string{r.SN, r.Manufacturer, r.Model, r.PSA, r.IDC, r.Environment, r.ConfigType, r.ConfigTypeStandardized, r.PackageStandardized, r.WarrantyEndDate, r.LaunchDate}
+			if err := w.Write(record); err != nil {
+				fail(c, 50001, "导出失败")
+				return
+			}
+		}
+		w.Flush()
+		if err := w.Error(); err != nil {
+			fail(c, 50001, "导出失败")
+			return
+		}
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+		c.Data(http.StatusOK, "text/csv; charset=utf-8", buf.Bytes())
+		return
+	}
+
+	xf := excelize.NewFile()
+	sheet := xf.GetSheetName(0)
+	header := []string{"SN", "制造商", "服务器型号", "PSA", "机房", "环境", "配置类型", "配置类型标准化", "套餐标准化", "保修结束日期", "投产日期"}
+	for i, h := range header {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		_ = xf.SetCellValue(sheet, cell, h)
+	}
+	for idx, r := range anomaly {
+		row := idx + 2
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("A%d", row), r.SN)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("B%d", row), r.Manufacturer)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("C%d", row), r.Model)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("D%d", row), r.PSA)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("E%d", row), r.IDC)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("F%d", row), r.Environment)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("G%d", row), r.ConfigType)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("H%d", row), r.ConfigTypeStandardized)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("I%d", row), r.PackageStandardized)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("J%d", row), r.WarrantyEndDate)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("K%d", row), r.LaunchDate)
+	}
+	buf, err := xf.WriteToBuffer()
+	if err != nil {
+		fail(c, 50001, "导出失败")
+		return
+	}
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buf.Bytes())
 }
 
 func (h *ImportHandler) ImportHostPackages(c *gin.Context) {
@@ -461,6 +551,57 @@ func parseStorageTopBucket(v string) string {
 	default:
 		return "warm_storage"
 	}
+}
+
+func normalizeConfigTypeKey(v string) string {
+	n := strings.ToLower(strings.TrimSpace(v))
+	n = strings.ReplaceAll(n, " ", "")
+	n = strings.ReplaceAll(n, "_", "")
+	n = strings.ReplaceAll(n, "-", "")
+	return n
+}
+
+func (h *ImportHandler) buildServerPackageStandardizedRows(ctx context.Context) ([]serverPackageStandardizedItem, error) {
+	servers, err := h.service.ListServers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	packages, err := h.service.ListHostPackages(ctx)
+	if err != nil {
+		return nil, err
+	}
+	pkgSet := map[string]struct{}{}
+	for _, p := range packages {
+		n := normalizeConfigTypeKey(p.ConfigType)
+		if n == "" {
+			continue
+		}
+		pkgSet[n] = struct{}{}
+	}
+	out := make([]serverPackageStandardizedItem, 0, len(servers))
+	for _, s := range servers {
+		n := normalizeConfigTypeKey(s.ConfigType)
+		_, matched := pkgSet[n]
+		status := "否"
+		if matched {
+			status = "是"
+		}
+		out = append(out, serverPackageStandardizedItem{
+			SN:                     s.SN,
+			Manufacturer:           s.Manufacturer,
+			Model:                  s.Model,
+			PSA:                    s.PSA,
+			IDC:                    s.IDC,
+			Environment:            s.Environment,
+			ConfigType:             s.ConfigType,
+			ConfigTypeStandardized: n,
+			PackageStandardized:    status,
+			PackageMatched:         matched,
+			WarrantyEndDate:        s.WarrantyEndDate,
+			LaunchDate:             s.LaunchDate,
+		})
+	}
+	return out, nil
 }
 
 func scopeLabelCN(v string) string {

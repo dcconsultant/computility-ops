@@ -4,6 +4,7 @@ import { Alert, Button, Card, Input, message, Space, Table, Tabs, Typography, Up
 import type { UploadProps } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import {
+  exportServerPackageAnomalies,
   importHostPackages,
   importServers,
   listHostPackages,
@@ -62,6 +63,8 @@ export default function ImportPage() {
       x.idc,
       x.environment,
       x.config_type,
+      x.config_type_standardized,
+      x.package_standardized,
       x.warranty_end_date,
       x.launch_date
     ].some((v) => (v || '').toString().toLowerCase().includes(q)));
@@ -112,8 +115,11 @@ export default function ImportPage() {
     };
   }
 
-  const tableCard = (title: string, kind: DataKey, table: ReactNode, helper: string) => (
-    <Card title={title} extra={<Upload {...makeUploadProps(kind)}><Button icon={<UploadOutlined />} loading={uploading === kind}>上传并导入</Button></Upload>}>
+  const tableCard = (title: string, kind: DataKey, table: ReactNode, helper: string, extra?: ReactNode) => (
+    <Card
+      title={title}
+      extra={extra || <Upload {...makeUploadProps(kind)}><Button icon={<UploadOutlined />} loading={uploading === kind}>上传并导入</Button></Upload>}
+    >
       <Space direction="vertical" style={{ width: '100%' }}>
         <Text type="secondary">{helper}</Text>
         {table}
@@ -159,12 +165,18 @@ export default function ImportPage() {
                     { title: '机房', dataIndex: 'idc' },
                     { title: '环境', dataIndex: 'environment' },
                     { title: '配置类型', dataIndex: 'config_type' },
+                    { title: '配置类型标准化', dataIndex: 'config_type_standardized' },
+                    { title: '套餐标准化', dataIndex: 'package_standardized' },
                     { title: '保修结束日期', dataIndex: 'warranty_end_date' },
                     { title: '投产日期', dataIndex: 'launch_date' }
                   ]}
                 />
               </Space>,
-              '字段：SN、制造商、服务器型号、PSA、机房、环境、配置类型、保修结束日期、投产日期'
+              '字段：SN、制造商、服务器型号、PSA、机房、环境、配置类型、配置类型标准化、套餐标准化、保修结束日期、投产日期',
+              <Space>
+                <Button onClick={() => exportServerPackageAnomalies('xlsx')}>下载套餐标准化异常清单</Button>
+                <Upload {...makeUploadProps('servers')}><Button icon={<UploadOutlined />} loading={uploading === 'servers'}>上传并导入</Button></Upload>
+              </Space>
             )
           },
           {

@@ -29,6 +29,7 @@ func NewRouter(h Handlers) *gin.Engine {
 
 		v1.POST("/servers/import", h.Import.ImportServers)
 		v1.GET("/servers", h.Import.ListServers)
+		v1.GET("/servers/package-anomalies/export", h.Import.ExportServerPackageAnomalies)
 
 		v1.POST("/host-packages/import", h.Import.ImportHostPackages)
 		v1.GET("/host-packages", h.Import.ListHostPackages)

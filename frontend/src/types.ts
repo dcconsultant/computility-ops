@@ -31,6 +31,9 @@ export interface ServerItem {
   idc?: string;
   environment?: string;
   config_type: string;
+  config_type_standardized?: string;
+  package_standardized?: string;
+  package_standardized_matched?: boolean;
   warranty_end_date?: string;
   launch_date?: string;
 }

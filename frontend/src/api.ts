@@ -40,6 +40,10 @@ export async function listServers() {
   return data;
 }
 
+export function exportServerPackageAnomalies(format: 'xlsx' | 'csv' = 'xlsx') {
+  window.open(`/api/v1/servers/package-anomalies/export?format=${format}`, '_blank');
+}
+
 export async function importHostPackages(file: File) {
   return uploadImport('/host-packages/import', file);
 }
