@@ -321,7 +321,7 @@ export default function PlanPage() {
           dataSource={plans}
           columns={columns}
           scroll={{ x: 1500 }}
-          pagination={{ pageSize: 10 }}
+          pagination={withTotalPagination(10)}
         />
       </Card>
 
@@ -342,7 +342,7 @@ export default function PlanPage() {
             rowKey="sn"
             loading={specialLoading}
             dataSource={specialRules}
-            pagination={{ pageSize: 10 }}
+            pagination={withTotalPagination(10)}
             columns={[
               { title: 'SN', dataIndex: 'sn', width: 160 },
               { title: '制造商', dataIndex: 'manufacturer', width: 120 },
@@ -358,6 +358,13 @@ export default function PlanPage() {
       </Card>
     </Space>
   );
+}
+
+function withTotalPagination(pageSize: number) {
+  return {
+    pageSize,
+    showTotal: (total: number) => `共${total}条，${Math.ceil(total / pageSize)}页`
+  };
 }
 
 function buildAnomalyReport(plan: RenewalPlan): string {

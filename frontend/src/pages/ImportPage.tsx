@@ -150,7 +150,7 @@ export default function ImportPage() {
                 <Table
                   rowKey="sn"
                   dataSource={filteredServers}
-                  pagination={{ pageSize: 10 }}
+                  pagination={withTotalPagination(10)}
                   columns={[
                     { title: 'SN', dataIndex: 'sn' },
                     { title: '制造商', dataIndex: 'manufacturer' },
@@ -183,7 +183,7 @@ export default function ImportPage() {
                 <Table
                   rowKey="config_type"
                   dataSource={filteredPackages}
-                  pagination={{ pageSize: 10 }}
+                  pagination={withTotalPagination(10)}
                   columns={[
                     { title: '配置类型', dataIndex: 'config_type' },
                     { title: '场景大类', dataIndex: 'scene_category' },
@@ -204,6 +204,13 @@ export default function ImportPage() {
       />
     </Space>
   );
+}
+
+function withTotalPagination(pageSize: number) {
+  return {
+    pageSize,
+    showTotal: (total: number) => `共${total}条，${Math.ceil(total / pageSize)}页`
+  };
 }
 
 function formatInt(v?: number) {

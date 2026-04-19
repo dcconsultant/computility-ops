@@ -95,7 +95,7 @@ export default function PlanDetailPage() {
             <Table
               rowKey="sn"
               dataSource={plan.items}
-              pagination={{ pageSize: 10 }}
+              pagination={withTotalPagination(10)}
               columns={[
                 { title: '排名', dataIndex: 'rank', width: 70, render: (v: number) => formatInt(v) },
                 { title: '栏目', dataIndex: 'bucket', width: 100 },
@@ -116,7 +116,7 @@ export default function PlanDetailPage() {
             <Table
               rowKey={(r) => `${r.sn}-${r.reason_code}-${r.rank_in_bucket || 0}`}
               dataSource={plan.non_renewal_items || []}
-              pagination={{ pageSize: 10 }}
+              pagination={withTotalPagination(10)}
               columns={[
                 { title: 'SN', dataIndex: 'sn', width: 160 },
                 { title: '栏目', dataIndex: 'bucket', width: 110 },
@@ -134,6 +134,13 @@ export default function PlanDetailPage() {
       )}
     </Space>
   );
+}
+
+function withTotalPagination(pageSize: number) {
+  return {
+    pageSize,
+    showTotal: (total: number) => `共${total}条，${Math.ceil(total / pageSize)}页`
+  };
 }
 
 function buildSummaryRows(plan: RenewalPlan): SummaryRow[] {

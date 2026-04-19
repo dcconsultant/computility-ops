@@ -214,7 +214,7 @@ export default function FailureAnalysisPage() {
             children: (
               <Card title="型号故障率表" extra={<Upload {...makeUploadProps('failure_model')}><Button icon={<UploadOutlined />} loading={uploading === 'failure_model'}>上传并导入</Button></Upload>}>
                 <Text type="secondary">故障率为年化值；过保故障率按投产满5年至今区间统计，仅供参考。</Text>
-                <Table rowKey={(r) => `${r.manufacturer}-${r.model}`} dataSource={fm} pagination={{ pageSize: 10 }} columns={[
+                <Table rowKey={(r) => `${r.manufacturer}-${r.model}`} dataSource={fm} pagination={withTotalPagination(10)} columns={[
                   { title: '厂商', dataIndex: 'manufacturer' },
                   { title: '服务器型号', dataIndex: 'model' },
                   { title: '年化故障率', dataIndex: 'failure_rate', render: (v: number) => formatPercent(v) },
@@ -229,7 +229,7 @@ export default function FailureAnalysisPage() {
             children: (
               <Card title="套餐故障率表" extra={<Upload {...makeUploadProps('failure_package')}><Button icon={<UploadOutlined />} loading={uploading === 'failure_package'}>上传并导入</Button></Upload>}>
                 <Text type="secondary">故障率为年化值；过保故障率按投产满5年至今区间统计，仅供参考。</Text>
-                <Table rowKey="config_type" dataSource={fp} pagination={{ pageSize: 10 }} columns={[
+                <Table rowKey="config_type" dataSource={fp} pagination={withTotalPagination(10)} columns={[
                   { title: '配置类型', dataIndex: 'config_type' },
                   { title: '年化故障率', dataIndex: 'failure_rate', render: (v: number) => formatPercent(v) },
                   { title: '过保故障率(参考)', dataIndex: 'over_warranty_failure_rate', render: (v: number) => formatPercent(v) }
@@ -243,7 +243,7 @@ export default function FailureAnalysisPage() {
             children: (
               <Card title="套餐型号故障率表" extra={<Upload {...makeUploadProps('failure_pkg_model')}><Button icon={<UploadOutlined />} loading={uploading === 'failure_pkg_model'}>上传并导入</Button></Upload>}>
                 <Text type="secondary">故障率为年化值；过保故障率按投产满5年至今区间统计，仅供参考。</Text>
-                <Table rowKey={(r) => `${r.config_type}-${r.manufacturer}-${r.model}`} dataSource={fpm} pagination={{ pageSize: 10 }} columns={[
+                <Table rowKey={(r) => `${r.config_type}-${r.manufacturer}-${r.model}`} dataSource={fpm} pagination={withTotalPagination(10)} columns={[
                   { title: '套餐', dataIndex: 'config_type' },
                   { title: '厂商', dataIndex: 'manufacturer' },
                   { title: '服务器型号', dataIndex: 'model' },
@@ -276,7 +276,7 @@ export default function FailureAnalysisPage() {
               <Space direction="vertical" size={12} style={{ width: '100%' }}>
                 <Card title="分场景 x 机龄汇总（跨记录年求和）">
                   <Text type="secondary">用于透明展示分子分母：按场景、机龄桶把所有记录年求和后再算故障率。</Text>
-                  <Table rowKey={(r) => `${r.scene_group}-${r.age_bucket}`} dataSource={phase1SceneAgeSummary} pagination={{ pageSize: 12 }} columns={[
+                  <Table rowKey={(r) => `${r.scene_group}-${r.age_bucket}`} dataSource={phase1SceneAgeSummary} pagination={withTotalPagination(12)} columns={[
                     { title: '场景', dataIndex: 'scene_group', render: (v: string) => sceneLabel(v) },
                     { title: '机龄桶', dataIndex: 'age_bucket', render: (v: number) => v >= 9 ? '8+' : `${v}` },
                     { title: '分母(加权求和)', dataIndex: 'denominator_weighted', render: (v: number) => formatFloat(v) },
@@ -286,7 +286,7 @@ export default function FailureAnalysisPage() {
                 </Card>
 
                 <Card title="记录年 x 机龄桶（Phase1 明细）">
-                  <Table rowKey={(r) => `${r.record_year_index}-${r.scope}-${r.scene_group}-${r.age_bucket}`} dataSource={featureFacts} pagination={{ pageSize: 12 }} columns={[
+                  <Table rowKey={(r) => `${r.record_year_index}-${r.scope}-${r.scene_group}-${r.age_bucket}`} dataSource={featureFacts} pagination={withTotalPagination(12)} columns={[
                     { title: '记录年', dataIndex: 'record_year_index', render: (_: number, r: FailureFeatureFact) => `Y${r.record_year_index} (${r.record_year_start}~${r.record_year_end})` },
                     { title: '范围', dataIndex: 'scope', render: (v: string) => scopeLabel(v) },
                     { title: '场景', dataIndex: 'scene_group', render: (v: string) => sceneLabel(v) },
@@ -310,7 +310,7 @@ export default function FailureAnalysisPage() {
                 </Space>}
               >
                 <Text type="secondary">仅统计温存储服务器；公式：最近1年故障次数 / (1 + 数据盘数量)。下载文件含全部温存储清单与保修截止日期。</Text>
-                <Table rowKey="sn" dataSource={warmStorageTopRates} pagination={{ pageSize: 20 }} columns={storageTopColumns} />
+                <Table rowKey="sn" dataSource={warmStorageTopRates} pagination={withTotalPagination(20)} columns={storageTopColumns} />
               </Card>
             )
           },
@@ -325,7 +325,7 @@ export default function FailureAnalysisPage() {
                 </Space>}
               >
                 <Text type="secondary">仅统计热存储服务器；公式：最近1年故障次数 / (1 + 数据盘数量)。下载文件含全部热存储清单与保修截止日期。</Text>
-                <Table rowKey="sn" dataSource={hotStorageTopRates} pagination={{ pageSize: 20 }} columns={storageTopColumns} />
+                <Table rowKey="sn" dataSource={hotStorageTopRates} pagination={withTotalPagination(20)} columns={storageTopColumns} />
               </Card>
             )
           },
@@ -341,7 +341,7 @@ export default function FailureAnalysisPage() {
                 <Table
                   rowKey={(r) => `${r.row_no}-${r.sn || ''}-${r.created_at || ''}`}
                   dataSource={yearFaultRows}
-                  pagination={{ pageSize: 20 }}
+                  pagination={withTotalPagination(20)}
                   columns={[
                     { title: '行号', dataIndex: 'row_no', width: 80 },
                     { title: 'SN', dataIndex: 'sn', width: 180, render: (v?: string) => v || '-' },
@@ -360,6 +360,13 @@ export default function FailureAnalysisPage() {
       />
     </Space>
   );
+}
+
+function withTotalPagination(pageSize: number) {
+  return {
+    pageSize,
+    showTotal: (total: number) => `共${total}条，${Math.ceil(total / pageSize)}页`
+  };
 }
 
 function periodLabel(period?: string, year?: number) {

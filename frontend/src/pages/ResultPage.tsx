@@ -181,7 +181,7 @@ export default function ResultPage() {
                       rowKey="sn"
                       loading={loading}
                       dataSource={tableData}
-                      pagination={{ pageSize: 20 }}
+                      pagination={withTotalPagination(20)}
                       columns={columns}
                     />
                   </Space>
@@ -193,4 +193,11 @@ export default function ResultPage() {
       )}
     </Space>
   );
+}
+
+function withTotalPagination(pageSize: number) {
+  return {
+    pageSize,
+    showTotal: (total: number) => `共${total}条，${Math.ceil(total / pageSize)}页`
+  };
 }
