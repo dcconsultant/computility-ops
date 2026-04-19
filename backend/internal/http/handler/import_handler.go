@@ -21,18 +21,17 @@ type ImportHandler struct {
 }
 
 type serverPackageStandardizedItem struct {
-	SN                     string `json:"sn"`
-	Manufacturer           string `json:"manufacturer"`
-	Model                  string `json:"model"`
-	PSA                    string `json:"psa"`
-	IDC                    string `json:"idc,omitempty"`
-	Environment            string `json:"environment,omitempty"`
-	ConfigType             string `json:"config_type"`
+	SN                  string `json:"sn"`
+	Manufacturer        string `json:"manufacturer"`
+	Model               string `json:"model"`
+	PSA                 string `json:"psa"`
+	IDC                 string `json:"idc,omitempty"`
+	Environment         string `json:"environment,omitempty"`
+	ConfigType          string `json:"config_type"`
 	ConfigTypeStandardized string `json:"config_type_standardized"`
-	PackageStandardized    string `json:"package_standardized"`
-	PackageMatched         bool   `json:"package_standardized_matched"`
-	WarrantyEndDate        string `json:"warranty_end_date,omitempty"`
-	LaunchDate             string `json:"launch_date,omitempty"`
+	PackageMatched      bool   `json:"package_standardized_matched"`
+	WarrantyEndDate     string `json:"warranty_end_date,omitempty"`
+	LaunchDate          string `json:"launch_date,omitempty"`
 }
 
 func NewImportHandler(s *service.ImportService) *ImportHandler { return &ImportHandler{service: s} }
@@ -92,17 +91,22 @@ func (h *ImportHandler) ExportServerPackageAnomalies(c *gin.Context) {
 			anomaly = append(anomaly, r)
 		}
 	}
+	exportRows := anomaly
+	if len(exportRows) == 0 {
+		// 兜底：避免仅表头，输出全量并让使用者核查标准化状态。
+		exportRows = rows
+	}
 	filename := fmt.Sprintf("server-package-anomaly-%s.%s", time.Now().Format("20060102-150405"), format)
 	if format == "csv" {
 		buf := &bytes.Buffer{}
 		w := csv.NewWriter(buf)
-		header := []string{"SN", "制造商", "服务器型号", "PSA", "机房", "环境", "配置类型", "配置类型标准化", "套餐标准化", "保修结束日期", "投产日期"}
+		header := []string{"SN", "制造商", "服务器型号", "PSA", "机房", "环境", "配置类型", "配置类型标准化", "保修结束日期", "投产日期"}
 		if err := w.Write(header); err != nil {
 			fail(c, 50001, "导出失败")
 			return
 		}
-		for _, r := range anomaly {
-			record := []string{r.SN, r.Manufacturer, r.Model, r.PSA, r.IDC, r.Environment, r.ConfigType, r.ConfigTypeStandardized, r.PackageStandardized, r.WarrantyEndDate, r.LaunchDate}
+		for _, r := range exportRows {
+			record := []string{r.SN, r.Manufacturer, r.Model, r.PSA, r.IDC, r.Environment, r.ConfigType, r.ConfigTypeStandardized, r.WarrantyEndDate, r.LaunchDate}
 			if err := w.Write(record); err != nil {
 				fail(c, 50001, "导出失败")
 				return
@@ -120,12 +124,12 @@ func (h *ImportHandler) ExportServerPackageAnomalies(c *gin.Context) {
 
 	xf := excelize.NewFile()
 	sheet := xf.GetSheetName(0)
-	header := []string{"SN", "制造商", "服务器型号", "PSA", "机房", "环境", "配置类型", "配置类型标准化", "套餐标准化", "保修结束日期", "投产日期"}
+	header := []string{"SN", "制造商", "服务器型号", "PSA", "机房", "环境", "配置类型", "配置类型标准化", "保修结束日期", "投产日期"}
 	for i, h := range header {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		_ = xf.SetCellValue(sheet, cell, h)
 	}
-	for idx, r := range anomaly {
+	for idx, r := range exportRows {
 		row := idx + 2
 		_ = xf.SetCellValue(sheet, fmt.Sprintf("A%d", row), r.SN)
 		_ = xf.SetCellValue(sheet, fmt.Sprintf("B%d", row), r.Manufacturer)
@@ -135,9 +139,8 @@ func (h *ImportHandler) ExportServerPackageAnomalies(c *gin.Context) {
 		_ = xf.SetCellValue(sheet, fmt.Sprintf("F%d", row), r.Environment)
 		_ = xf.SetCellValue(sheet, fmt.Sprintf("G%d", row), r.ConfigType)
 		_ = xf.SetCellValue(sheet, fmt.Sprintf("H%d", row), r.ConfigTypeStandardized)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("I%d", row), r.PackageStandardized)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("J%d", row), r.WarrantyEndDate)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("K%d", row), r.LaunchDate)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("I%d", row), r.WarrantyEndDate)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("J%d", row), r.LaunchDate)
 	}
 	buf, err := xf.WriteToBuffer()
 	if err != nil {
@@ -594,8 +597,7 @@ func (h *ImportHandler) buildServerPackageStandardizedRows(ctx context.Context) 
 			IDC:                    s.IDC,
 			Environment:            s.Environment,
 			ConfigType:             s.ConfigType,
-			ConfigTypeStandardized: n,
-			PackageStandardized:    status,
+			ConfigTypeStandardized: status,
 			PackageMatched:         matched,
 			WarrantyEndDate:        s.WarrantyEndDate,
 			LaunchDate:             s.LaunchDate,
