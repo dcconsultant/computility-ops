@@ -178,7 +178,7 @@ export interface PlanItem {
   cpu_logical_cores: number;
   gpu_card_count?: number;
   storage_capacity_tb?: number;
-  psa: number;
+  psa: string;
   arch_standardized_factor: number;
   base_score?: number;
   afr_old?: number;
@@ -210,7 +210,7 @@ export interface NonRenewalItem {
   model?: string;
   environment?: string;
   config_type?: string;
-  psa?: number;
+  psa?: string;
   final_score?: number;
   reason_code: string;
   reason: string;

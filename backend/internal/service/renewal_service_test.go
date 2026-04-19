@@ -99,6 +99,38 @@ func TestRenewalService_CreatePlan_ExcludePSA(t *testing.T) {
 	}
 }
 
+func TestRenewalService_CreatePlan_ExcludePSA_PathSegmentPrefix(t *testing.T) {
+	ctx := context.Background()
+	serverRepo := mem.NewServerRepo()
+	datasetRepo := mem.NewDatasetRepo()
+	renewalRepo := mem.NewRenewalRepo()
+
+	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
+		{SN: "A", ConfigType: "c1", PSA: "/aa/ss/as", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+		{SN: "B", ConfigType: "c1", PSA: "/aa/ss/as,/aa/ss/at", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+		{SN: "C", ConfigType: "c1", PSA: "/bb/xx", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+	})
+	_ = datasetRepo.ReplaceHostPackages(ctx, []domain.HostPackageConfig{{ConfigType: "c1", SceneCategory: "计算型", CPULogicalCores: 8, ArchStandardizedFactor: 1}})
+
+	svc := NewRenewalService(serverRepo, datasetRepo, renewalRepo)
+
+	planPrefix, err := svc.CreatePlan(ctx, CreatePlanInput{TargetDate: "2026-01-01", TargetCores: 8, ExcludedPSAs: []string{"/aa"}})
+	if err != nil {
+		t.Fatalf("CreatePlan(prefix) error = %v", err)
+	}
+	if len(planPrefix.Items) != 1 || planPrefix.Items[0].SN != "C" {
+		t.Fatalf("prefix exclude failed, items=%+v", planPrefix.Items)
+	}
+
+	planExact, err := svc.CreatePlan(ctx, CreatePlanInput{TargetDate: "2026-01-01", TargetCores: 16, ExcludedPSAs: []string{"/aa/ss/at"}})
+	if err != nil {
+		t.Fatalf("CreatePlan(exact) error = %v", err)
+	}
+	if len(planExact.Items) != 2 || planExact.Items[0].SN != "A" || planExact.Items[1].SN != "C" {
+		t.Fatalf("exact exclude failed, items=%+v", planExact.Items)
+	}
+}
+
 func TestRenewalService_CreatePlan_SkipUnmatchedConfigType(t *testing.T) {
 	ctx := context.Background()
 	serverRepo := mem.NewServerRepo()
@@ -124,6 +156,54 @@ func TestRenewalService_CreatePlan_SkipUnmatchedConfigType(t *testing.T) {
 	}
 	if len(plan.Items) != 1 || plan.Items[0].SN != "A" {
 		t.Fatalf("items=%+v, want only SN A", plan.Items)
+	}
+}
+
+func TestRenewalService_CreatePlan_ExcludePSA_SegmentBoundary(t *testing.T) {
+	ctx := context.Background()
+	serverRepo := mem.NewServerRepo()
+	datasetRepo := mem.NewDatasetRepo()
+	renewalRepo := mem.NewRenewalRepo()
+
+	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
+		{SN: "AA", ConfigType: "c1", PSA: "/aa", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+		{SN: "AB", ConfigType: "c1", PSA: "/ab", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+		{SN: "SSA", ConfigType: "c1", PSA: "/ss/st/a", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+	})
+	_ = datasetRepo.ReplaceHostPackages(ctx, []domain.HostPackageConfig{{ConfigType: "c1", SceneCategory: "计算型", CPULogicalCores: 8, ArchStandardizedFactor: 1}})
+
+	svc := NewRenewalService(serverRepo, datasetRepo, renewalRepo)
+
+	planA, err := svc.CreatePlan(ctx, CreatePlanInput{TargetDate: "2026-01-01", TargetCores: 24, ExcludedPSAs: []string{"/a"}})
+	if err != nil {
+		t.Fatalf("CreatePlan(/a) error = %v", err)
+	}
+	if len(planA.Items) != 3 {
+		t.Fatalf("/a should not match /aa,/ab,/ss/st/a, items=%+v", planA.Items)
+	}
+
+	planSS, err := svc.CreatePlan(ctx, CreatePlanInput{TargetDate: "2026-01-01", TargetCores: 16, ExcludedPSAs: []string{"/ss"}})
+	if err != nil {
+		t.Fatalf("CreatePlan(/ss) error = %v", err)
+	}
+	if len(planSS.Items) != 2 || planSS.Items[0].SN != "AA" || planSS.Items[1].SN != "AB" {
+		t.Fatalf("/ss should match /ss/st/a only, items=%+v", planSS.Items)
+	}
+
+	planSSST, err := svc.CreatePlan(ctx, CreatePlanInput{TargetDate: "2026-01-01", TargetCores: 16, ExcludedPSAs: []string{"/ss/st"}})
+	if err != nil {
+		t.Fatalf("CreatePlan(/ss/st) error = %v", err)
+	}
+	if len(planSSST.Items) != 2 || planSSST.Items[0].SN != "AA" || planSSST.Items[1].SN != "AB" {
+		t.Fatalf("/ss/st should match /ss/st/a, items=%+v", planSSST.Items)
+	}
+
+	planExact, err := svc.CreatePlan(ctx, CreatePlanInput{TargetDate: "2026-01-01", TargetCores: 16, ExcludedPSAs: []string{"/ss/st/a"}})
+	if err != nil {
+		t.Fatalf("CreatePlan(/ss/st/a) error = %v", err)
+	}
+	if len(planExact.Items) != 2 || planExact.Items[0].SN != "AA" || planExact.Items[1].SN != "AB" {
+		t.Fatalf("/ss/st/a should match itself, items=%+v", planExact.Items)
 	}
 }
 

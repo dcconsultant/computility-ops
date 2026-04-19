@@ -2,8 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"sort"
 	"strconv"
@@ -92,14 +90,16 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		excludedSet[normalizeEnv("测试")] = true
 	}
 
-	excludedPSAMatcher := newPSAExactMatcher()
+	excludedPSAMatcher := newPSAMatcher()
 	excludedPSACanonical := make([]string, 0, len(in.ExcludedPSAs))
 	for _, psa := range in.ExcludedPSAs {
 		n := normalizeText(psa)
-		if n == "" || excludedPSAMatcher.HasNormalized(n) {
+		if n == "" {
 			continue
 		}
-		excludedPSAMatcher.AddNormalized(n)
+		if !excludedPSAMatcher.AddNormalized(n) {
+			continue
+		}
 		excludedPSACanonical = append(excludedPSACanonical, strings.TrimSpace(psa))
 	}
 
@@ -149,14 +149,13 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			continue
 		}
 		if excludedPSAMatcher.MatchRaw(srv.PSA) {
-			psa, _ := parsePSAValue(srv.PSA)
 			nonRenewalItems = append(nonRenewalItems, domain.NonRenewalItem{
 				SN:           srv.SN,
 				Manufacturer: srv.Manufacturer,
 				Model:        srv.Model,
 				Environment:  srv.Environment,
 				ConfigType:   srv.ConfigType,
-				PSA:          psa,
+				PSA:          strings.TrimSpace(srv.PSA),
 				ReasonCode:   "psa_exception",
 				Reason:       "PSA例外",
 				ReasonDetail: fmt.Sprintf("PSA=%s 命中排除条件", strings.TrimSpace(srv.PSA)),
@@ -211,10 +210,6 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		}
 
 		baseValue := pkg.ServerValueScore
-		psaValue, psaParsed := parsePSAValue(srv.PSA)
-		if psaParsed {
-			baseValue = psaValue
-		}
 		baseScore := baseValue * coef
 		item := domain.RenewalItem{
 			SN:                     srv.SN,
@@ -227,7 +222,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			CPULogicalCores:        cores,
 			GPUCardCount:           gpuCards,
 			StorageCapacityTB:      pkg.StorageCapacityTB,
-			PSA:                    baseValue,
+			PSA:                    strings.TrimSpace(srv.PSA),
 			ArchStandardizedFactor: coef,
 			BaseScore:              baseScore,
 			FinalScore:             baseScore,
@@ -635,52 +630,54 @@ func maxFloat(a, b float64) float64 {
 	return b
 }
 
-func parsePSAValue(raw string) (float64, bool) {
-	v := strings.TrimSpace(raw)
-	if v == "" {
-		return 0, false
+type psaMatcher struct {
+	patterns map[string]struct{}
+}
+
+func newPSAMatcher() *psaMatcher {
+	return &psaMatcher{patterns: map[string]struct{}{}}
+}
+
+// AddNormalized adds an exclusion pattern and returns true when newly added.
+// Matching is slash-segment aware prefix matching:
+// pattern "/ss" matches "/ss", "/ss/st", "/ss/st/a";
+// pattern "/a" does NOT match "/aa" or "/ab".
+func (m *psaMatcher) AddNormalized(v string) bool {
+	if _, ok := m.patterns[v]; ok {
+		return false
 	}
-	f, err := strconv.ParseFloat(v, 64)
-	if err != nil {
-		return 0, false
-	}
-	return f, true
+	m.patterns[v] = struct{}{}
+	return true
 }
 
-type psaExactMatcher struct {
-	byHash map[string][]string
-}
-
-func newPSAExactMatcher() *psaExactMatcher {
-	return &psaExactMatcher{byHash: map[string][]string{}}
-}
-
-func (m *psaExactMatcher) AddNormalized(v string) {
-	h := textHash(v)
-	m.byHash[h] = append(m.byHash[h], v)
-}
-
-func (m *psaExactMatcher) HasNormalized(v string) bool {
-	h := textHash(v)
-	for _, c := range m.byHash[h] {
-		if c == v {
-			return true
+func (m *psaMatcher) MatchRaw(raw string) bool {
+	for _, token := range splitPSATokens(raw) {
+		for pattern := range m.patterns {
+			if token == pattern || strings.HasPrefix(token, pattern+"/") {
+				return true
+			}
 		}
 	}
 	return false
 }
 
-func (m *psaExactMatcher) MatchRaw(raw string) bool {
-	n := normalizeText(raw)
-	if n == "" {
-		return false
+func splitPSATokens(raw string) []string {
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		switch r {
+		case ',', '，', ';', '；':
+			return true
+		default:
+			return false
+		}
+	})
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		n := normalizeText(p)
+		if n != "" {
+			out = append(out, n)
+		}
 	}
-	return m.HasNormalized(n)
-}
-
-func textHash(v string) string {
-	sum := sha256.Sum256([]byte(v))
-	return hex.EncodeToString(sum[:])
+	return out
 }
 
 func containsNormalized(list []string, target string) bool {

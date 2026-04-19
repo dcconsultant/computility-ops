@@ -57,7 +57,7 @@ type RenewalItem struct {
 	CPULogicalCores        int     `json:"cpu_logical_cores"`
 	GPUCardCount           int     `json:"gpu_card_count,omitempty"`
 	StorageCapacityTB      float64 `json:"storage_capacity_tb,omitempty"`
-	PSA                    float64 `json:"psa"`
+	PSA                    string  `json:"psa"`
 	ArchStandardizedFactor float64 `json:"arch_standardized_factor"`
 	BaseScore              float64 `json:"base_score,omitempty"`
 	AFROld                 float64 `json:"afr_old,omitempty"`
@@ -74,7 +74,7 @@ type NonRenewalItem struct {
 	Model        string  `json:"model,omitempty"`
 	Environment  string  `json:"environment,omitempty"`
 	ConfigType   string  `json:"config_type,omitempty"`
-	PSA          float64 `json:"psa,omitempty"`
+	PSA          string  `json:"psa,omitempty"`
 	FinalScore   float64 `json:"final_score,omitempty"`
 	ReasonCode   string  `json:"reason_code"`
 	Reason       string  `json:"reason"`

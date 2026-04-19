@@ -121,7 +121,7 @@ export default function PlanDetailPage() {
                 { title: 'SN', dataIndex: 'sn', width: 160 },
                 { title: '栏目', dataIndex: 'bucket', width: 110 },
                 { title: '配置类型', dataIndex: 'config_type', width: 140 },
-                { title: 'PSA', dataIndex: 'psa', width: 100, render: (v: number) => formatFloat(v) },
+                { title: 'PSA', dataIndex: 'psa', width: 120, render: (v?: string) => (v && v.trim() ? v : '-') },
                 { title: '价值分', dataIndex: 'final_score', width: 110, render: (v: number) => formatFloat(v) },
                 { title: '桶内排名', dataIndex: 'rank_in_bucket', width: 100, render: (v: number) => (v ? formatInt(v) : '-') },
                 { title: '不续保理由', dataIndex: 'reason', width: 140 },
