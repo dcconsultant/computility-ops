@@ -247,6 +247,11 @@ export interface RenewalPlan {
   target_cores: number;
   warm_target_storage_tb?: number;
   hot_target_storage_tb?: number;
+  domestic_budget?: number;
+  india_budget?: number;
+  total_servers_no_psa?: number;
+  domestic_servers_no_psa?: number;
+  india_servers_no_psa?: number;
   covered_compute_cores?: number;
   covered_warm_storage_tb?: number;
   covered_hot_storage_tb?: number;

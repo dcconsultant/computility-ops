@@ -19,6 +19,8 @@ type CreatePlanInput struct {
 	TargetCores          int
 	WarmTargetStorageTB  float64
 	HotTargetStorageTB   float64
+	DomesticBudget       float64
+	IndiaBudget          float64
 }
 
 type RenewalService struct {
@@ -45,6 +47,9 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	}
 	if strings.TrimSpace(in.TargetDate) == "" {
 		return domain.RenewalPlan{}, fmt.Errorf("target_date is required")
+	}
+	if in.DomesticBudget < 0 || in.IndiaBudget < 0 {
+		return domain.RenewalPlan{}, fmt.Errorf("budget must be >= 0")
 	}
 	targetDate, err := parseDate(in.TargetDate)
 	if err != nil {
@@ -104,6 +109,21 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			continue
 		}
 		excludedPSACanonical = append(excludedPSACanonical, strings.TrimSpace(psa))
+	}
+
+	totalServersNoPSA := 0
+	domesticServersNoPSA := 0
+	indiaServersNoPSA := 0
+	for _, srv := range servers {
+		if excludedPSAMatcher.MatchRaw(srv.PSA) {
+			continue
+		}
+		totalServersNoPSA++
+		if isIndiaIDC(srv.IDC) {
+			indiaServersNoPSA++
+		} else {
+			domesticServersNoPSA++
+		}
 	}
 
 	pkgMap := map[string]domain.HostPackageConfig{}
@@ -403,6 +423,11 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		TargetCores:          in.TargetCores,
 		WarmTargetStorageTB:  in.WarmTargetStorageTB,
 		HotTargetStorageTB:   in.HotTargetStorageTB,
+		DomesticBudget:       in.DomesticBudget,
+		IndiaBudget:          in.IndiaBudget,
+		TotalServersNoPSA:    totalServersNoPSA,
+		DomesticServersNoPSA: domesticServersNoPSA,
+		IndiaServersNoPSA:    indiaServersNoPSA,
 		CoveredComputeCores:  coveredComputeCores,
 		CoveredWarmStorageTB: coveredWarmStorage,
 		CoveredHotStorageTB:  coveredHotStorage,
@@ -654,6 +679,10 @@ func maxFloat(a, b float64) float64 {
 		return a
 	}
 	return b
+}
+
+func isIndiaIDC(idc string) bool {
+	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(idc)), "IN")
 }
 
 type psaMatcher struct {

@@ -12,6 +12,8 @@ type CreatePlanReq struct {
 	TargetCores          int      `json:"target_cores" binding:"required,min=1"`
 	WarmTargetStorageTB  float64  `json:"warm_target_storage_tb" binding:"required,min=0"`
 	HotTargetStorageTB   float64  `json:"hot_target_storage_tb" binding:"required,min=0"`
+	DomesticBudget       float64  `json:"domestic_budget" binding:"min=0"`
+	IndiaBudget          float64  `json:"india_budget" binding:"min=0"`
 }
 
 type ListPlansReq struct {

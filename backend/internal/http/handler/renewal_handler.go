@@ -35,6 +35,8 @@ func (h *RenewalHandler) CreatePlan(c *gin.Context) {
 		TargetCores:          req.TargetCores,
 		WarmTargetStorageTB:  req.WarmTargetStorageTB,
 		HotTargetStorageTB:   req.HotTargetStorageTB,
+		DomesticBudget:       req.DomesticBudget,
+		IndiaBudget:          req.IndiaBudget,
 	})
 	if err != nil {
 		fail(c, 40001, err.Error())

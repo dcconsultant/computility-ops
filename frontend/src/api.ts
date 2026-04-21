@@ -148,6 +148,8 @@ export interface CreatePlanPayload {
   target_cores: number;
   warm_target_storage_tb: number;
   hot_target_storage_tb: number;
+  domestic_budget: number;
+  india_budget: number;
 }
 
 export async function createPlan(payload: CreatePlanPayload) {

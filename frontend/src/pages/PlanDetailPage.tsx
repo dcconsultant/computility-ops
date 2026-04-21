@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Space, Table, Tag, Typography, message } from 'antd';
+import { Alert, Button, Card, Space, Table, Tabs, Tag, Typography, message } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getPlan, listRenewalUnitPrices } from '../api';
@@ -23,11 +23,11 @@ interface SummaryRow {
 interface RegionSummaryRow {
   key: string;
   region: string;
-  servers: number;
-  computeCores: number;
-  storageTB: number;
-  gpuCards: number;
-  amount: number;
+  renewalCount: number;
+  estimatedCost: number;
+  activeRatio: number;
+  budget: number;
+  budgetExecutionRate: number | null;
 }
 
 interface CostRow {
@@ -115,21 +115,28 @@ export default function PlanDetailPage() {
                 ]}
               />
 
-              <Text type="secondary">按地域汇总（全场景）</Text>
-              <Table<RegionSummaryRow>
-                rowKey="key"
-                dataSource={regionSummaryRows}
-                pagination={false}
-                columns={[
-                  { title: '地域', dataIndex: 'region', width: 120 },
-                  { title: '续保台数', dataIndex: 'servers', width: 110, render: (v: number) => formatInt(v) },
-                  { title: '计算核数', dataIndex: 'computeCores', width: 120, render: (v: number) => formatInt(v) },
-                  { title: '存储容量(TB)', dataIndex: 'storageTB', width: 140, render: (v: number) => toTB(v) },
-                  { title: 'GPU卡数', dataIndex: 'gpuCards', width: 120, render: (v: number) => formatInt(v) },
-                  { title: '续保金额', dataIndex: 'amount', width: 140, render: (v: number) => formatMoney(v) }
-                ]}
-              />
             </Space>
+          </Card>
+
+          <Card title="续保纵览（国内 / 印度 / 合计）" loading={loading}>
+            <Table<RegionSummaryRow>
+              rowKey="key"
+              dataSource={regionSummaryRows}
+              pagination={false}
+              columns={[
+                { title: '地域', dataIndex: 'region', width: 140 },
+                { title: '续保数量', dataIndex: 'renewalCount', width: 120, render: (v: number) => formatInt(v) },
+                { title: '预估花费(CNY)', dataIndex: 'estimatedCost', width: 140, render: (v: number) => formatMoney(v) },
+                { title: '在役占比', dataIndex: 'activeRatio', width: 120, render: (v: number) => formatPercent(v) },
+                { title: '26预算', dataIndex: 'budget', width: 120, render: (v: number) => formatMoney(v) },
+                {
+                  title: '预算执行率',
+                  dataIndex: 'budgetExecutionRate',
+                  width: 130,
+                  render: (v: number | null) => (v == null ? '-' : formatPercent(v))
+                }
+              ]}
+            />
           </Card>
 
           <Card title="续保金额估算（按机房区分印度/国内）" loading={loading}>
@@ -151,45 +158,58 @@ export default function PlanDetailPage() {
             </Space>
           </Card>
 
-          <Card title="续保清单" loading={loading}>
-            <Table
-              rowKey="sn"
-              dataSource={plan.items}
-              pagination={withTotalPagination(10)}
-              columns={[
-                { title: '排名', dataIndex: 'rank', width: 70, render: (v: number) => formatInt(v) },
-                { title: '栏目', dataIndex: 'bucket', width: 100 },
-                { title: 'SN', dataIndex: 'sn', width: 160 },
-                { title: '机房', dataIndex: 'idc', width: 110 },
-                { title: '服务器型号', dataIndex: 'model', width: 160 },
-                { title: '配置类型', dataIndex: 'config_type', width: 140 },
-                { title: '场景大类', dataIndex: 'scene_category', width: 120 },
-                { title: 'CPU核数', dataIndex: 'cpu_logical_cores', width: 100, render: (v: number) => formatInt(v) },
-                { title: 'GPU卡数', dataIndex: 'gpu_card_count', width: 100, render: (v: number) => formatInt(v) },
-                { title: '存储(TB)', dataIndex: 'storage_capacity_tb', width: 100, render: (v: number) => toTB(v) },
-                { title: '最终分', dataIndex: 'final_score', width: 110, render: (v: number) => formatFloat(v) }
+          <Card title="清单明细" loading={loading}>
+            <Tabs
+              items={[
+                {
+                  key: 'renewal',
+                  label: `续保清单（${formatInt((plan.items || []).length)}）`,
+                  children: (
+                    <Table
+                      rowKey="sn"
+                      dataSource={plan.items}
+                      pagination={withTotalPagination(10)}
+                      columns={[
+                        { title: '排名', dataIndex: 'rank', width: 70, render: (v: number) => formatInt(v) },
+                        { title: '栏目', dataIndex: 'bucket', width: 100 },
+                        { title: 'SN', dataIndex: 'sn', width: 160 },
+                        { title: '机房', dataIndex: 'idc', width: 110 },
+                        { title: '服务器型号', dataIndex: 'model', width: 160 },
+                        { title: '配置类型', dataIndex: 'config_type', width: 140 },
+                        { title: '场景大类', dataIndex: 'scene_category', width: 120 },
+                        { title: 'CPU核数', dataIndex: 'cpu_logical_cores', width: 100, render: (v: number) => formatInt(v) },
+                        { title: 'GPU卡数', dataIndex: 'gpu_card_count', width: 100, render: (v: number) => formatInt(v) },
+                        { title: '存储(TB)', dataIndex: 'storage_capacity_tb', width: 100, render: (v: number) => toTB(v) },
+                        { title: '最终分', dataIndex: 'final_score', width: 110, render: (v: number) => formatFloat(v) }
+                      ]}
+                      scroll={{ x: 1320 }}
+                    />
+                  )
+                },
+                {
+                  key: 'non-renewal',
+                  label: `不续保清单（${formatInt((plan.non_renewal_items || []).length)}）`,
+                  children: (
+                    <Table
+                      rowKey={(r) => `${r.sn}-${r.reason_code}-${r.rank_in_bucket || 0}`}
+                      dataSource={plan.non_renewal_items || []}
+                      pagination={withTotalPagination(10)}
+                      columns={[
+                        { title: 'SN', dataIndex: 'sn', width: 160 },
+                        { title: '机房', dataIndex: 'idc', width: 110 },
+                        { title: '栏目', dataIndex: 'bucket', width: 110 },
+                        { title: '配置类型', dataIndex: 'config_type', width: 140 },
+                        { title: 'PSA', dataIndex: 'psa', width: 120, render: (v?: string) => (v && v.trim() ? v : '-') },
+                        { title: '价值分', dataIndex: 'final_score', width: 110, render: (v: number) => formatFloat(v) },
+                        { title: '桶内排名', dataIndex: 'rank_in_bucket', width: 100, render: (v: number) => (v ? formatInt(v) : '-') },
+                        { title: '不续保理由', dataIndex: 'reason', width: 140 },
+                        { title: '原因说明', dataIndex: 'reason_detail', width: 260 }
+                      ]}
+                      scroll={{ x: 1300 }}
+                    />
+                  )
+                }
               ]}
-              scroll={{ x: 1320 }}
-            />
-          </Card>
-
-          <Card title="不续保清单（含原因）" loading={loading}>
-            <Table
-              rowKey={(r) => `${r.sn}-${r.reason_code}-${r.rank_in_bucket || 0}`}
-              dataSource={plan.non_renewal_items || []}
-              pagination={withTotalPagination(10)}
-              columns={[
-                { title: 'SN', dataIndex: 'sn', width: 160 },
-                { title: '机房', dataIndex: 'idc', width: 110 },
-                { title: '栏目', dataIndex: 'bucket', width: 110 },
-                { title: '配置类型', dataIndex: 'config_type', width: 140 },
-                { title: 'PSA', dataIndex: 'psa', width: 120, render: (v?: string) => (v && v.trim() ? v : '-') },
-                { title: '价值分', dataIndex: 'final_score', width: 110, render: (v: number) => formatFloat(v) },
-                { title: '桶内排名', dataIndex: 'rank_in_bucket', width: 100, render: (v: number) => (v ? formatInt(v) : '-') },
-                { title: '不续保理由', dataIndex: 'reason', width: 140 },
-                { title: '原因说明', dataIndex: 'reason_detail', width: 260 }
-              ]}
-              scroll={{ x: 1300 }}
             />
           </Card>
         </>
@@ -274,56 +294,49 @@ function buildSummaryRows(plan: RenewalPlan): SummaryRow[] {
 }
 
 function buildRegionSummaryRows(plan: RenewalPlan, costRows: CostRow[]): RegionSummaryRow[] {
-  const makeRow = (region: string): RegionSummaryRow => ({
-    key: region,
-    region,
-    servers: 0,
-    computeCores: 0,
-    storageTB: 0,
-    gpuCards: 0,
-    amount: 0
-  });
+  const domesticRenewalCount = (plan.items || []).filter((x) => !isIndiaIDC(x.idc)).length;
+  const indiaRenewalCount = (plan.items || []).filter((x) => isIndiaIDC(x.idc)).length;
+  const domesticEstimatedCost = costRows.filter((x) => x.region === '国内').reduce((s, x) => s + x.amount, 0);
+  const indiaEstimatedCost = costRows.filter((x) => x.region === '印度').reduce((s, x) => s + x.amount, 0);
 
-  const byRegion = new Map<string, RegionSummaryRow>([
-    ['国内', makeRow('国内全场景汇总')],
-    ['印度', makeRow('印度全场景汇总')]
-  ]);
+  const domesticTotal = Number(plan.domestic_servers_no_psa || 0);
+  const indiaTotal = Number(plan.india_servers_no_psa || 0);
+  const total = Number(plan.total_servers_no_psa || (domesticTotal + indiaTotal));
+  const domesticBudget = Number(plan.domestic_budget || 0);
+  const indiaBudget = Number(plan.india_budget || 0);
 
-  for (const item of plan.items || []) {
-    const regionKey = isIndiaIDC(item.idc) ? '印度' : '国内';
-    const row = byRegion.get(regionKey);
-    if (!row) continue;
-    row.servers += 1;
-    if ((item.bucket || 'compute') === 'compute') {
-      row.computeCores += Number(item.cpu_logical_cores || 0);
+  const rows: RegionSummaryRow[] = [
+    {
+      key: 'domestic',
+      region: '国内',
+      renewalCount: domesticRenewalCount,
+      estimatedCost: domesticEstimatedCost,
+      activeRatio: domesticTotal > 0 ? domesticRenewalCount / domesticTotal : 0,
+      budget: domesticBudget,
+      budgetExecutionRate: domesticBudget > 0 ? domesticEstimatedCost / domesticBudget : null
+    },
+    {
+      key: 'india',
+      region: '印度',
+      renewalCount: indiaRenewalCount,
+      estimatedCost: indiaEstimatedCost,
+      activeRatio: indiaTotal > 0 ? indiaRenewalCount / indiaTotal : 0,
+      budget: indiaBudget,
+      budgetExecutionRate: indiaBudget > 0 ? indiaEstimatedCost / indiaBudget : null
     }
-    row.storageTB += Number(item.storage_capacity_tb || 0);
-    row.gpuCards += Number(item.gpu_card_count || 0);
-  }
-
-  for (const cost of costRows) {
-    const row = byRegion.get(cost.region);
-    if (!row) continue;
-    row.amount += Number(cost.amount || 0);
-  }
-
-  const domestic = byRegion.get('国内') || makeRow('国内全场景汇总');
-  const india = byRegion.get('印度') || makeRow('印度全场景汇总');
-  const global: RegionSummaryRow = {
-    key: 'global',
-    region: '全球全场景汇总',
-    servers: domestic.servers + india.servers,
-    computeCores: domestic.computeCores + india.computeCores,
-    storageTB: domestic.storageTB + india.storageTB,
-    gpuCards: domestic.gpuCards + india.gpuCards,
-    amount: domestic.amount + india.amount
-  };
-
-  return [
-    { ...domestic, key: 'domestic' },
-    { ...india, key: 'india' },
-    global
   ];
+
+  const totalBudget = domesticBudget + indiaBudget;
+  rows.push({
+    key: 'total',
+    region: '合计',
+    renewalCount: domesticRenewalCount + indiaRenewalCount,
+    estimatedCost: domesticEstimatedCost + indiaEstimatedCost,
+    activeRatio: total > 0 ? (domesticRenewalCount + indiaRenewalCount) / total : 0,
+    budget: totalBudget,
+    budgetExecutionRate: totalBudget > 0 ? (domesticEstimatedCost + indiaEstimatedCost) / totalBudget : null
+  });
+  return rows;
 }
 
 function buildCostRows(plan: RenewalPlan, unitPrices: RenewalUnitPrice[]): CostRow[] {
@@ -384,4 +397,8 @@ function formatFloat(v?: number) {
 
 function formatMoney(v?: number) {
   return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+function formatPercent(v?: number) {
+  return `${(Number(v || 0) * 100).toFixed(2)}%`;
 }

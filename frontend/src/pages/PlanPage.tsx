@@ -43,6 +43,8 @@ export default function PlanPage() {
   const [targetCores, setTargetCores] = useState<number>(1200);
   const [warmTargetStorageTB, setWarmTargetStorageTB] = useState<number>(0);
   const [hotTargetStorageTB, setHotTargetStorageTB] = useState<number>(0);
+  const [domesticBudget, setDomesticBudget] = useState<number>(0);
+  const [indiaBudget, setIndiaBudget] = useState<number>(0);
   const [loading, setLoading] = useState(false);
 
   const [plans, setPlans] = useState<RenewalPlan[]>([]);
@@ -69,6 +71,8 @@ export default function PlanPage() {
     setTargetCores(Number(latest.target_cores || 0));
     setWarmTargetStorageTB(Number(latest.warm_target_storage_tb || 0));
     setHotTargetStorageTB(Number(latest.hot_target_storage_tb || 0));
+    setDomesticBudget(Number(latest.domestic_budget || 0));
+    setIndiaBudget(Number(latest.india_budget || 0));
     setPlanFormHydrated(true);
   }
 
@@ -148,6 +152,10 @@ export default function PlanPage() {
       message.warning('温/热存储目标容量不能为负数');
       return;
     }
+    if (domesticBudget < 0 || indiaBudget < 0) {
+      message.warning('预算不能为负数');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -159,7 +167,9 @@ export default function PlanPage() {
         excluded_psas: excludedPSAList,
         target_cores: targetCores,
         warm_target_storage_tb: warmTargetStorageTB,
-        hot_target_storage_tb: hotTargetStorageTB
+        hot_target_storage_tb: hotTargetStorageTB,
+        domestic_budget: domesticBudget,
+        india_budget: indiaBudget
       }));
       message.success(`方案已生成：${resp.data.plan_id}`);
       await reloadPlans();
@@ -357,6 +367,11 @@ export default function PlanPage() {
                     <InputNumber min={1} value={targetCores} onChange={(v) => setTargetCores(v ?? 0)} addonBefore="计算目标核数" />
                     <InputNumber min={0} step={1} value={warmTargetStorageTB} onChange={(v) => setWarmTargetStorageTB(v ?? 0)} addonBefore="温存储需求(TB)" />
                     <InputNumber min={0} step={1} value={hotTargetStorageTB} onChange={(v) => setHotTargetStorageTB(v ?? 0)} addonBefore="热存储需求(TB)" />
+                  </Space>
+
+                  <Space wrap>
+                    <InputNumber min={0} step={1000} value={domesticBudget} onChange={(v) => setDomesticBudget(v ?? 0)} addonBefore="国内预算(CNY)" />
+                    <InputNumber min={0} step={1000} value={indiaBudget} onChange={(v) => setIndiaBudget(v ?? 0)} addonBefore="印度预算(CNY)" />
                     <Button type="primary" loading={loading} onClick={onCreatePlan}>生成方案</Button>
                   </Space>
                 </Space>
