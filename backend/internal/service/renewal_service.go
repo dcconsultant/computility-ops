@@ -43,9 +43,6 @@ func NewRenewalService(serverRepo repository.ServerRepo, datasetRepo repository.
 }
 
 func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (domain.RenewalPlan, error) {
-	if in.TargetCores <= 0 {
-		return domain.RenewalPlan{}, fmt.Errorf("target_cores must be > 0")
-	}
 	if strings.TrimSpace(in.TargetDate) == "" {
 		return domain.RenewalPlan{}, fmt.Errorf("target_date is required")
 	}
