@@ -184,6 +184,10 @@ export function exportPlan(planId: string, format: 'xlsx' | 'csv') {
   window.open(`/api/v1/renewals/plans/${planId}/export?format=${format}`, '_blank');
 }
 
+export function exportNonRenewalPlan(planId: string) {
+  window.open(`/api/v1/renewals/plans/${planId}/non-renewal/export`, '_blank');
+}
+
 export async function listRenewalUnitPrices() {
   const { data } = await http.get<ApiResp<ListData<RenewalUnitPrice>>>('/renewals/unit-prices');
   return data;

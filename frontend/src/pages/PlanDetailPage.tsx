@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Card, Space, Table, Tabs, Tag, Typography, message } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getPlan, listRenewalUnitPrices } from '../api';
+import { exportNonRenewalPlan, getPlan, listRenewalUnitPrices } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
 import type { RenewalPlan, RenewalUnitPrice } from '../types';
 
@@ -97,74 +97,78 @@ export default function PlanDetailPage() {
             </div>
           </Card>
 
-          <Card title="方案总结（目标/保内/续保）" loading={loading}>
-            <Space direction="vertical" style={{ width: '100%' }}>
-              <Table<SummaryRow>
-                rowKey="key"
-                dataSource={summaryRows}
-                pagination={false}
-                columns={[
-                  { title: '场景大类', dataIndex: 'sceneCategory', width: 120 },
-                  { title: '目标', dataIndex: 'target', width: 120 },
-                  { title: '保内满足', dataIndex: 'coveredValue', width: 130 },
-                  { title: '保内台数', dataIndex: 'coveredServers', width: 100, render: (v: number) => formatInt(v) },
-                  { title: '续保满足', dataIndex: 'renewalValue', width: 130 },
-                  { title: '续保台数', dataIndex: 'renewalServers', width: 100, render: (v: number) => formatInt(v) },
-                  { title: '当前总量', dataIndex: 'currentValue', width: 130 },
-                  { title: '当前台数', dataIndex: 'currentServers', width: 100, render: (v: number) => formatInt(v) }
-                ]}
-              />
+          <Tabs
+            items={[
+              {
+                key: 'overview',
+                label: '方案总览',
+                children: (
+                  <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                    <Card title="续保总览-算力" loading={loading}>
+                      <Table<SummaryRow>
+                        rowKey="key"
+                        dataSource={summaryRows}
+                        pagination={false}
+                        columns={[
+                          { title: '场景大类', dataIndex: 'sceneCategory', width: 120 },
+                          { title: '目标', dataIndex: 'target', width: 120 },
+                          { title: '保内满足', dataIndex: 'coveredValue', width: 130 },
+                          { title: '保内台数', dataIndex: 'coveredServers', width: 100, render: (v: number) => formatInt(v) },
+                          { title: '续保满足', dataIndex: 'renewalValue', width: 130 },
+                          { title: '续保台数', dataIndex: 'renewalServers', width: 100, render: (v: number) => formatInt(v) },
+                          { title: '当前总量', dataIndex: 'currentValue', width: 130 },
+                          { title: '当前台数', dataIndex: 'currentServers', width: 100, render: (v: number) => formatInt(v) }
+                        ]}
+                      />
+                    </Card>
 
-            </Space>
-          </Card>
+                    <Card title="续保总览" loading={loading}>
+                      <Table<RegionSummaryRow>
+                        rowKey="key"
+                        dataSource={regionSummaryRows}
+                        pagination={false}
+                        columns={[
+                          { title: '地域', dataIndex: 'region', width: 140 },
+                          { title: '续保数量', dataIndex: 'renewalCount', width: 120, render: (v: number) => formatInt(v) },
+                          { title: '预估花费(CNY)', dataIndex: 'estimatedCost', width: 140, render: (v: number) => formatMoney(v) },
+                          { title: '在役占比', dataIndex: 'activeRatio', width: 120, render: (v: number) => formatPercent(v) },
+                          { title: '26预算', dataIndex: 'budget', width: 120, render: (v: number) => formatMoney(v) },
+                          {
+                            title: '预算执行率',
+                            dataIndex: 'budgetExecutionRate',
+                            width: 130,
+                            render: (v: number | null) => (v == null ? '-' : formatPercent(v))
+                          }
+                        ]}
+                      />
+                    </Card>
 
-          <Card title="续保纵览（国内 / 印度 / 合计）" loading={loading}>
-            <Table<RegionSummaryRow>
-              rowKey="key"
-              dataSource={regionSummaryRows}
-              pagination={false}
-              columns={[
-                { title: '地域', dataIndex: 'region', width: 140 },
-                { title: '续保数量', dataIndex: 'renewalCount', width: 120, render: (v: number) => formatInt(v) },
-                { title: '预估花费(CNY)', dataIndex: 'estimatedCost', width: 140, render: (v: number) => formatMoney(v) },
-                { title: '在役占比', dataIndex: 'activeRatio', width: 120, render: (v: number) => formatPercent(v) },
-                { title: '26预算', dataIndex: 'budget', width: 120, render: (v: number) => formatMoney(v) },
-                {
-                  title: '预算执行率',
-                  dataIndex: 'budgetExecutionRate',
-                  width: 130,
-                  render: (v: number | null) => (v == null ? '-' : formatPercent(v))
-                }
-              ]}
-            />
-          </Card>
-
-          <Card title="续保金额估算（按机房区分印度/国内）" loading={loading}>
-            <Space direction="vertical" style={{ width: '100%' }}>
-              <Text type="secondary">规则：机房以 IN 开头归类印度，其余归类国内；按“国家+场景大类”读取续保管理中的最新单价。</Text>
-              <Text strong>续保总金额：{formatMoney(totalRenewalAmount)}</Text>
-              <Table<CostRow>
-                rowKey="key"
-                dataSource={costRows}
-                pagination={false}
-                columns={[
-                  { title: '区域', dataIndex: 'region', width: 120 },
-                  { title: '栏目', dataIndex: 'bucket', width: 120 },
-                  { title: '单价', dataIndex: 'unitPrice', width: 120, render: (v: number) => formatMoney(v) },
-                  { title: '台数', dataIndex: 'servers', width: 100, render: (v: number) => formatInt(v) },
-                  { title: '金额', dataIndex: 'amount', width: 140, render: (v: number) => formatMoney(v) }
-                ]}
-              />
-            </Space>
-          </Card>
-
-          <Card title="清单明细" loading={loading}>
-            <Tabs
-              items={[
-                {
-                  key: 'renewal',
-                  label: `续保清单（${formatInt((plan.items || []).length)}）`,
-                  children: (
+                    <Card title="续保金额估算（按机房区分印度/国内）" loading={loading}>
+                      <Space direction="vertical" style={{ width: '100%' }}>
+                        <Text type="secondary">规则：机房以 IN 开头归类印度，其余归类国内；按“国家+场景大类”读取续保管理中的最新单价。</Text>
+                        <Text strong>续保总金额：{formatMoney(totalRenewalAmount)}</Text>
+                        <Table<CostRow>
+                          rowKey="key"
+                          dataSource={costRows}
+                          pagination={false}
+                          columns={[
+                            { title: '区域', dataIndex: 'region', width: 120 },
+                            { title: '栏目', dataIndex: 'bucket', width: 120 },
+                            { title: '单价', dataIndex: 'unitPrice', width: 120, render: (v: number) => formatMoney(v) },
+                            { title: '台数', dataIndex: 'servers', width: 100, render: (v: number) => formatInt(v) },
+                            { title: '金额', dataIndex: 'amount', width: 140, render: (v: number) => formatMoney(v) }
+                          ]}
+                        />
+                      </Space>
+                    </Card>
+                  </Space>
+                )
+              },
+              {
+                key: 'renewal',
+                label: `续保清单（${formatInt((plan.items || []).length)}）`,
+                children: (
+                  <Card title="续保清单" loading={loading}>
                     <Table
                       rowKey="sn"
                       dataSource={plan.items}
@@ -184,12 +188,18 @@ export default function PlanDetailPage() {
                       ]}
                       scroll={{ x: 1320 }}
                     />
-                  )
-                },
-                {
-                  key: 'non-renewal',
-                  label: `不续保清单（${formatInt((plan.non_renewal_items || []).length)}）`,
-                  children: (
+                  </Card>
+                )
+              },
+              {
+                key: 'non-renewal',
+                label: `不续保清单（${formatInt((plan.non_renewal_items || []).length)}）`,
+                children: (
+                  <Card
+                    title="不续保清单（含原因）"
+                    loading={loading}
+                    extra={<Button onClick={() => exportNonRenewalPlan(plan.plan_id)}>下载Excel</Button>}
+                  >
                     <Table
                       rowKey={(r) => `${r.sn}-${r.reason_code}-${r.rank_in_bucket || 0}`}
                       dataSource={plan.non_renewal_items || []}
@@ -207,11 +217,11 @@ export default function PlanDetailPage() {
                       ]}
                       scroll={{ x: 1300 }}
                     />
-                  )
-                }
-              ]}
-            />
-          </Card>
+                  </Card>
+                )
+              }
+            ]}
+          />
         </>
       )}
     </Space>

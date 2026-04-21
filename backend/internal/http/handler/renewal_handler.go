@@ -158,6 +158,28 @@ func (h *RenewalHandler) ExportPlan(c *gin.Context) {
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buf.Bytes())
 }
 
+func (h *RenewalHandler) ExportNonRenewal(c *gin.Context) {
+	c.Set("audit_action", "renewals.export_non_renewal")
+	planID := c.Param("plan_id")
+	plan, err := h.service.GetPlan(c.Request.Context(), planID)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			fail(c, 40401, err.Error())
+			return
+		}
+		fail(c, 50001, err.Error())
+		return
+	}
+	buf, err := buildNonRenewalXLSX(plan)
+	if err != nil {
+		fail(c, 50001, err.Error())
+		return
+	}
+	filename := fmt.Sprintf("renewal_non_renewal_%s.xlsx", sanitizeFilenameToken(plan.PlanID))
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buf.Bytes())
+}
+
 func buildCSV(plan domain.RenewalPlan) (*bytes.Buffer, error) {
 	buf := &bytes.Buffer{}
 	w := csv.NewWriter(buf)
@@ -221,6 +243,32 @@ func buildXLSX(plan domain.RenewalPlan) (*bytes.Buffer, error) {
 	for i, item := range plan.Items {
 		cell, _ := excelize.CoordinatesToCellName(1, i+5)
 		if err := f.SetSheetRow(sheet, cell, &[]any{item.Rank, item.Bucket, item.SN, item.Manufacturer, item.Model, item.Environment, item.ConfigType, item.SceneCategory, item.CPULogicalCores, item.GPUCardCount, item.StorageCapacityTB, item.PSA, item.ArchStandardizedFactor, item.BaseScore, item.AFROld, item.AFRAvg, item.FailureAdjustFactor, item.FinalScore, item.SpecialPolicy}); err != nil {
+			return nil, err
+		}
+	}
+	buf, err := f.WriteToBuffer()
+	if err != nil {
+		return nil, err
+	}
+	return buf, nil
+}
+
+func buildNonRenewalXLSX(plan domain.RenewalPlan) (*bytes.Buffer, error) {
+	f := excelize.NewFile()
+	defer func() { _ = f.Close() }()
+	sheet := f.GetSheetName(0)
+	if err := f.SetSheetRow(sheet, "A1", &[]string{"plan_id", "target_date", "target_cores", "selected_count", "non_renewal_count"}); err != nil {
+		return nil, err
+	}
+	if err := f.SetSheetRow(sheet, "A2", &[]any{plan.PlanID, plan.TargetDate, plan.TargetCores, plan.SelectedCount, len(plan.NonRenewalItems)}); err != nil {
+		return nil, err
+	}
+	if err := f.SetSheetRow(sheet, "A4", &[]string{"sn", "idc", "bucket", "config_type", "psa", "final_score", "rank_in_bucket", "reason", "reason_detail"}); err != nil {
+		return nil, err
+	}
+	for i, item := range plan.NonRenewalItems {
+		cell, _ := excelize.CoordinatesToCellName(1, i+5)
+		if err := f.SetSheetRow(sheet, cell, &[]any{item.SN, item.IDC, item.Bucket, item.ConfigType, item.PSA, item.FinalScore, item.RankInBucket, item.Reason, item.ReasonDetail}); err != nil {
 			return nil, err
 		}
 	}
