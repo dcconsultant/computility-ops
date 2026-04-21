@@ -1,6 +1,9 @@
 package handler
 
-import "computility-ops/backend/internal/service"
+import (
+	"computility-ops/backend/internal/domain"
+	"computility-ops/backend/internal/service"
+)
 
 type CreatePlanReq struct {
 	TargetDate           string   `json:"target_date" binding:"required"`
@@ -19,7 +22,11 @@ type ListPlansReq struct {
 	ExcludedEnvironment string `form:"excluded_environment"`
 }
 
+type UpdateRenewalUnitPricesReq struct {
+	Prices []domain.RenewalUnitPrice `json:"prices" binding:"required,min=1"`
+}
+
 type ExportYearFaultAnalysisReq struct {
-	Year int                       `json:"year"`
+	Year int                        `json:"year"`
 	Rows []service.FaultAnalysisRow `json:"rows" binding:"required"`
 }

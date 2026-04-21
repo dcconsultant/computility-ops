@@ -78,6 +78,31 @@ func (h *RenewalHandler) ListPlans(c *gin.Context) {
 	ok(c, gin.H{"list": plans, "total": len(plans), "page": 1, "page_size": len(plans)})
 }
 
+func (h *RenewalHandler) ListUnitPrices(c *gin.Context) {
+	c.Set("audit_action", "renewals.list_unit_prices")
+	prices, err := h.service.ListUnitPrices(c.Request.Context())
+	if err != nil {
+		fail(c, 50001, err.Error())
+		return
+	}
+	ok(c, gin.H{"list": prices, "total": len(prices), "page": 1, "page_size": len(prices)})
+}
+
+func (h *RenewalHandler) UpdateUnitPrices(c *gin.Context) {
+	c.Set("audit_action", "renewals.update_unit_prices")
+	var req UpdateRenewalUnitPricesReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, 40001, "请求参数无效，请检查 prices")
+		return
+	}
+	prices, err := h.service.SaveUnitPrices(c.Request.Context(), req.Prices)
+	if err != nil {
+		fail(c, 40001, err.Error())
+		return
+	}
+	ok(c, gin.H{"list": prices, "total": len(prices), "page": 1, "page_size": len(prices)})
+}
+
 func (h *RenewalHandler) DeletePlan(c *gin.Context) {
 	c.Set("audit_action", "renewals.delete_plan")
 	if err := h.service.DeletePlan(c.Request.Context(), c.Param("plan_id")); err != nil {

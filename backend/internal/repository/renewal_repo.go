@@ -11,4 +11,6 @@ type RenewalPlanRepo interface {
 	GetPlan(ctx context.Context, planID string) (domain.RenewalPlan, error)
 	ListPlans(ctx context.Context) ([]domain.RenewalPlan, error)
 	DeletePlan(ctx context.Context, planID string) error
+	ListUnitPrices(ctx context.Context) ([]domain.RenewalUnitPrice, error)
+	ReplaceUnitPrices(ctx context.Context, prices []domain.RenewalUnitPrice) error
 }

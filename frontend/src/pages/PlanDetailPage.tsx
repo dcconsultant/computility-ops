@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Card, Space, Table, Tag, Typography, message } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getPlan } from '../api';
+import { getPlan, listRenewalUnitPrices } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
-import type { RenewalPlan } from '../types';
+import type { RenewalPlan, RenewalUnitPrice } from '../types';
 
 const { Text, Title } = Typography;
 
@@ -34,6 +34,7 @@ export default function PlanDetailPage() {
   const { planId = '' } = useParams();
   const [loading, setLoading] = useState(false);
   const [plan, setPlan] = useState<RenewalPlan | null>(null);
+  const [unitPrices, setUnitPrices] = useState<RenewalUnitPrice[]>([]);
 
   useEffect(() => {
     if (!planId) return;
@@ -43,8 +44,9 @@ export default function PlanDetailPage() {
   async function loadPlan(id: string) {
     setLoading(true);
     try {
-      const resp = ensureApiOk(await getPlan(id));
-      setPlan(resp.data);
+      const [planResp, unitPriceResp] = await Promise.all([getPlan(id), listRenewalUnitPrices()]);
+      setPlan(ensureApiOk(planResp).data);
+      setUnitPrices(ensureApiOk(unitPriceResp).data.list || []);
     } catch (e) {
       message.error(parseApiError(e, '查询方案失败'));
     } finally {
@@ -53,7 +55,7 @@ export default function PlanDetailPage() {
   }
 
   const summaryRows = useMemo(() => (plan ? buildSummaryRows(plan) : []), [plan]);
-  const costRows = useMemo(() => (plan ? buildCostRows(plan) : []), [plan]);
+  const costRows = useMemo(() => (plan ? buildCostRows(plan, unitPrices) : []), [plan, unitPrices]);
   const totalRenewalAmount = useMemo(() => costRows.reduce((sum, r) => sum + r.amount, 0), [costRows]);
 
   return (
@@ -104,7 +106,7 @@ export default function PlanDetailPage() {
 
           <Card title="续保金额估算（按机房区分印度/国内）" loading={loading}>
             <Space direction="vertical" style={{ width: '100%' }}>
-              <Text type="secondary">规则：机房以 IN 开头归类印度，单价 1000；其余归类国内（计算150、温存储300、热存储300、GPU800）。</Text>
+              <Text type="secondary">规则：机房以 IN 开头归类印度，其余归类国内；按“国家+场景大类”读取续保管理中的最新单价。</Text>
               <Text strong>续保总金额：{formatMoney(totalRenewalAmount)}</Text>
               <Table<CostRow>
                 rowKey="key"
@@ -243,18 +245,19 @@ function buildSummaryRows(plan: RenewalPlan): SummaryRow[] {
   ];
 }
 
-function buildCostRows(plan: RenewalPlan): CostRow[] {
+function buildCostRows(plan: RenewalPlan, unitPrices: RenewalUnitPrice[]): CostRow[] {
   const bucketLabel: Record<string, string> = {
     compute: '计算型',
     warm_storage: '温存储',
     hot_storage: '热存储',
     gpu: 'GPU'
   };
+  const priceMap = new Map(unitPrices.map((p) => [`${p.country}|${p.scene_category}`, Number(p.unit_price || 0)]));
   const amountByKey = new Map<string, CostRow>();
   for (const item of plan.items || []) {
     const region = isIndiaIDC(item.idc) ? '印度' : '国内';
     const bucket = item.bucket || 'compute';
-    const unitPrice = estimateUnitPrice(region, bucket);
+    const unitPrice = estimateUnitPrice(priceMap, region, bucket);
     const key = `${region}|${bucket}`;
     const old = amountByKey.get(key) || {
       key,
@@ -281,18 +284,9 @@ function isIndiaIDC(idc?: string) {
   return v.startsWith('IN');
 }
 
-function estimateUnitPrice(region: string, bucket: string) {
-  if (region === '印度') return 1000;
-  switch (bucket) {
-    case 'warm_storage':
-    case 'hot_storage':
-      return 300;
-    case 'gpu':
-      return 800;
-    case 'compute':
-    default:
-      return 150;
-  }
+function estimateUnitPrice(priceMap: Map<string, number>, region: string, bucket: string) {
+  const key = `${region}|${bucket}`;
+  return Number(priceMap.get(key) || 0);
 }
 
 function toTB(v: number) {

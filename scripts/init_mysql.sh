@@ -22,17 +22,20 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-echo "[1/4] create database ${MYSQL_DB} ..."
+echo "[1/5] create database ${MYSQL_DB} ..."
 mysql -h "${MYSQL_HOST}" -P "${MYSQL_PORT}" -u "${MYSQL_USER}" -p \
   -e "CREATE DATABASE IF NOT EXISTS ${MYSQL_DB} CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
 
-echo "[2/4] apply mysql_v1.sql ..."
+echo "[2/5] apply mysql_v1.sql ..."
 mysql -h "${MYSQL_HOST}" -P "${MYSQL_PORT}" -u "${MYSQL_USER}" -p "${MYSQL_DB}" < "${ROOT_DIR}/backend/migrations/mysql_v1.sql"
 
-echo "[3/4] apply mysql_v2_failure_dashboard.sql ..."
+echo "[3/5] apply mysql_v2_failure_dashboard.sql ..."
 mysql -h "${MYSQL_HOST}" -P "${MYSQL_PORT}" -u "${MYSQL_USER}" -p "${MYSQL_DB}" < "${ROOT_DIR}/backend/migrations/mysql_v2_failure_dashboard.sql"
 
-echo "[4/4] apply mysql_v3_ops_repo_tables.sql ..."
+echo "[4/5] apply mysql_v3_ops_repo_tables.sql ..."
 mysql -h "${MYSQL_HOST}" -P "${MYSQL_PORT}" -u "${MYSQL_USER}" -p "${MYSQL_DB}" < "${ROOT_DIR}/backend/migrations/mysql_v3_ops_repo_tables.sql"
+
+echo "[5/5] apply mysql_v10_renewal_unit_prices.sql ..."
+mysql -h "${MYSQL_HOST}" -P "${MYSQL_PORT}" -u "${MYSQL_USER}" -p "${MYSQL_DB}" < "${ROOT_DIR}/backend/migrations/mysql_v10_renewal_unit_prices.sql"
 
 echo "Done. DB initialized: ${MYSQL_DB}"

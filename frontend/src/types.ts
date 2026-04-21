@@ -233,6 +233,12 @@ export interface NonRenewalItem {
   rank_in_bucket?: number;
 }
 
+export interface RenewalUnitPrice {
+  country: string;
+  scene_category: 'compute' | 'warm_storage' | 'hot_storage' | 'gpu' | string;
+  unit_price: number;
+}
+
 export interface RenewalPlan {
   plan_id: string;
   target_date?: string;

@@ -11,12 +11,13 @@ import (
 )
 
 type RenewalRepo struct {
-	mu    sync.RWMutex
-	plans map[string]domain.RenewalPlan
+	mu         sync.RWMutex
+	plans      map[string]domain.RenewalPlan
+	unitPrices []domain.RenewalUnitPrice
 }
 
 func NewRenewalRepo() *RenewalRepo {
-	return &RenewalRepo{plans: map[string]domain.RenewalPlan{}}
+	return &RenewalRepo{plans: map[string]domain.RenewalPlan{}, unitPrices: []domain.RenewalUnitPrice{}}
 }
 
 func (r *RenewalRepo) SavePlan(_ context.Context, plan domain.RenewalPlan) error {
@@ -58,5 +59,18 @@ func (r *RenewalRepo) DeletePlan(_ context.Context, planID string) error {
 		return fmt.Errorf("plan %s not found", planID)
 	}
 	delete(r.plans, planID)
+	return nil
+}
+
+func (r *RenewalRepo) ListUnitPrices(_ context.Context) ([]domain.RenewalUnitPrice, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return append([]domain.RenewalUnitPrice(nil), r.unitPrices...), nil
+}
+
+func (r *RenewalRepo) ReplaceUnitPrices(_ context.Context, prices []domain.RenewalUnitPrice) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.unitPrices = append([]domain.RenewalUnitPrice(nil), prices...)
 	return nil
 }

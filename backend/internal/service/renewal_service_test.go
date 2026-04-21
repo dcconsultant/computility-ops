@@ -2,11 +2,29 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"computility-ops/backend/internal/domain"
 	mem "computility-ops/backend/internal/storage/memory"
 )
+
+func mustSeedUnitPrices(t *testing.T, repo *mem.RenewalRepo) {
+	t.Helper()
+	err := repo.ReplaceUnitPrices(context.Background(), []domain.RenewalUnitPrice{
+		{Country: "国内", SceneCategory: "compute", UnitPrice: 101},
+		{Country: "国内", SceneCategory: "warm_storage", UnitPrice: 102},
+		{Country: "国内", SceneCategory: "hot_storage", UnitPrice: 103},
+		{Country: "国内", SceneCategory: "gpu", UnitPrice: 104},
+		{Country: "印度", SceneCategory: "compute", UnitPrice: 201},
+		{Country: "印度", SceneCategory: "warm_storage", UnitPrice: 202},
+		{Country: "印度", SceneCategory: "hot_storage", UnitPrice: 203},
+		{Country: "印度", SceneCategory: "gpu", UnitPrice: 204},
+	})
+	if err != nil {
+		t.Fatalf("seed unit prices error: %v", err)
+	}
+}
 
 func TestRenewalService_CreatePlan_SelectsWhitelistAndSortsByScore(t *testing.T) {
 	ctx := context.Background()
@@ -14,6 +32,7 @@ func TestRenewalService_CreatePlan_SelectsWhitelistAndSortsByScore(t *testing.T)
 	serverRepo := mem.NewServerRepo()
 	datasetRepo := mem.NewDatasetRepo()
 	renewalRepo := mem.NewRenewalRepo()
+	mustSeedUnitPrices(t, renewalRepo)
 
 	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
 		{SN: "A", ConfigType: "c1", PSA: "10", WarrantyEndDate: "2025-01-01", Environment: "生产"},
@@ -52,6 +71,7 @@ func TestRenewalService_CreatePlan_TargetIncludesUnexpiredButOutputExcludesUnexp
 	serverRepo := mem.NewServerRepo()
 	datasetRepo := mem.NewDatasetRepo()
 	renewalRepo := mem.NewRenewalRepo()
+	mustSeedUnitPrices(t, renewalRepo)
 
 	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
 		{SN: "U1", ConfigType: "compute-a", PSA: "10", WarrantyEndDate: "2026-12-31", Environment: "生产"}, // 未过保，计入覆盖
@@ -82,6 +102,7 @@ func TestRenewalService_CreatePlan_ExcludePSA(t *testing.T) {
 	serverRepo := mem.NewServerRepo()
 	datasetRepo := mem.NewDatasetRepo()
 	renewalRepo := mem.NewRenewalRepo()
+	mustSeedUnitPrices(t, renewalRepo)
 
 	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
 		{SN: "A", ConfigType: "c1", PSA: "P0", WarrantyEndDate: "2025-01-01", Environment: "生产"},
@@ -104,6 +125,7 @@ func TestRenewalService_CreatePlan_ExcludePSA_PathSegmentPrefix(t *testing.T) {
 	serverRepo := mem.NewServerRepo()
 	datasetRepo := mem.NewDatasetRepo()
 	renewalRepo := mem.NewRenewalRepo()
+	mustSeedUnitPrices(t, renewalRepo)
 
 	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
 		{SN: "A", ConfigType: "c1", PSA: "/aa/ss/as", WarrantyEndDate: "2025-01-01", Environment: "生产"},
@@ -136,6 +158,7 @@ func TestRenewalService_CreatePlan_SkipUnmatchedConfigType(t *testing.T) {
 	serverRepo := mem.NewServerRepo()
 	datasetRepo := mem.NewDatasetRepo()
 	renewalRepo := mem.NewRenewalRepo()
+	mustSeedUnitPrices(t, renewalRepo)
 
 	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
 		{SN: "A", ConfigType: "known", PSA: "10", WarrantyEndDate: "2025-01-01", Environment: "生产"},
@@ -164,6 +187,7 @@ func TestRenewalService_CreatePlan_ExcludePSA_SegmentBoundary(t *testing.T) {
 	serverRepo := mem.NewServerRepo()
 	datasetRepo := mem.NewDatasetRepo()
 	renewalRepo := mem.NewRenewalRepo()
+	mustSeedUnitPrices(t, renewalRepo)
 
 	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
 		{SN: "AA", ConfigType: "c1", PSA: "/aa", WarrantyEndDate: "2025-01-01", Environment: "生产"},
@@ -212,5 +236,70 @@ func TestRenewalService_CreatePlan_InvalidTarget(t *testing.T) {
 	_, err := svc.CreatePlan(context.Background(), CreatePlanInput{TargetDate: "2026-01-01", TargetCores: 0})
 	if err == nil {
 		t.Fatal("expected error for target_cores <= 0")
+	}
+}
+
+func TestRenewalService_CreatePlan_ErrorWhenUnitPriceMissing(t *testing.T) {
+	ctx := context.Background()
+	serverRepo := mem.NewServerRepo()
+	datasetRepo := mem.NewDatasetRepo()
+	renewalRepo := mem.NewRenewalRepo()
+
+	_ = serverRepo.ReplaceAll(ctx, []domain.Server{{SN: "A", ConfigType: "c1", PSA: "10", WarrantyEndDate: "2025-01-01", Environment: "生产"}})
+	_ = datasetRepo.ReplaceHostPackages(ctx, []domain.HostPackageConfig{{ConfigType: "c1", SceneCategory: "计算型", CPULogicalCores: 8, ArchStandardizedFactor: 1}})
+
+	svc := NewRenewalService(serverRepo, datasetRepo, renewalRepo)
+	_, err := svc.CreatePlan(ctx, CreatePlanInput{TargetDate: "2026-01-01", TargetCores: 8})
+	if err == nil {
+		t.Fatal("expected error when unit prices are missing")
+	}
+	if !strings.Contains(err.Error(), "无续保单价") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRenewalService_ListUnitPrices_EmptyAllowed(t *testing.T) {
+	svc := NewRenewalService(mem.NewServerRepo(), mem.NewDatasetRepo(), mem.NewRenewalRepo())
+	prices, err := svc.ListUnitPrices(context.Background())
+	if err != nil {
+		t.Fatalf("ListUnitPrices() error = %v", err)
+	}
+	if len(prices) != 0 {
+		t.Fatalf("len(prices)=%d, want 0", len(prices))
+	}
+}
+
+func TestRenewalService_SaveUnitPrices_ValidateAndPersist(t *testing.T) {
+	svc := NewRenewalService(mem.NewServerRepo(), mem.NewDatasetRepo(), mem.NewRenewalRepo())
+	_, err := svc.SaveUnitPrices(context.Background(), []domain.RenewalUnitPrice{
+		{Country: "国内", SceneCategory: "compute", UnitPrice: 1},
+	})
+	if err == nil {
+		t.Fatal("expected error for missing matrix prices")
+	}
+
+	full := []domain.RenewalUnitPrice{
+		{Country: "国内", SceneCategory: "compute", UnitPrice: 101},
+		{Country: "国内", SceneCategory: "warm_storage", UnitPrice: 102},
+		{Country: "国内", SceneCategory: "hot_storage", UnitPrice: 103},
+		{Country: "国内", SceneCategory: "gpu", UnitPrice: 104},
+		{Country: "印度", SceneCategory: "compute", UnitPrice: 201},
+		{Country: "印度", SceneCategory: "warm_storage", UnitPrice: 202},
+		{Country: "印度", SceneCategory: "hot_storage", UnitPrice: 203},
+		{Country: "印度", SceneCategory: "gpu", UnitPrice: 204},
+	}
+	saved, err := svc.SaveUnitPrices(context.Background(), full)
+	if err != nil {
+		t.Fatalf("SaveUnitPrices(full) error = %v", err)
+	}
+	if len(saved) != 8 {
+		t.Fatalf("len(saved)=%d, want 8", len(saved))
+	}
+	listed, err := svc.ListUnitPrices(context.Background())
+	if err != nil {
+		t.Fatalf("ListUnitPrices() error = %v", err)
+	}
+	if len(listed) != 8 {
+		t.Fatalf("len(listed)=%d, want 8", len(listed))
 	}
 }

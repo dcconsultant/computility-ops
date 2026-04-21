@@ -14,6 +14,7 @@ import type {
   PackageFailureRate,
   PackageModelFailureRate,
   RenewalPlan,
+  RenewalUnitPrice,
   ServerItem,
   SpecialRule,
   StorageBucket,
@@ -179,6 +180,16 @@ export async function deletePlan(planId: string) {
 
 export function exportPlan(planId: string, format: 'xlsx' | 'csv') {
   window.open(`/api/v1/renewals/plans/${planId}/export?format=${format}`, '_blank');
+}
+
+export async function listRenewalUnitPrices() {
+  const { data } = await http.get<ApiResp<ListData<RenewalUnitPrice>>>('/renewals/unit-prices');
+  return data;
+}
+
+export async function updateRenewalUnitPrices(prices: RenewalUnitPrice[]) {
+  const { data } = await http.put<ApiResp<ListData<RenewalUnitPrice>>>('/renewals/unit-prices', { prices });
+  return data;
 }
 
 export interface MySQLTestPayload {

@@ -94,3 +94,51 @@ func (r *RenewalRepo) DeletePlan(ctx context.Context, planID string) error {
 	}
 	return nil
 }
+
+func (r *RenewalRepo) ListUnitPrices(ctx context.Context) ([]domain.RenewalUnitPrice, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT country, scene_category, unit_price
+		FROM ops_renewal_unit_prices
+		ORDER BY country ASC, scene_category ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]domain.RenewalUnitPrice, 0)
+	for rows.Next() {
+		var x domain.RenewalUnitPrice
+		if err := rows.Scan(&x.Country, &x.SceneCategory, &x.UnitPrice); err != nil {
+			return nil, err
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
+}
+
+func (r *RenewalRepo) ReplaceUnitPrices(ctx context.Context, prices []domain.RenewalUnitPrice) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ops_renewal_unit_prices`); err != nil {
+		return err
+	}
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO ops_renewal_unit_prices (country, scene_category, unit_price)
+		VALUES (?, ?, ?)
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, p := range prices {
+		if _, err := stmt.ExecContext(ctx, p.Country, p.SceneCategory, p.UnitPrice); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}

@@ -10,6 +10,7 @@ import {
   Popconfirm,
   Space,
   Table,
+  Tabs,
   Tooltip,
   Typography,
   Upload,
@@ -19,12 +20,20 @@ import { ExclamationCircleOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { UploadProps } from 'antd';
 import { useNavigate } from 'react-router-dom';
-import { createPlan, deletePlan, exportPlan, importSpecialRules, listPlans, listSpecialRules } from '../api';
+import { createPlan, deletePlan, exportPlan, importSpecialRules, listPlans, listRenewalUnitPrices, listSpecialRules, updateRenewalUnitPrices } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
-import type { RenewalPlan, SpecialRule } from '../types';
+import type { RenewalPlan, RenewalUnitPrice, SpecialRule } from '../types';
 
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
+
+const COUNTRY_OPTIONS = ['国内', '印度'] as const;
+const SCENE_OPTIONS = [
+  { key: 'compute', label: '计算' },
+  { key: 'warm_storage', label: '温存储' },
+  { key: 'hot_storage', label: '热存储' },
+  { key: 'gpu', label: 'GPU' }
+] as const;
 
 export default function PlanPage() {
   const navigate = useNavigate();
@@ -41,6 +50,10 @@ export default function PlanPage() {
   const [specialRules, setSpecialRules] = useState<SpecialRule[]>([]);
   const [specialLoading, setSpecialLoading] = useState(false);
   const [specialUploading, setSpecialUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState('plan');
+  const [unitPrices, setUnitPrices] = useState<RenewalUnitPrice[]>([]);
+  const [unitPriceLoading, setUnitPriceLoading] = useState(false);
+  const [unitPriceSaving, setUnitPriceSaving] = useState(false);
 
   const [queryPlanID, setQueryPlanID] = useState('');
   const [queryTargetDateRange, setQueryTargetDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
@@ -78,9 +91,22 @@ export default function PlanPage() {
     }
   }
 
+  async function reloadUnitPrices() {
+    setUnitPriceLoading(true);
+    try {
+      const resp = ensureApiOk(await listRenewalUnitPrices());
+      setUnitPrices(normalizeUnitPrices(resp.data.list || []));
+    } catch (e) {
+      message.error(parseApiError(e, '加载续保单价失败'));
+    } finally {
+      setUnitPriceLoading(false);
+    }
+  }
+
   useEffect(() => {
     reloadPlans();
     reloadSpecialRules();
+    reloadUnitPrices();
   }, []);
 
   async function onCreatePlan() {
@@ -142,6 +168,28 @@ export default function PlanPage() {
       message.error(parseApiError(e, '重置查询失败'));
     } finally {
       setListLoading(false);
+    }
+  }
+
+  function onUnitPriceChange(country: string, scene: string, next: number) {
+    setUnitPrices((prev) => prev.map((x) => (
+      x.country === country && x.scene_category === scene
+        ? { ...x, unit_price: next }
+        : x
+    )));
+  }
+
+  async function onSaveUnitPrices() {
+    setUnitPriceSaving(true);
+    try {
+      const payload = normalizeUnitPrices(unitPrices);
+      const resp = ensureApiOk(await updateRenewalUnitPrices(payload));
+      setUnitPrices(normalizeUnitPrices(resp.data.list || []));
+      message.success('续保单价已保存');
+    } catch (e) {
+      message.error(parseApiError(e, '保存续保单价失败'));
+    } finally {
+      setUnitPriceSaving(false);
     }
   }
 
@@ -247,117 +295,189 @@ export default function PlanPage() {
   ];
 
   return (
-    <Space direction="vertical" size="large" style={{ width: '100%' }}>
-      <Card title="续保管理 - 生成方案">
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-          <Space wrap>
-            <Text>续保目标时间</Text>
-            <DatePicker
-              value={targetDate ? dayjs(targetDate) : undefined}
-              onChange={(d) => setTargetDate(d ? d.format('YYYY-MM-DD') : '')}
-              allowClear={false}
-            />
-          </Space>
+    <Tabs
+      activeKey={activeTab}
+      onChange={setActiveTab}
+      items={[
+        {
+          key: 'plan',
+          label: '续保方案管理',
+          children: (
+            <Space direction="vertical" size="large" style={{ width: '100%' }}>
+              <Card title="续保管理 - 生成方案">
+                <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                  <Space wrap>
+                    <Text>续保目标时间</Text>
+                    <DatePicker
+                      value={targetDate ? dayjs(targetDate) : undefined}
+                      onChange={(d) => setTargetDate(d ? d.format('YYYY-MM-DD') : '')}
+                      allowClear={false}
+                    />
+                  </Space>
 
-          <Space wrap>
-            <Text>排除环境</Text>
-            <Input style={{ width: 300 }} value={excludeEnvs} onChange={(e) => setExcludeEnvs(e.target.value)} placeholder="开发,测试" />
-            <Text type="secondary">多个环境用逗号分隔</Text>
-          </Space>
+                  <Space wrap>
+                    <Text>排除环境</Text>
+                    <Input style={{ width: 300 }} value={excludeEnvs} onChange={(e) => setExcludeEnvs(e.target.value)} placeholder="开发,测试" />
+                    <Text type="secondary">多个环境用逗号分隔</Text>
+                  </Space>
 
-          <Space wrap>
-            <Text>排除PSA</Text>
-            <Input style={{ width: 300 }} value={excludePSAs} onChange={(e) => setExcludePSAs(e.target.value)} placeholder="例如：A,B,C 或 10,20" />
-            <Text type="secondary">排除的PSA不参与总量和续保清单统计</Text>
-          </Space>
+                  <Space wrap>
+                    <Text>排除PSA</Text>
+                    <Input style={{ width: 300 }} value={excludePSAs} onChange={(e) => setExcludePSAs(e.target.value)} placeholder="例如：A,B,C 或 10,20" />
+                    <Text type="secondary">排除的PSA不参与总量和续保清单统计</Text>
+                  </Space>
 
-          <Space wrap>
-            <InputNumber min={1} value={targetCores} onChange={(v) => setTargetCores(v ?? 0)} addonBefore="计算目标核数" />
-            <InputNumber min={0} step={1} value={warmTargetStorageTB} onChange={(v) => setWarmTargetStorageTB(v ?? 0)} addonBefore="温存储需求(TB)" />
-            <InputNumber min={0} step={1} value={hotTargetStorageTB} onChange={(v) => setHotTargetStorageTB(v ?? 0)} addonBefore="热存储需求(TB)" />
-            <Button type="primary" loading={loading} onClick={onCreatePlan}>生成方案</Button>
-          </Space>
-        </Space>
-      </Card>
+                  <Space wrap>
+                    <InputNumber min={1} value={targetCores} onChange={(v) => setTargetCores(v ?? 0)} addonBefore="计算目标核数" />
+                    <InputNumber min={0} step={1} value={warmTargetStorageTB} onChange={(v) => setWarmTargetStorageTB(v ?? 0)} addonBefore="温存储需求(TB)" />
+                    <InputNumber min={0} step={1} value={hotTargetStorageTB} onChange={(v) => setHotTargetStorageTB(v ?? 0)} addonBefore="热存储需求(TB)" />
+                    <Button type="primary" loading={loading} onClick={onCreatePlan}>生成方案</Button>
+                  </Space>
+                </Space>
+              </Card>
 
-      <Card
-        title="续保管理 - 历史方案列表"
-        extra={(
-          <Space wrap>
-            <Input
-              style={{ width: 160 }}
-              value={queryPlanID}
-              onChange={(e) => setQueryPlanID(e.target.value)}
-              placeholder="方案ID"
-              allowClear
-            />
-            <RangePicker
-              value={queryTargetDateRange}
-              onChange={(v) => setQueryTargetDateRange((v as [dayjs.Dayjs | null, dayjs.Dayjs | null]) || null)}
-              allowEmpty={[true, true]}
-            />
-            <Input
-              style={{ width: 140 }}
-              value={queryExcludedPSA}
-              onChange={(e) => setQueryExcludedPSA(e.target.value)}
-              placeholder="排除PSA"
-              allowClear
-            />
-            <Input
-              style={{ width: 140 }}
-              value={queryExcludedEnv}
-              onChange={(e) => setQueryExcludedEnv(e.target.value)}
-              placeholder="排除环境"
-              allowClear
-            />
-            <Button type="primary" onClick={reloadPlans} loading={listLoading}>搜索</Button>
-            <Button onClick={onResetHistoryFilters} loading={listLoading}>重置</Button>
-          </Space>
-        )}
-      >
-        <Table
-          rowKey="plan_id"
-          loading={listLoading}
-          dataSource={plans}
-          columns={columns}
-          scroll={{ x: 1500 }}
-          pagination={withTotalPagination(10)}
-        />
-      </Card>
+              <Card
+                title="续保管理 - 历史方案列表"
+                extra={(
+                  <Space wrap>
+                    <Input
+                      style={{ width: 160 }}
+                      value={queryPlanID}
+                      onChange={(e) => setQueryPlanID(e.target.value)}
+                      placeholder="方案ID"
+                      allowClear
+                    />
+                    <RangePicker
+                      value={queryTargetDateRange}
+                      onChange={(v) => setQueryTargetDateRange((v as [dayjs.Dayjs | null, dayjs.Dayjs | null]) || null)}
+                      allowEmpty={[true, true]}
+                    />
+                    <Input
+                      style={{ width: 140 }}
+                      value={queryExcludedPSA}
+                      onChange={(e) => setQueryExcludedPSA(e.target.value)}
+                      placeholder="排除PSA"
+                      allowClear
+                    />
+                    <Input
+                      style={{ width: 140 }}
+                      value={queryExcludedEnv}
+                      onChange={(e) => setQueryExcludedEnv(e.target.value)}
+                      placeholder="排除环境"
+                      allowClear
+                    />
+                    <Button type="primary" onClick={reloadPlans} loading={listLoading}>搜索</Button>
+                    <Button onClick={onResetHistoryFilters} loading={listLoading}>重置</Button>
+                  </Space>
+                )}
+              >
+                <Table
+                  rowKey="plan_id"
+                  loading={listLoading}
+                  dataSource={plans}
+                  columns={columns}
+                  scroll={{ x: 1500 }}
+                  pagination={withTotalPagination(10)}
+                />
+              </Card>
 
-      <Card
-        title="续保管理 - 例外清单"
-        extra={(
-          <Space>
-            <Button onClick={reloadSpecialRules} loading={specialLoading}>刷新</Button>
-            <Upload {...specialUploadProps}>
-              <Button icon={<UploadOutlined />} loading={specialUploading}>上传并导入</Button>
-            </Upload>
-          </Space>
-        )}
-      >
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <Text type="secondary">导入模板建议三列：SN、策略（加白/加黑）、原因（可选）。其余字段会自动从服务器管理表按 SN 补全。</Text>
-          <Table
-            rowKey="sn"
-            loading={specialLoading}
-            dataSource={specialRules}
-            pagination={withTotalPagination(10)}
-            columns={[
-              { title: 'SN', dataIndex: 'sn', width: 160 },
-              { title: '制造商', dataIndex: 'manufacturer', width: 120 },
-              { title: '型号', dataIndex: 'model', width: 140 },
-              { title: 'PSA', dataIndex: 'psa', width: 100 },
-              { title: '套餐', dataIndex: 'package_type', width: 140 },
-              { title: '策略', dataIndex: 'policy', width: 100 },
-              { title: '原因', dataIndex: 'reason', width: 220 }
-            ]}
-            scroll={{ x: 1140 }}
-          />
-        </Space>
-      </Card>
-    </Space>
+              <Card
+                title="续保管理 - 例外清单"
+                extra={(
+                  <Space>
+                    <Button onClick={reloadSpecialRules} loading={specialLoading}>刷新</Button>
+                    <Upload {...specialUploadProps}>
+                      <Button icon={<UploadOutlined />} loading={specialUploading}>上传并导入</Button>
+                    </Upload>
+                  </Space>
+                )}
+              >
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <Text type="secondary">导入模板建议三列：SN、策略（加白/加黑）、原因（可选）。其余字段会自动从服务器管理表按 SN 补全。</Text>
+                  <Table
+                    rowKey="sn"
+                    loading={specialLoading}
+                    dataSource={specialRules}
+                    pagination={withTotalPagination(10)}
+                    columns={[
+                      { title: 'SN', dataIndex: 'sn', width: 160 },
+                      { title: '制造商', dataIndex: 'manufacturer', width: 120 },
+                      { title: '型号', dataIndex: 'model', width: 140 },
+                      { title: 'PSA', dataIndex: 'psa', width: 100 },
+                      { title: '套餐', dataIndex: 'package_type', width: 140 },
+                      { title: '策略', dataIndex: 'policy', width: 100 },
+                      { title: '原因', dataIndex: 'reason', width: 220 }
+                    ]}
+                    scroll={{ x: 1140 }}
+                  />
+                </Space>
+              </Card>
+            </Space>
+          )
+        },
+        {
+          key: 'unit_price',
+          label: '续保单价维护',
+          children: (
+            <Card
+              title="续保单价维护（国家 + 场景大类）"
+              extra={(
+                <Space>
+                  <Button onClick={reloadUnitPrices} loading={unitPriceLoading}>刷新</Button>
+                  <Button type="primary" onClick={onSaveUnitPrices} loading={unitPriceSaving}>保存</Button>
+                </Space>
+              )}
+            >
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Text type="secondary">当前支持国家：国内、印度；场景大类：计算、温存储、热存储、GPU。修改后点击保存，单价会入库并用于续保金额估算。</Text>
+                <Table
+                  rowKey={(r) => `${r.country}-${r.scene_category}`}
+                  loading={unitPriceLoading}
+                  pagination={false}
+                  dataSource={unitPrices}
+                  columns={[
+                    { title: '国家', dataIndex: 'country', width: 120 },
+                    {
+                      title: '场景大类',
+                      dataIndex: 'scene_category',
+                      width: 120,
+                      render: (v: string) => SCENE_OPTIONS.find((x) => x.key === v)?.label || v
+                    },
+                    {
+                      title: '续保单价',
+                      dataIndex: 'unit_price',
+                      width: 200,
+                      render: (v: number, row: RenewalUnitPrice) => (
+                        <InputNumber
+                          min={0}
+                          precision={2}
+                          step={10}
+                          style={{ width: 180 }}
+                          value={v}
+                          onChange={(next) => onUnitPriceChange(row.country, row.scene_category, Number(next ?? 0))}
+                        />
+                      )
+                    }
+                  ]}
+                />
+              </Space>
+            </Card>
+          )
+        }
+      ]}
+    />
   );
+}
+
+function normalizeUnitPrices(list: RenewalUnitPrice[]): RenewalUnitPrice[] {
+  const byKey = new Map(list.map((x) => [`${x.country}|${x.scene_category}`, { ...x, unit_price: Number(x.unit_price || 0) }]));
+  const out: RenewalUnitPrice[] = [];
+  for (const country of COUNTRY_OPTIONS) {
+    for (const scene of SCENE_OPTIONS) {
+      out.push(byKey.get(`${country}|${scene.key}`) || { country, scene_category: scene.key, unit_price: 0 });
+    }
+  }
+  return out;
 }
 
 function withTotalPagination(pageSize: number) {

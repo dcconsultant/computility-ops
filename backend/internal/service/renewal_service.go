@@ -50,6 +50,9 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	if err != nil {
 		return domain.RenewalPlan{}, fmt.Errorf("invalid target_date: %v", err)
 	}
+	if err := s.ensureUnitPricesReadyForPlan(ctx); err != nil {
+		return domain.RenewalPlan{}, err
+	}
 
 	servers, err := s.serverRepo.List(ctx)
 	if err != nil {
@@ -554,6 +557,25 @@ func (s *RenewalService) DeletePlan(ctx context.Context, planID string) error {
 	return s.renewalRepo.DeletePlan(ctx, planID)
 }
 
+func (s *RenewalService) ListUnitPrices(ctx context.Context) ([]domain.RenewalUnitPrice, error) {
+	prices, err := s.renewalRepo.ListUnitPrices(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return normalizeUnitPrices(prices)
+}
+
+func (s *RenewalService) SaveUnitPrices(ctx context.Context, prices []domain.RenewalUnitPrice) ([]domain.RenewalUnitPrice, error) {
+	normalized, err := normalizeAndValidateUnitPrices(prices)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.renewalRepo.ReplaceUnitPrices(ctx, normalized); err != nil {
+		return nil, err
+	}
+	return normalized, nil
+}
+
 func splitByWhitelist(items []domain.RenewalItem) (must []domain.RenewalItem, normal []domain.RenewalItem) {
 	must = make([]domain.RenewalItem, 0)
 	normal = make([]domain.RenewalItem, 0)
@@ -691,4 +713,127 @@ func containsNormalized(list []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func normalizeUnitPrices(prices []domain.RenewalUnitPrice) ([]domain.RenewalUnitPrice, error) {
+	seen := map[string]bool{}
+	out := make([]domain.RenewalUnitPrice, 0, len(prices))
+	for _, item := range prices {
+		country, ok := normalizeCountry(item.Country)
+		if !ok {
+			return nil, fmt.Errorf("invalid country: %s", item.Country)
+		}
+		scene, ok := normalizeUnitPriceScene(item.SceneCategory)
+		if !ok {
+			return nil, fmt.Errorf("invalid scene_category: %s", item.SceneCategory)
+		}
+		if item.UnitPrice < 0 {
+			return nil, fmt.Errorf("unit_price must be >= 0, country=%s scene=%s", country, scene)
+		}
+		k := country + "|" + scene
+		if seen[k] {
+			return nil, fmt.Errorf("duplicated unit price: country=%s scene=%s", country, scene)
+		}
+		seen[k] = true
+		out = append(out, domain.RenewalUnitPrice{Country: country, SceneCategory: scene, UnitPrice: item.UnitPrice})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Country != out[j].Country {
+			return out[i].Country < out[j].Country
+		}
+		return out[i].SceneCategory < out[j].SceneCategory
+	})
+	return out, nil
+}
+
+func normalizeAndValidateUnitPrices(prices []domain.RenewalUnitPrice) ([]domain.RenewalUnitPrice, error) {
+	if len(prices) == 0 {
+		return nil, fmt.Errorf("unit prices cannot be empty")
+	}
+	normalized, err := normalizeUnitPrices(prices)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	for _, item := range normalized {
+		if item.UnitPrice <= 0 {
+			return nil, fmt.Errorf("missing unit price: country=%s scene=%s", item.Country, item.SceneCategory)
+		}
+		seen[item.Country+"|"+item.SceneCategory] = true
+	}
+	missing := missingRequiredUnitPriceKeys(seen)
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("missing unit price: %s", strings.Join(missing, ", "))
+	}
+	return normalized, nil
+}
+
+func missingRequiredUnitPriceKeys(seen map[string]bool) []string {
+	missing := make([]string, 0)
+	for _, country := range []string{"国内", "印度"} {
+		for _, scene := range []string{"compute", "warm_storage", "hot_storage", "gpu"} {
+			k := country + "|" + scene
+			if !seen[k] {
+				missing = append(missing, fmt.Sprintf("country=%s scene=%s", country, scene))
+			}
+		}
+	}
+	return missing
+}
+
+func (s *RenewalService) ensureUnitPricesReadyForPlan(ctx context.Context) error {
+	prices, err := s.renewalRepo.ListUnitPrices(ctx)
+	if err != nil {
+		return err
+	}
+	normalized, err := normalizeUnitPrices(prices)
+	if err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	for _, item := range normalized {
+		if item.UnitPrice <= 0 {
+			return fmt.Errorf("%s场景无续保单价（国家=%s），请先在续保单价维护中保存", item.SceneCategory, item.Country)
+		}
+		seen[item.Country+"|"+item.SceneCategory] = true
+	}
+	missing := missingRequiredUnitPriceKeys(seen)
+	if len(missing) == 0 {
+		return nil
+	}
+	first := strings.Split(missing[0], " ")
+	if len(first) == 2 {
+		country := strings.TrimPrefix(first[0], "country=")
+		scene := strings.TrimPrefix(first[1], "scene=")
+		return fmt.Errorf("%s场景无续保单价（国家=%s），请先在续保单价维护中保存", scene, country)
+	}
+	return fmt.Errorf("续保单价不完整，请先在续保单价维护中保存")
+}
+
+func normalizeCountry(v string) (string, bool) {
+	n := normalizeText(v)
+	switch n {
+	case "国内", "中国", "cn", "china", "domestic":
+		return "国内", true
+	case "印度", "india", "in":
+		return "印度", true
+	default:
+		return "", false
+	}
+}
+
+func normalizeUnitPriceScene(v string) (string, bool) {
+	n := normalizeText(v)
+	switch n {
+	case "计算", "计算型", "compute", "generalcompute", "cpu":
+		return "compute", true
+	case "温存储", "warmstorage", "warm", "coldstorage", "温储":
+		return "warm_storage", true
+	case "热存储", "hotstorage", "hot", "热储":
+		return "hot_storage", true
+	case "gpu", "gpu型", "gpu计算", "gpucompute":
+		return "gpu", true
+	default:
+		return "", false
+	}
 }
