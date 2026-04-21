@@ -10,7 +10,7 @@ const { Text, Title } = Typography;
 
 interface SummaryRow {
   key: string;
-  dimension: string;
+  sceneCategory: string;
   target: string;
   coveredValue: string;
   coveredServers: number;
@@ -18,6 +18,16 @@ interface SummaryRow {
   renewalServers: number;
   currentValue: string;
   currentServers: number;
+}
+
+interface RegionSummaryRow {
+  key: string;
+  region: string;
+  servers: number;
+  computeCores: number;
+  storageTB: number;
+  gpuCards: number;
+  amount: number;
 }
 
 interface CostRow {
@@ -57,6 +67,7 @@ export default function PlanDetailPage() {
   const summaryRows = useMemo(() => (plan ? buildSummaryRows(plan) : []), [plan]);
   const costRows = useMemo(() => (plan ? buildCostRows(plan, unitPrices) : []), [plan, unitPrices]);
   const totalRenewalAmount = useMemo(() => costRows.reduce((sum, r) => sum + r.amount, 0), [costRows]);
+  const regionSummaryRows = useMemo(() => (plan ? buildRegionSummaryRows(plan, costRows) : []), [plan, costRows]);
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -87,21 +98,38 @@ export default function PlanDetailPage() {
           </Card>
 
           <Card title="方案总结（目标/保内/续保）" loading={loading}>
-            <Table<SummaryRow>
-              rowKey="key"
-              dataSource={summaryRows}
-              pagination={false}
-              columns={[
-                { title: '维度', dataIndex: 'dimension', width: 120 },
-                { title: '目标', dataIndex: 'target', width: 120 },
-                { title: '保内满足', dataIndex: 'coveredValue', width: 130 },
-                { title: '保内台数', dataIndex: 'coveredServers', width: 100, render: (v: number) => formatInt(v) },
-                { title: '续保满足', dataIndex: 'renewalValue', width: 130 },
-                { title: '续保台数', dataIndex: 'renewalServers', width: 100, render: (v: number) => formatInt(v) },
-                { title: '当前总量', dataIndex: 'currentValue', width: 130 },
-                { title: '当前台数', dataIndex: 'currentServers', width: 100, render: (v: number) => formatInt(v) }
-              ]}
-            />
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Table<SummaryRow>
+                rowKey="key"
+                dataSource={summaryRows}
+                pagination={false}
+                columns={[
+                  { title: '场景大类', dataIndex: 'sceneCategory', width: 120 },
+                  { title: '目标', dataIndex: 'target', width: 120 },
+                  { title: '保内满足', dataIndex: 'coveredValue', width: 130 },
+                  { title: '保内台数', dataIndex: 'coveredServers', width: 100, render: (v: number) => formatInt(v) },
+                  { title: '续保满足', dataIndex: 'renewalValue', width: 130 },
+                  { title: '续保台数', dataIndex: 'renewalServers', width: 100, render: (v: number) => formatInt(v) },
+                  { title: '当前总量', dataIndex: 'currentValue', width: 130 },
+                  { title: '当前台数', dataIndex: 'currentServers', width: 100, render: (v: number) => formatInt(v) }
+                ]}
+              />
+
+              <Text type="secondary">按地域汇总（全场景）</Text>
+              <Table<RegionSummaryRow>
+                rowKey="key"
+                dataSource={regionSummaryRows}
+                pagination={false}
+                columns={[
+                  { title: '地域', dataIndex: 'region', width: 120 },
+                  { title: '续保台数', dataIndex: 'servers', width: 110, render: (v: number) => formatInt(v) },
+                  { title: '计算核数', dataIndex: 'computeCores', width: 120, render: (v: number) => formatInt(v) },
+                  { title: '存储容量(TB)', dataIndex: 'storageTB', width: 140, render: (v: number) => toTB(v) },
+                  { title: 'GPU卡数', dataIndex: 'gpuCards', width: 120, render: (v: number) => formatInt(v) },
+                  { title: '续保金额', dataIndex: 'amount', width: 140, render: (v: number) => formatMoney(v) }
+                ]}
+              />
+            </Space>
           </Card>
 
           <Card title="续保金额估算（按机房区分印度/国内）" loading={loading}>
@@ -200,7 +228,7 @@ function buildSummaryRows(plan: RenewalPlan): SummaryRow[] {
   return [
     {
       key: 'compute',
-      dimension: '计算型',
+      sceneCategory: '计算',
       target: `${formatInt(plan.target_cores || 0)} 核`,
       coveredValue: `${formatInt(computeCovered)} 核`,
       coveredServers: computeCoveredServers,
@@ -211,7 +239,7 @@ function buildSummaryRows(plan: RenewalPlan): SummaryRow[] {
     },
     {
       key: 'warm_storage',
-      dimension: '温存储',
+      sceneCategory: '温存储',
       target: `${plan.warm_target_storage_tb || 0} TB`,
       coveredValue: `${toTB(warmCovered)} TB`,
       coveredServers: warmCoveredServers,
@@ -222,7 +250,7 @@ function buildSummaryRows(plan: RenewalPlan): SummaryRow[] {
     },
     {
       key: 'hot_storage',
-      dimension: '热存储',
+      sceneCategory: '热存储',
       target: `${plan.hot_target_storage_tb || 0} TB`,
       coveredValue: `${toTB(hotCovered)} TB`,
       coveredServers: hotCoveredServers,
@@ -233,7 +261,7 @@ function buildSummaryRows(plan: RenewalPlan): SummaryRow[] {
     },
     {
       key: 'gpu',
-      dimension: 'GPU（例外）',
+      sceneCategory: 'GPU',
       target: '-',
       coveredValue: `${formatInt(plan.gpu_covered_cards || 0)} 卡`,
       coveredServers: plan.gpu_covered_servers || 0,
@@ -242,6 +270,59 @@ function buildSummaryRows(plan: RenewalPlan): SummaryRow[] {
       currentValue: `${formatInt(plan.gpu_current_cards || 0)} 卡`,
       currentServers: plan.gpu_current_servers || 0
     }
+  ];
+}
+
+function buildRegionSummaryRows(plan: RenewalPlan, costRows: CostRow[]): RegionSummaryRow[] {
+  const makeRow = (region: string): RegionSummaryRow => ({
+    key: region,
+    region,
+    servers: 0,
+    computeCores: 0,
+    storageTB: 0,
+    gpuCards: 0,
+    amount: 0
+  });
+
+  const byRegion = new Map<string, RegionSummaryRow>([
+    ['国内', makeRow('国内全场景汇总')],
+    ['印度', makeRow('印度全场景汇总')]
+  ]);
+
+  for (const item of plan.items || []) {
+    const regionKey = isIndiaIDC(item.idc) ? '印度' : '国内';
+    const row = byRegion.get(regionKey);
+    if (!row) continue;
+    row.servers += 1;
+    if ((item.bucket || 'compute') === 'compute') {
+      row.computeCores += Number(item.cpu_logical_cores || 0);
+    }
+    row.storageTB += Number(item.storage_capacity_tb || 0);
+    row.gpuCards += Number(item.gpu_card_count || 0);
+  }
+
+  for (const cost of costRows) {
+    const row = byRegion.get(cost.region);
+    if (!row) continue;
+    row.amount += Number(cost.amount || 0);
+  }
+
+  const domestic = byRegion.get('国内') || makeRow('国内全场景汇总');
+  const india = byRegion.get('印度') || makeRow('印度全场景汇总');
+  const global: RegionSummaryRow = {
+    key: 'global',
+    region: '全球全场景汇总',
+    servers: domestic.servers + india.servers,
+    computeCores: domestic.computeCores + india.computeCores,
+    storageTB: domestic.storageTB + india.storageTB,
+    gpuCards: domestic.gpuCards + india.gpuCards,
+    amount: domestic.amount + india.amount
+  };
+
+  return [
+    { ...domestic, key: 'domestic' },
+    { ...india, key: 'india' },
+    global
   ];
 }
 
