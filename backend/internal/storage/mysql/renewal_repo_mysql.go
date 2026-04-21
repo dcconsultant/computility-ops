@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"computility-ops/backend/internal/domain"
 )
@@ -141,4 +142,36 @@ func (r *RenewalRepo) ReplaceUnitPrices(ctx context.Context, prices []domain.Ren
 		}
 	}
 	return tx.Commit()
+}
+
+func (r *RenewalRepo) GetSettings(ctx context.Context) (domain.RenewalPlanSettings, bool, error) {
+	var payload string
+	err := r.db.QueryRowContext(ctx, `SELECT payload_json FROM ops_renewal_settings WHERE id = 1`).Scan(&payload)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return domain.RenewalPlanSettings{}, false, nil
+		}
+		if strings.Contains(strings.ToLower(err.Error()), "doesn't exist") {
+			return domain.RenewalPlanSettings{}, false, nil
+		}
+		return domain.RenewalPlanSettings{}, false, err
+	}
+	var out domain.RenewalPlanSettings
+	if err := json.Unmarshal([]byte(payload), &out); err != nil {
+		return domain.RenewalPlanSettings{}, false, err
+	}
+	return out, true, nil
+}
+
+func (r *RenewalRepo) SaveSettings(ctx context.Context, settings domain.RenewalPlanSettings) error {
+	payload, err := json.Marshal(settings)
+	if err != nil {
+		return err
+	}
+	_, err = r.db.ExecContext(ctx, `
+		INSERT INTO ops_renewal_settings (id, payload_json)
+		VALUES (1, ?)
+		ON DUPLICATE KEY UPDATE payload_json = VALUES(payload_json), updated_at = CURRENT_TIMESTAMP
+	`, string(payload))
+	return err
 }

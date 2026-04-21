@@ -14,6 +14,7 @@ type RenewalRepo struct {
 	mu         sync.RWMutex
 	plans      map[string]domain.RenewalPlan
 	unitPrices []domain.RenewalUnitPrice
+	settings   *domain.RenewalPlanSettings
 }
 
 func NewRenewalRepo() *RenewalRepo {
@@ -72,5 +73,22 @@ func (r *RenewalRepo) ReplaceUnitPrices(_ context.Context, prices []domain.Renew
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.unitPrices = append([]domain.RenewalUnitPrice(nil), prices...)
+	return nil
+}
+
+func (r *RenewalRepo) GetSettings(_ context.Context) (domain.RenewalPlanSettings, bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.settings == nil {
+		return domain.RenewalPlanSettings{}, false, nil
+	}
+	return *r.settings, true, nil
+}
+
+func (r *RenewalRepo) SaveSettings(_ context.Context, settings domain.RenewalPlanSettings) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	x := settings
+	r.settings = &x
 	return nil
 }

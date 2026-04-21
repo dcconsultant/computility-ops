@@ -233,6 +233,34 @@ export interface NonRenewalItem {
   rank_in_bucket?: number;
 }
 
+export type RenewalTargetMode = 'manual' | 'maximize';
+
+export interface RenewalSceneTarget {
+  mode: RenewalTargetMode;
+  target: number;
+}
+
+export interface RenewalRegionTargets {
+  compute: RenewalSceneTarget;
+  warm_storage: RenewalSceneTarget;
+  hot_storage: RenewalSceneTarget;
+  gpu: RenewalSceneTarget;
+}
+
+export interface RenewalRequirements {
+  domestic: RenewalRegionTargets;
+  india: RenewalRegionTargets;
+}
+
+export interface RenewalPlanSettings {
+  target_date: string;
+  excluded_environments: string[];
+  excluded_psas: string[];
+  requirements: RenewalRequirements;
+  domestic_budget: number;
+  india_budget: number;
+}
+
 export interface RenewalUnitPrice {
   country: string;
   scene_category: 'compute' | 'warm_storage' | 'hot_storage' | 'gpu' | string;
@@ -252,6 +280,7 @@ export interface RenewalPlan {
   total_servers_no_psa?: number;
   domestic_servers_no_psa?: number;
   india_servers_no_psa?: number;
+  requirements?: RenewalRequirements;
   covered_compute_cores?: number;
   covered_warm_storage_tb?: number;
   covered_hot_storage_tb?: number;

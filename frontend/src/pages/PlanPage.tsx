@@ -8,6 +8,7 @@ import {
   InputNumber,
   Modal,
   Popconfirm,
+  Select,
   Space,
   Table,
   Tabs,
@@ -20,9 +21,9 @@ import { ExclamationCircleOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { UploadProps } from 'antd';
 import { useNavigate } from 'react-router-dom';
-import { createPlan, deletePlan, exportPlan, importSpecialRules, listPlans, listRenewalUnitPrices, listSpecialRules, updateRenewalUnitPrices } from '../api';
+import { createPlan, deletePlan, exportPlan, getRenewalSettings, importSpecialRules, listPlans, listRenewalUnitPrices, listSpecialRules, updateRenewalSettings, updateRenewalUnitPrices } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
-import type { RenewalPlan, RenewalUnitPrice, SpecialRule } from '../types';
+import type { RenewalPlan, RenewalPlanSettings, RenewalRequirements, RenewalTargetMode, RenewalUnitPrice, SpecialRule } from '../types';
 
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -37,14 +38,9 @@ const SCENE_OPTIONS = [
 
 export default function PlanPage() {
   const navigate = useNavigate();
-  const [targetDate, setTargetDate] = useState(dayjs().format('YYYY-MM-DD'));
-  const [excludeEnvs, setExcludeEnvs] = useState('开发,测试');
-  const [excludePSAs, setExcludePSAs] = useState('');
-  const [targetCores, setTargetCores] = useState<number>(1200);
-  const [warmTargetStorageTB, setWarmTargetStorageTB] = useState<number>(0);
-  const [hotTargetStorageTB, setHotTargetStorageTB] = useState<number>(0);
-  const [domesticBudget, setDomesticBudget] = useState<number>(0);
-  const [indiaBudget, setIndiaBudget] = useState<number>(0);
+  const [settings, setSettings] = useState<RenewalPlanSettings>(defaultRenewalSettings());
+  const [settingsEditing, setSettingsEditing] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const [plans, setPlans] = useState<RenewalPlan[]>([]);
@@ -56,37 +52,30 @@ export default function PlanPage() {
   const [unitPrices, setUnitPrices] = useState<RenewalUnitPrice[]>([]);
   const [unitPriceLoading, setUnitPriceLoading] = useState(false);
   const [unitPriceSaving, setUnitPriceSaving] = useState(false);
-  const [planFormHydrated, setPlanFormHydrated] = useState(false);
 
   const [queryPlanID, setQueryPlanID] = useState('');
   const [queryTargetDateRange, setQueryTargetDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
   const [queryExcludedPSA, setQueryExcludedPSA] = useState('');
   const [queryExcludedEnv, setQueryExcludedEnv] = useState('');
 
-  function hydratePlanFormFromLatest(latest?: RenewalPlan) {
-    if (!latest || planFormHydrated) return;
-    if (latest.target_date) setTargetDate(latest.target_date);
-    setExcludeEnvs((latest.excluded_environments || []).join(','));
-    setExcludePSAs((latest.excluded_psas || []).join(','));
-    setTargetCores(Number(latest.target_cores || 0));
-    setWarmTargetStorageTB(Number(latest.warm_target_storage_tb || 0));
-    setHotTargetStorageTB(Number(latest.hot_target_storage_tb || 0));
-    setDomesticBudget(Number(latest.domestic_budget || 0));
-    setIndiaBudget(Number(latest.india_budget || 0));
-    setPlanFormHydrated(true);
-  }
-
   async function loadInitialPlans() {
     setListLoading(true);
     try {
       const resp = ensureApiOk(await listPlans());
-      const list = resp.data.list || [];
-      setPlans(list);
-      hydratePlanFormFromLatest(list[0]);
+      setPlans(resp.data.list || []);
     } catch (e) {
       message.error(parseApiError(e, '加载历史方案失败'));
     } finally {
       setListLoading(false);
+    }
+  }
+
+  async function reloadSettings() {
+    try {
+      const resp = ensureApiOk(await getRenewalSettings());
+      setSettings(normalizeSettings(resp.data));
+    } catch (e) {
+      message.error(parseApiError(e, '加载方案参数失败'));
     }
   }
 
@@ -137,39 +126,28 @@ export default function PlanPage() {
     loadInitialPlans();
     reloadSpecialRules();
     reloadUnitPrices();
+    reloadSettings();
   }, []);
 
   async function onCreatePlan() {
-    if (!targetDate) {
+    if (!settings.target_date) {
       message.warning('请选择续保目标时间');
       return;
     }
-    if (!targetCores || targetCores <= 0) {
-      message.warning('请输入有效计算型目标核数');
-      return;
-    }
-    if (warmTargetStorageTB < 0 || hotTargetStorageTB < 0) {
-      message.warning('温/热存储目标容量不能为负数');
-      return;
-    }
-    if (domesticBudget < 0 || indiaBudget < 0) {
+    if (settings.domestic_budget < 0 || settings.india_budget < 0) {
       message.warning('预算不能为负数');
       return;
     }
 
     setLoading(true);
     try {
-      const excluded = excludeEnvs.split(/[，,]/).map((x) => x.trim()).filter(Boolean);
-      const excludedPSAList = excludePSAs.split(/[，,]/).map((x) => x.trim()).filter(Boolean);
       const resp = ensureApiOk(await createPlan({
-        target_date: targetDate,
-        excluded_environments: excluded,
-        excluded_psas: excludedPSAList,
-        target_cores: targetCores,
-        warm_target_storage_tb: warmTargetStorageTB,
-        hot_target_storage_tb: hotTargetStorageTB,
-        domestic_budget: domesticBudget,
-        india_budget: indiaBudget
+        target_date: settings.target_date,
+        excluded_environments: settings.excluded_environments,
+        excluded_psas: settings.excluded_psas,
+        requirements: settings.requirements,
+        domestic_budget: settings.domestic_budget,
+        india_budget: settings.india_budget
       }));
       message.success(`方案已生成：${resp.data.plan_id}`);
       await reloadPlans();
@@ -226,6 +204,41 @@ export default function PlanPage() {
       message.error(parseApiError(e, '保存续保单价失败'));
     } finally {
       setUnitPriceSaving(false);
+    }
+  }
+
+  function onSettingListChange(field: 'excluded_environments' | 'excluded_psas', raw: string) {
+    const values = raw.split(/[，,]/).map((x) => x.trim()).filter(Boolean);
+    setSettings((prev) => ({ ...prev, [field]: values }));
+  }
+
+  function onSettingTarget(region: 'domestic' | 'india', scene: keyof RenewalRequirements['domestic'], patch: Partial<{ mode: RenewalTargetMode; target: number }>) {
+    setSettings((prev) => ({
+      ...prev,
+      requirements: {
+        ...prev.requirements,
+        [region]: {
+          ...prev.requirements[region],
+          [scene]: {
+            ...prev.requirements[region][scene],
+            ...patch
+          }
+        }
+      }
+    }));
+  }
+
+  async function onSaveSettings() {
+    setSettingsSaving(true);
+    try {
+      const resp = ensureApiOk(await updateRenewalSettings(settings));
+      setSettings(normalizeSettings(resp.data));
+      setSettingsEditing(false);
+      message.success('方案参数已保存');
+    } catch (e) {
+      message.error(parseApiError(e, '保存方案参数失败'));
+    } finally {
+      setSettingsSaving(false);
     }
   }
 
@@ -340,39 +353,97 @@ export default function PlanPage() {
           label: '续保方案管理',
           children: (
             <Space direction="vertical" size="large" style={{ width: '100%' }}>
-              <Card title="续保管理 - 生成方案">
+              <Card
+                title="续保管理 - 生成方案"
+                extra={(
+                  <Space>
+                    {!settingsEditing && <Button onClick={() => setSettingsEditing(true)}>修改方案参数</Button>}
+                    {settingsEditing && (
+                      <>
+                        <Button onClick={() => { setSettingsEditing(false); reloadSettings(); }}>取消</Button>
+                        <Button type="primary" loading={settingsSaving} onClick={onSaveSettings}>保存</Button>
+                      </>
+                    )}
+                    <Button type="primary" loading={loading} onClick={onCreatePlan}>生成方案</Button>
+                  </Space>
+                )}
+              >
                 <Space direction="vertical" size="middle" style={{ width: '100%' }}>
                   <Space wrap>
                     <Text>续保目标时间</Text>
                     <DatePicker
-                      value={targetDate ? dayjs(targetDate) : undefined}
-                      onChange={(d) => setTargetDate(d ? d.format('YYYY-MM-DD') : '')}
+                      value={settings.target_date ? dayjs(settings.target_date) : undefined}
+                      onChange={(d) => setSettings((prev) => ({ ...prev, target_date: d ? d.format('YYYY-MM-DD') : '' }))}
                       allowClear={false}
+                      disabled={!settingsEditing}
                     />
                   </Space>
 
                   <Space wrap>
                     <Text>排除环境</Text>
-                    <Input style={{ width: 300 }} value={excludeEnvs} onChange={(e) => setExcludeEnvs(e.target.value)} placeholder="开发,测试" />
-                    <Text type="secondary">多个环境用逗号分隔</Text>
+                    {settingsEditing ? (
+                      <Input style={{ width: 300 }} value={(settings.excluded_environments || []).join(',')} onChange={(e) => onSettingListChange('excluded_environments', e.target.value)} placeholder="开发,测试" />
+                    ) : (
+                      <Text>{(settings.excluded_environments || []).join('、') || '-'}</Text>
+                    )}
                   </Space>
 
                   <Space wrap>
                     <Text>排除PSA</Text>
-                    <Input style={{ width: 300 }} value={excludePSAs} onChange={(e) => setExcludePSAs(e.target.value)} placeholder="例如：A,B,C 或 10,20" />
-                    <Text type="secondary">排除的PSA不参与总量和续保清单统计</Text>
+                    {settingsEditing ? (
+                      <Input style={{ width: 300 }} value={(settings.excluded_psas || []).join(',')} onChange={(e) => onSettingListChange('excluded_psas', e.target.value)} placeholder="例如：A,B,C 或 10,20" />
+                    ) : (
+                      <Text>{(settings.excluded_psas || []).join('、') || '-'}</Text>
+                    )}
                   </Space>
 
-                  <Space wrap>
-                    <InputNumber min={1} value={targetCores} onChange={(v) => setTargetCores(v ?? 0)} addonBefore="计算目标核数" />
-                    <InputNumber min={0} step={1} value={warmTargetStorageTB} onChange={(v) => setWarmTargetStorageTB(v ?? 0)} addonBefore="温存储需求(TB)" />
-                    <InputNumber min={0} step={1} value={hotTargetStorageTB} onChange={(v) => setHotTargetStorageTB(v ?? 0)} addonBefore="热存储需求(TB)" />
-                  </Space>
+                  <Table
+                    pagination={false}
+                    rowKey={(r) => `${r.region}-${r.scene}`}
+                    dataSource={buildRequirementRows(settings.requirements)}
+                    columns={[
+                      { title: '国家', dataIndex: 'regionLabel', width: 100 },
+                      { title: '场景', dataIndex: 'sceneLabel', width: 120 },
+                      {
+                        title: '需求方式',
+                        dataIndex: 'mode',
+                        width: 140,
+                        render: (v: RenewalTargetMode, row: any) => settingsEditing ? (
+                          <Select
+                            style={{ width: 120 }}
+                            value={v}
+                            options={[{ label: '手动输入', value: 'manual' }, { label: '多多益善', value: 'maximize' }]}
+                            onChange={(next) => onSettingTarget(row.region, row.scene, { mode: next as RenewalTargetMode })}
+                          />
+                        ) : (v === 'maximize' ? '多多益善' : '手动输入')
+                      },
+                      {
+                        title: '需求值',
+                        dataIndex: 'target',
+                        width: 180,
+                        render: (v: number, row: any) => {
+                          if (!settingsEditing) {
+                            return row.mode === 'maximize' ? '价值分全部达标' : formatInt(v);
+                          }
+                          return (
+                            <InputNumber
+                              min={0}
+                              step={row.scene === 'gpu' ? 1 : 10}
+                              value={Number(v || 0)}
+                              disabled={row.mode === 'maximize'}
+                              onChange={(next) => onSettingTarget(row.region, row.scene, { target: Number(next ?? 0) })}
+                            />
+                          );
+                        }
+                      }
+                    ]}
+                  />
 
                   <Space wrap>
-                    <InputNumber min={0} step={1000} value={domesticBudget} onChange={(v) => setDomesticBudget(v ?? 0)} addonBefore="国内预算(CNY)" />
-                    <InputNumber min={0} step={1000} value={indiaBudget} onChange={(v) => setIndiaBudget(v ?? 0)} addonBefore="印度预算(CNY)" />
-                    <Button type="primary" loading={loading} onClick={onCreatePlan}>生成方案</Button>
+                    <Text>国内预算(CNY)：{settingsEditing ? '' : formatInt(settings.domestic_budget)}</Text>
+                    {settingsEditing && <InputNumber min={0} step={1000} value={settings.domestic_budget} onChange={(v) => setSettings((prev) => ({ ...prev, domestic_budget: Number(v ?? 0) }))} />}
+                    <Text>印度预算(CNY)：{settingsEditing ? '' : formatInt(settings.india_budget)}</Text>
+                    {settingsEditing && <InputNumber min={0} step={1000} value={settings.india_budget} onChange={(v) => setSettings((prev) => ({ ...prev, india_budget: Number(v ?? 0) }))} />}
                   </Space>
                 </Space>
               </Card>
@@ -514,6 +585,56 @@ export default function PlanPage() {
       ]}
     />
   );
+}
+
+function defaultRenewalSettings(): RenewalPlanSettings {
+  return {
+    target_date: dayjs().format('YYYY-MM-DD'),
+    excluded_environments: ['开发', '测试'],
+    excluded_psas: [],
+    requirements: {
+      domestic: {
+        compute: { mode: 'manual', target: 1200 },
+        warm_storage: { mode: 'manual', target: 0 },
+        hot_storage: { mode: 'manual', target: 0 },
+        gpu: { mode: 'manual', target: 0 }
+      },
+      india: {
+        compute: { mode: 'manual', target: 0 },
+        warm_storage: { mode: 'manual', target: 0 },
+        hot_storage: { mode: 'manual', target: 0 },
+        gpu: { mode: 'manual', target: 0 }
+      }
+    },
+    domestic_budget: 0,
+    india_budget: 0
+  };
+}
+
+function normalizeSettings(input?: RenewalPlanSettings): RenewalPlanSettings {
+  const base = defaultRenewalSettings();
+  if (!input) return base;
+  return {
+    ...base,
+    ...input,
+    requirements: {
+      domestic: { ...base.requirements.domestic, ...(input.requirements?.domestic || {}) },
+      india: { ...base.requirements.india, ...(input.requirements?.india || {}) }
+    }
+  };
+}
+
+function buildRequirementRows(requirements: RenewalRequirements) {
+  return [
+    { region: 'domestic', regionLabel: '国内', scene: 'compute', sceneLabel: '计算', ...requirements.domestic.compute },
+    { region: 'domestic', regionLabel: '国内', scene: 'warm_storage', sceneLabel: '温存储', ...requirements.domestic.warm_storage },
+    { region: 'domestic', regionLabel: '国内', scene: 'hot_storage', sceneLabel: '热存储', ...requirements.domestic.hot_storage },
+    { region: 'domestic', regionLabel: '国内', scene: 'gpu', sceneLabel: 'GPU', ...requirements.domestic.gpu },
+    { region: 'india', regionLabel: '印度', scene: 'compute', sceneLabel: '计算', ...requirements.india.compute },
+    { region: 'india', regionLabel: '印度', scene: 'warm_storage', sceneLabel: '温存储', ...requirements.india.warm_storage },
+    { region: 'india', regionLabel: '印度', scene: 'hot_storage', sceneLabel: '热存储', ...requirements.india.hot_storage },
+    { region: 'india', regionLabel: '印度', scene: 'gpu', sceneLabel: 'GPU', ...requirements.india.gpu }
+  ];
 }
 
 function normalizeUnitPrices(list: RenewalUnitPrice[]): RenewalUnitPrice[] {

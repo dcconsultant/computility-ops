@@ -21,6 +21,7 @@ type CreatePlanInput struct {
 	HotTargetStorageTB   float64
 	DomesticBudget       float64
 	IndiaBudget          float64
+	Requirements         domain.RenewalRequirements
 }
 
 type RenewalService struct {
@@ -54,6 +55,16 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	targetDate, err := parseDate(in.TargetDate)
 	if err != nil {
 		return domain.RenewalPlan{}, fmt.Errorf("invalid target_date: %v", err)
+	}
+	req := normalizeRequirements(in.Requirements)
+	if req.Domestic.Compute.Target == 0 && req.India.Compute.Target == 0 && in.TargetCores > 0 {
+		req.Domestic.Compute = domain.RenewalSceneTarget{Mode: domain.RenewalTargetModeManual, Target: float64(in.TargetCores)}
+		req.Domestic.WarmStorage = domain.RenewalSceneTarget{Mode: domain.RenewalTargetModeManual, Target: in.WarmTargetStorageTB}
+		req.Domestic.HotStorage = domain.RenewalSceneTarget{Mode: domain.RenewalTargetModeManual, Target: in.HotTargetStorageTB}
+		req.Domestic.GPU = domain.RenewalSceneTarget{Mode: domain.RenewalTargetModeManual, Target: 0}
+	}
+	if err := validateRequirements(req); err != nil {
+		return domain.RenewalPlan{}, err
 	}
 	if err := s.ensureUnitPricesReadyForPlan(ctx); err != nil {
 		return domain.RenewalPlan{}, err
@@ -349,14 +360,38 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		return selected, pickedStorage, pickedCores
 	}
 
-	requiredComputeCores := maxInt(0, in.TargetCores-coveredComputeCores)
-	requiredWarmStorage := maxFloat(0, in.WarmTargetStorageTB-coveredWarmStorage)
-	requiredHotStorage := maxFloat(0, in.HotTargetStorageTB-coveredHotStorage)
+	selectByGPUCards := func(items []domain.RenewalItem, target int) ([]domain.RenewalItem, int) {
+		must, normal := splitByWhitelist(items)
+		selected := make([]domain.RenewalItem, 0, len(items))
+		picked := 0
+		for _, item := range must {
+			selected = append(selected, item)
+			picked += item.GPUCardCount
+		}
+		for _, item := range normal {
+			if picked >= target {
+				break
+			}
+			selected = append(selected, item)
+			picked += item.GPUCardCount
+		}
+		return selected, picked
+	}
+
+	targetComputeCores := aggregateSceneTarget(req.Domestic.Compute, req.India.Compute)
+	targetWarmStorage := aggregateSceneTarget(req.Domestic.WarmStorage, req.India.WarmStorage)
+	targetHotStorage := aggregateSceneTarget(req.Domestic.HotStorage, req.India.HotStorage)
+	targetGPUCards := aggregateSceneTarget(req.Domestic.GPU, req.India.GPU)
+
+	requiredComputeCores := maxInt(0, int(targetComputeCores)-coveredComputeCores)
+	requiredWarmStorage := maxFloat(0, targetWarmStorage-coveredWarmStorage)
+	requiredHotStorage := maxFloat(0, targetHotStorage-coveredHotStorage)
+	requiredGPUCards := maxInt(0, int(targetGPUCards)-gpuCoveredCards)
 
 	computeItems, computeCores := selectByCores(bucketItems["compute"], requiredComputeCores)
 	warmItems, warmStorage, warmCores := selectByStorage(bucketItems["warm_storage"], requiredWarmStorage)
 	hotItems, hotStorage, hotCores := selectByStorage(bucketItems["hot_storage"], requiredHotStorage)
-	gpuItems := bucketItems["gpu"] // 全部续保（已应用环境过滤、到期过滤、blacklist）
+	gpuItems, gpuCardsSelected := selectByGPUCards(bucketItems["gpu"], requiredGPUCards)
 
 	appendRankingNonRenewals := func(bucket string, all []domain.RenewalItem, selected []domain.RenewalItem) {
 		selectedSet := make(map[string]bool, len(selected))
@@ -389,11 +424,10 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	appendRankingNonRenewals("hot_storage", bucketItems["hot_storage"], hotItems)
 	gpuCores := 0
 	gpuStorage := 0.0
-	gpuRenewalCards := 0
+	gpuRenewalCards := gpuCardsSelected
 	for _, item := range gpuItems {
 		gpuCores += item.CPULogicalCores
 		gpuStorage += item.StorageCapacityTB
-		gpuRenewalCards += item.GPUCardCount
 	}
 
 	sort.SliceStable(nonRenewalItems, func(i, j int) bool {
@@ -420,14 +454,15 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		TargetDate:           targetDate.Format("2006-01-02"),
 		ExcludedEnvironments: excludedCanonical,
 		ExcludedPSAs:         excludedPSACanonical,
-		TargetCores:          in.TargetCores,
-		WarmTargetStorageTB:  in.WarmTargetStorageTB,
-		HotTargetStorageTB:   in.HotTargetStorageTB,
+		TargetCores:          int(targetComputeCores),
+		WarmTargetStorageTB:  targetWarmStorage,
+		HotTargetStorageTB:   targetHotStorage,
 		DomesticBudget:       in.DomesticBudget,
 		IndiaBudget:          in.IndiaBudget,
 		TotalServersNoPSA:    totalServersNoPSA,
 		DomesticServersNoPSA: domesticServersNoPSA,
 		IndiaServersNoPSA:    indiaServersNoPSA,
+		Requirements:         req,
 		CoveredComputeCores:  coveredComputeCores,
 		CoveredWarmStorageTB: coveredWarmStorage,
 		CoveredHotStorageTB:  coveredHotStorage,
@@ -446,7 +481,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		Sections: []domain.RenewalPlanSection{
 			{
 				Bucket:        "compute",
-				TargetCores:   in.TargetCores,
+				TargetCores:   int(targetComputeCores),
 				CoveredCores:  coveredComputeCores,
 				RequiredCores: requiredComputeCores,
 				CoveredCount:  coveredComputeCount,
@@ -456,7 +491,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			},
 			{
 				Bucket:            "warm_storage",
-				TargetStorageTB:   in.WarmTargetStorageTB,
+				TargetStorageTB:   targetWarmStorage,
 				CoveredStorageTB:  coveredWarmStorage,
 				RequiredStorageTB: requiredWarmStorage,
 				CoveredCount:      coveredWarmCount,
@@ -467,7 +502,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			},
 			{
 				Bucket:            "hot_storage",
-				TargetStorageTB:   in.HotTargetStorageTB,
+				TargetStorageTB:   targetHotStorage,
 				CoveredStorageTB:  coveredHotStorage,
 				RequiredStorageTB: requiredHotStorage,
 				CoveredCount:      coveredHotCount,
@@ -513,6 +548,14 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	if err := s.renewalRepo.SavePlan(ctx, plan); err != nil {
 		return domain.RenewalPlan{}, err
 	}
+	_ = s.renewalRepo.SaveSettings(ctx, domain.RenewalPlanSettings{
+		TargetDate:           plan.TargetDate,
+		ExcludedEnvironments: plan.ExcludedEnvironments,
+		ExcludedPSAs:         plan.ExcludedPSAs,
+		Requirements:         plan.Requirements,
+		DomesticBudget:       plan.DomesticBudget,
+		IndiaBudget:          plan.IndiaBudget,
+	})
 	return plan, nil
 }
 
@@ -599,6 +642,38 @@ func (s *RenewalService) SaveUnitPrices(ctx context.Context, prices []domain.Ren
 		return nil, err
 	}
 	return normalized, nil
+}
+
+func (s *RenewalService) GetSettings(ctx context.Context) (domain.RenewalPlanSettings, error) {
+	settings, ok, err := s.renewalRepo.GetSettings(ctx)
+	if err != nil {
+		return domain.RenewalPlanSettings{}, err
+	}
+	if !ok {
+		return defaultPlanSettings(), nil
+	}
+	settings.Requirements = normalizeRequirements(settings.Requirements)
+	return settings, nil
+}
+
+func (s *RenewalService) SaveSettings(ctx context.Context, settings domain.RenewalPlanSettings) (domain.RenewalPlanSettings, error) {
+	settings.Requirements = normalizeRequirements(settings.Requirements)
+	if err := validateRequirements(settings.Requirements); err != nil {
+		return domain.RenewalPlanSettings{}, err
+	}
+	if settings.DomesticBudget < 0 || settings.IndiaBudget < 0 {
+		return domain.RenewalPlanSettings{}, fmt.Errorf("budget must be >= 0")
+	}
+	if strings.TrimSpace(settings.TargetDate) == "" {
+		return domain.RenewalPlanSettings{}, fmt.Errorf("target_date is required")
+	}
+	if _, err := parseDate(settings.TargetDate); err != nil {
+		return domain.RenewalPlanSettings{}, fmt.Errorf("invalid target_date: %v", err)
+	}
+	if err := s.renewalRepo.SaveSettings(ctx, settings); err != nil {
+		return domain.RenewalPlanSettings{}, err
+	}
+	return settings, nil
 }
 
 func splitByWhitelist(items []domain.RenewalItem) (must []domain.RenewalItem, normal []domain.RenewalItem) {
@@ -733,6 +808,81 @@ func splitPSATokens(raw string) []string {
 		}
 	}
 	return out
+}
+
+func defaultPlanSettings() domain.RenewalPlanSettings {
+	return domain.RenewalPlanSettings{
+		TargetDate:           time.Now().Format("2006-01-02"),
+		ExcludedEnvironments: []string{"开发", "测试"},
+		ExcludedPSAs:         []string{},
+		Requirements: domain.RenewalRequirements{
+			Domestic: domain.RenewalRegionTargets{
+				Compute:     domain.RenewalSceneTarget{Mode: domain.RenewalTargetModeManual, Target: 1200},
+				WarmStorage: domain.RenewalSceneTarget{Mode: domain.RenewalTargetModeManual, Target: 0},
+				HotStorage:  domain.RenewalSceneTarget{Mode: domain.RenewalTargetModeManual, Target: 0},
+				GPU:         domain.RenewalSceneTarget{Mode: domain.RenewalTargetModeManual, Target: 0},
+			},
+			India: domain.RenewalRegionTargets{
+				Compute:     domain.RenewalSceneTarget{Mode: domain.RenewalTargetModeManual, Target: 0},
+				WarmStorage: domain.RenewalSceneTarget{Mode: domain.RenewalTargetModeManual, Target: 0},
+				HotStorage:  domain.RenewalSceneTarget{Mode: domain.RenewalTargetModeManual, Target: 0},
+				GPU:         domain.RenewalSceneTarget{Mode: domain.RenewalTargetModeManual, Target: 0},
+			},
+		},
+		DomesticBudget: 0,
+		IndiaBudget:    0,
+	}
+}
+
+func normalizeRequirements(req domain.RenewalRequirements) domain.RenewalRequirements {
+	normalize := func(x domain.RenewalSceneTarget) domain.RenewalSceneTarget {
+		if x.Mode != domain.RenewalTargetModeMaximize {
+			x.Mode = domain.RenewalTargetModeManual
+		}
+		if x.Target < 0 {
+			x.Target = 0
+		}
+		return x
+	}
+	req.Domestic.Compute = normalize(req.Domestic.Compute)
+	req.Domestic.WarmStorage = normalize(req.Domestic.WarmStorage)
+	req.Domestic.HotStorage = normalize(req.Domestic.HotStorage)
+	req.Domestic.GPU = normalize(req.Domestic.GPU)
+	req.India.Compute = normalize(req.India.Compute)
+	req.India.WarmStorage = normalize(req.India.WarmStorage)
+	req.India.HotStorage = normalize(req.India.HotStorage)
+	req.India.GPU = normalize(req.India.GPU)
+	return req
+}
+
+func validateRequirements(req domain.RenewalRequirements) error {
+	list := []domain.RenewalSceneTarget{
+		req.Domestic.Compute, req.Domestic.WarmStorage, req.Domestic.HotStorage, req.Domestic.GPU,
+		req.India.Compute, req.India.WarmStorage, req.India.HotStorage, req.India.GPU,
+	}
+	hasDemand := false
+	for _, x := range list {
+		if x.Mode != domain.RenewalTargetModeManual && x.Mode != domain.RenewalTargetModeMaximize {
+			return fmt.Errorf("invalid target mode")
+		}
+		if x.Target < 0 {
+			return fmt.Errorf("target must be >= 0")
+		}
+		if x.Mode == domain.RenewalTargetModeMaximize || x.Target > 0 {
+			hasDemand = true
+		}
+	}
+	if !hasDemand {
+		return fmt.Errorf("at least one demand target is required")
+	}
+	return nil
+}
+
+func aggregateSceneTarget(domestic, india domain.RenewalSceneTarget) float64 {
+	if domestic.Mode == domain.RenewalTargetModeMaximize || india.Mode == domain.RenewalTargetModeMaximize {
+		return 1e12
+	}
+	return domestic.Target + india.Target
 }
 
 func containsNormalized(list []string, target string) bool {

@@ -44,6 +44,7 @@ type RenewalPlan struct {
 	TotalServersNoPSA    int                  `json:"total_servers_no_psa,omitempty"`
 	DomesticServersNoPSA int                  `json:"domestic_servers_no_psa,omitempty"`
 	IndiaServersNoPSA    int                  `json:"india_servers_no_psa,omitempty"`
+	Requirements         RenewalRequirements  `json:"requirements,omitempty"`
 	CoveredComputeCores  int                  `json:"covered_compute_cores,omitempty"`
 	CoveredWarmStorageTB float64              `json:"covered_warm_storage_tb,omitempty"`
 	CoveredHotStorageTB  float64              `json:"covered_hot_storage_tb,omitempty"`

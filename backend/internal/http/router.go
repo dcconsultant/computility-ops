@@ -61,6 +61,8 @@ func NewRouter(h Handlers) *gin.Engine {
 		v1.DELETE("/renewals/plans/:plan_id", h.Renewal.DeletePlan)
 		v1.GET("/renewals/plans/:plan_id/export", h.Renewal.ExportPlan)
 		v1.GET("/renewals/plans/:plan_id/non-renewal/export", h.Renewal.ExportNonRenewal)
+		v1.GET("/renewals/settings", h.Renewal.GetSettings)
+		v1.PUT("/renewals/settings", h.Renewal.UpdateSettings)
 		v1.GET("/renewals/unit-prices", h.Renewal.ListUnitPrices)
 		v1.PUT("/renewals/unit-prices", h.Renewal.UpdateUnitPrices)
 	}

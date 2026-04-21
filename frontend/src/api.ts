@@ -14,6 +14,8 @@ import type {
   PackageFailureRate,
   PackageModelFailureRate,
   RenewalPlan,
+  RenewalPlanSettings,
+  RenewalRequirements,
   RenewalUnitPrice,
   ServerItem,
   SpecialRule,
@@ -145,15 +147,26 @@ export interface CreatePlanPayload {
   target_date: string;
   excluded_environments: string[];
   excluded_psas: string[];
-  target_cores: number;
-  warm_target_storage_tb: number;
-  hot_target_storage_tb: number;
+  target_cores?: number;
+  warm_target_storage_tb?: number;
+  hot_target_storage_tb?: number;
+  requirements: RenewalRequirements;
   domestic_budget: number;
   india_budget: number;
 }
 
 export async function createPlan(payload: CreatePlanPayload) {
   const { data } = await http.post<ApiResp<RenewalPlan>>('/renewals/plan', payload);
+  return data;
+}
+
+export async function getRenewalSettings() {
+  const { data } = await http.get<ApiResp<RenewalPlanSettings>>('/renewals/settings');
+  return data;
+}
+
+export async function updateRenewalSettings(payload: RenewalPlanSettings) {
+  const { data } = await http.put<ApiResp<RenewalPlanSettings>>('/renewals/settings', payload);
   return data;
 }
 

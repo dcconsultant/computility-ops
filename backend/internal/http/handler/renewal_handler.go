@@ -37,6 +37,7 @@ func (h *RenewalHandler) CreatePlan(c *gin.Context) {
 		HotTargetStorageTB:   req.HotTargetStorageTB,
 		DomesticBudget:       req.DomesticBudget,
 		IndiaBudget:          req.IndiaBudget,
+		Requirements:         req.Requirements,
 	})
 	if err != nil {
 		fail(c, 40001, err.Error())
@@ -88,6 +89,38 @@ func (h *RenewalHandler) ListUnitPrices(c *gin.Context) {
 		return
 	}
 	ok(c, gin.H{"list": prices, "total": len(prices), "page": 1, "page_size": len(prices)})
+}
+
+func (h *RenewalHandler) GetSettings(c *gin.Context) {
+	c.Set("audit_action", "renewals.get_settings")
+	settings, err := h.service.GetSettings(c.Request.Context())
+	if err != nil {
+		fail(c, 50001, err.Error())
+		return
+	}
+	ok(c, settings)
+}
+
+func (h *RenewalHandler) UpdateSettings(c *gin.Context) {
+	c.Set("audit_action", "renewals.update_settings")
+	var req UpdateRenewalSettingsReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, 40001, "请求参数无效，请检查方案参数")
+		return
+	}
+	settings, err := h.service.SaveSettings(c.Request.Context(), domain.RenewalPlanSettings{
+		TargetDate:           req.TargetDate,
+		ExcludedEnvironments: req.ExcludedEnvironments,
+		ExcludedPSAs:         req.ExcludedPSAs,
+		Requirements:         req.Requirements,
+		DomesticBudget:       req.DomesticBudget,
+		IndiaBudget:          req.IndiaBudget,
+	})
+	if err != nil {
+		fail(c, 40001, err.Error())
+		return
+	}
+	ok(c, settings)
 }
 
 func (h *RenewalHandler) UpdateUnitPrices(c *gin.Context) {
