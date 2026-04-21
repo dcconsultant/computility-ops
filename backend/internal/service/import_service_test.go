@@ -39,6 +39,18 @@ func TestValidateRequiredHeaders(t *testing.T) {
 	}
 }
 
+func TestMapHeaders_SpecialRulesWithAnnotatedHeaders(t *testing.T) {
+	headers := []string{"SN", "策略（加白/加黑）", "原因（可选）"}
+	mapped := MapHeaders(headers, specialHeaderMap)
+
+	want := []string{"sn", "policy", "reason"}
+	for i := range want {
+		if mapped[i] != want[i] {
+			t.Fatalf("mapped[%d]=%q, want %q", i, mapped[i], want[i])
+		}
+	}
+}
+
 func TestNormalizeSpecialPolicy(t *testing.T) {
 	cases := map[string]string{
 		"白名单":       "whitelist",

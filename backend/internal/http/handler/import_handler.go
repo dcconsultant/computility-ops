@@ -21,17 +21,17 @@ type ImportHandler struct {
 }
 
 type serverPackageStandardizedItem struct {
-	SN                  string `json:"sn"`
-	Manufacturer        string `json:"manufacturer"`
-	Model               string `json:"model"`
-	PSA                 string `json:"psa"`
-	IDC                 string `json:"idc,omitempty"`
-	Environment         string `json:"environment,omitempty"`
-	ConfigType          string `json:"config_type"`
+	SN                     string `json:"sn"`
+	Manufacturer           string `json:"manufacturer"`
+	Model                  string `json:"model"`
+	PSA                    string `json:"psa"`
+	IDC                    string `json:"idc,omitempty"`
+	Environment            string `json:"environment,omitempty"`
+	ConfigType             string `json:"config_type"`
 	ConfigTypeStandardized string `json:"config_type_standardized"`
-	PackageMatched      bool   `json:"package_standardized_matched"`
-	WarrantyEndDate     string `json:"warranty_end_date,omitempty"`
-	LaunchDate          string `json:"launch_date,omitempty"`
+	PackageMatched         bool   `json:"package_standardized_matched"`
+	WarrantyEndDate        string `json:"warranty_end_date,omitempty"`
+	LaunchDate             string `json:"launch_date,omitempty"`
 }
 
 func NewImportHandler(s *service.ImportService) *ImportHandler { return &ImportHandler{service: s} }
@@ -653,7 +653,7 @@ func serviceHostPackageHeaderMap() map[string]string {
 	return map[string]string{"配置类型": "config_type", "套餐": "config_type", "configtype": "config_type", "场景大类": "scene_category", "scenecategory": "scene_category", "cpu逻辑核数": "cpu_logical_cores", "cpulogicalcores": "cpu_logical_cores", "gpu卡数": "gpu_card_count", "卡数": "gpu_card_count", "gpu_card_count": "gpu_card_count", "gpucardcount": "gpu_card_count", "数据盘类型": "data_disk_type", "数据盘种类": "data_disk_type", "datadisktype": "data_disk_type", "磁盘类型": "data_disk_type", "disktype": "data_disk_type", "数据盘数量": "data_disk_count", "datadiskcount": "data_disk_count", "存储容量(tb)": "storage_capacity_tb", "存储容量": "storage_capacity_tb", "storagecapacitytb": "storage_capacity_tb", "服务器价值分": "server_value_score", "价值分": "server_value_score", "servervaluescore": "server_value_score", "架构标准化系数": "arch_standardized_factor", "archstandardizedfactor": "arch_standardized_factor"}
 }
 func serviceSpecialHeaderMap() map[string]string {
-	return map[string]string{"sn": "sn", "序列号": "sn", "制造商": "manufacturer", "厂商": "manufacturer", "manufacturer": "manufacturer", "型号": "model", "model": "model", "psa": "psa", "机房": "idc", "idc": "idc", "套餐": "package_type", "配置类型": "package_type", "保修结束日期": "warranty_end_date", "投产日期": "launch_date", "策略": "policy", "标签": "policy", "黑白": "policy", "原因": "reason", "备注": "reason", "reason": "reason"}
+	return map[string]string{"sn": "sn", "序列号": "sn", "制造商": "manufacturer", "厂商": "manufacturer", "manufacturer": "manufacturer", "型号": "model", "model": "model", "psa": "psa", "机房": "idc", "idc": "idc", "套餐": "package_type", "配置类型": "package_type", "保修结束日期": "warranty_end_date", "投产日期": "launch_date", "策略": "policy", "策略（加白/加黑）": "policy", "策略(加白/加黑)": "policy", "标签": "policy", "黑白": "policy", "原因": "reason", "原因（可选）": "reason", "原因(可选)": "reason", "备注": "reason", "reason": "reason"}
 }
 func serviceModelFailureHeaderMap() map[string]string {
 	return map[string]string{"厂商": "manufacturer", "制造商": "manufacturer", "manufacturer": "manufacturer", "型号": "model", "服务器型号": "model", "model": "model", "故障率": "failure_rate", "failurerate": "failure_rate", "过保故障率": "over_warranty_failure_rate", "overwarrantyfailurerate": "over_warranty_failure_rate"}

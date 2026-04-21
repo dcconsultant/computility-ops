@@ -248,9 +248,13 @@ var specialHeaderMap = map[string]string{
 	"保修结束日期":       "warranty_end_date",
 	"投产日期":         "launch_date",
 	"策略":           "policy",
+	"策略（加白/加黑）":    "policy",
+	"策略(加白/加黑)":    "policy",
 	"标签":           "policy",
 	"黑白":           "policy",
 	"原因":           "reason",
+	"原因（可选）":       "reason",
+	"原因(可选)":       "reason",
 	"备注":           "reason",
 	"reason":       "reason",
 }
