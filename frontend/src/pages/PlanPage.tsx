@@ -54,11 +54,37 @@ export default function PlanPage() {
   const [unitPrices, setUnitPrices] = useState<RenewalUnitPrice[]>([]);
   const [unitPriceLoading, setUnitPriceLoading] = useState(false);
   const [unitPriceSaving, setUnitPriceSaving] = useState(false);
+  const [planFormHydrated, setPlanFormHydrated] = useState(false);
 
   const [queryPlanID, setQueryPlanID] = useState('');
   const [queryTargetDateRange, setQueryTargetDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
   const [queryExcludedPSA, setQueryExcludedPSA] = useState('');
   const [queryExcludedEnv, setQueryExcludedEnv] = useState('');
+
+  function hydratePlanFormFromLatest(latest?: RenewalPlan) {
+    if (!latest || planFormHydrated) return;
+    if (latest.target_date) setTargetDate(latest.target_date);
+    setExcludeEnvs((latest.excluded_environments || []).join(','));
+    setExcludePSAs((latest.excluded_psas || []).join(','));
+    setTargetCores(Number(latest.target_cores || 0));
+    setWarmTargetStorageTB(Number(latest.warm_target_storage_tb || 0));
+    setHotTargetStorageTB(Number(latest.hot_target_storage_tb || 0));
+    setPlanFormHydrated(true);
+  }
+
+  async function loadInitialPlans() {
+    setListLoading(true);
+    try {
+      const resp = ensureApiOk(await listPlans());
+      const list = resp.data.list || [];
+      setPlans(list);
+      hydratePlanFormFromLatest(list[0]);
+    } catch (e) {
+      message.error(parseApiError(e, '加载历史方案失败'));
+    } finally {
+      setListLoading(false);
+    }
+  }
 
   async function reloadPlans() {
     setListLoading(true);
@@ -104,7 +130,7 @@ export default function PlanPage() {
   }
 
   useEffect(() => {
-    reloadPlans();
+    loadInitialPlans();
     reloadSpecialRules();
     reloadUnitPrices();
   }, []);
@@ -381,38 +407,44 @@ export default function PlanPage() {
                 />
               </Card>
 
-              <Card
-                title="续保管理 - 例外清单"
-                extra={(
-                  <Space>
-                    <Button onClick={reloadSpecialRules} loading={specialLoading}>刷新</Button>
-                    <Upload {...specialUploadProps}>
-                      <Button icon={<UploadOutlined />} loading={specialUploading}>上传并导入</Button>
-                    </Upload>
-                  </Space>
-                )}
-              >
-                <Space direction="vertical" style={{ width: '100%' }}>
-                  <Text type="secondary">导入模板建议三列：SN、策略（加白/加黑）、原因（可选）。其余字段会自动从服务器管理表按 SN 补全。</Text>
-                  <Table
-                    rowKey="sn"
-                    loading={specialLoading}
-                    dataSource={specialRules}
-                    pagination={withTotalPagination(10)}
-                    columns={[
-                      { title: 'SN', dataIndex: 'sn', width: 160 },
-                      { title: '制造商', dataIndex: 'manufacturer', width: 120 },
-                      { title: '型号', dataIndex: 'model', width: 140 },
-                      { title: 'PSA', dataIndex: 'psa', width: 100 },
-                      { title: '套餐', dataIndex: 'package_type', width: 140 },
-                      { title: '策略', dataIndex: 'policy', width: 100 },
-                      { title: '原因', dataIndex: 'reason', width: 220 }
-                    ]}
-                    scroll={{ x: 1140 }}
-                  />
-                </Space>
-              </Card>
             </Space>
+          )
+        },
+        {
+          key: 'special_rules',
+          label: '例外清单维护',
+          children: (
+            <Card
+              title="续保管理 - 例外清单"
+              extra={(
+                <Space>
+                  <Button onClick={reloadSpecialRules} loading={specialLoading}>刷新</Button>
+                  <Upload {...specialUploadProps}>
+                    <Button icon={<UploadOutlined />} loading={specialUploading}>上传并导入</Button>
+                  </Upload>
+                </Space>
+              )}
+            >
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Text type="secondary">导入模板建议三列：SN、策略（加白/加黑）、原因（可选）。其余字段会自动从服务器管理表按 SN 补全。</Text>
+                <Table
+                  rowKey="sn"
+                  loading={specialLoading}
+                  dataSource={specialRules}
+                  pagination={withTotalPagination(10)}
+                  columns={[
+                    { title: 'SN', dataIndex: 'sn', width: 160 },
+                    { title: '制造商', dataIndex: 'manufacturer', width: 120 },
+                    { title: '型号', dataIndex: 'model', width: 140 },
+                    { title: 'PSA', dataIndex: 'psa', width: 100 },
+                    { title: '套餐', dataIndex: 'package_type', width: 140 },
+                    { title: '策略', dataIndex: 'policy', width: 100 },
+                    { title: '原因', dataIndex: 'reason', width: 220 }
+                  ]}
+                  scroll={{ x: 1140 }}
+                />
+              </Space>
+            </Card>
           )
         },
         {
