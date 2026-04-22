@@ -174,6 +174,10 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	gpuCurrentServers := 0
 	gpuCoveredCards := 0
 	gpuCoveredServers := 0
+	coveredComputeByRegion := map[string]int{"domestic": 0, "india": 0}
+	coveredWarmByRegion := map[string]float64{"domestic": 0, "india": 0}
+	coveredHotByRegion := map[string]float64{"domestic": 0, "india": 0}
+	gpuCoveredCardsByRegion := map[string]int{"domestic": 0, "india": 0}
 
 	for _, srv := range servers {
 		if excludedSet[normalizeEnv(srv.Environment)] {
@@ -217,6 +221,10 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		}
 
 		bucket := normalizeBucket(pkg.SceneCategory)
+		region := "domestic"
+		if isIndiaIDC(srv.IDC) {
+			region = "india"
+		}
 		gpuCards := pkg.GPUCardCount
 		if bucket == "gpu" {
 			gpuCurrentCards += gpuCards
@@ -227,15 +235,19 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			switch bucket {
 			case "compute":
 				coveredComputeCores += cores
+				coveredComputeByRegion[region] += cores
 				coveredComputeCount++
 			case "warm_storage":
 				coveredWarmStorage += pkg.StorageCapacityTB
+				coveredWarmByRegion[region] += pkg.StorageCapacityTB
 				coveredWarmCount++
 			case "hot_storage":
 				coveredHotStorage += pkg.StorageCapacityTB
+				coveredHotByRegion[region] += pkg.StorageCapacityTB
 				coveredHotCount++
 			case "gpu":
 				gpuCoveredCards += gpuCards
+				gpuCoveredCardsByRegion[region] += gpuCards
 				gpuCoveredServers++
 			}
 			continue
@@ -375,20 +387,152 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		return selected, picked
 	}
 
-	targetComputeCores := aggregateSceneTarget(req.Domestic.Compute, req.India.Compute)
-	targetWarmStorage := aggregateSceneTarget(req.Domestic.WarmStorage, req.India.WarmStorage)
-	targetHotStorage := aggregateSceneTarget(req.Domestic.HotStorage, req.India.HotStorage)
-	targetGPUCards := aggregateSceneTarget(req.Domestic.GPU, req.India.GPU)
+	filterItemsByRegion := func(items []domain.RenewalItem, region string) []domain.RenewalItem {
+		out := make([]domain.RenewalItem, 0, len(items))
+		for _, item := range items {
+			itemRegion := "domestic"
+			if isIndiaIDC(item.IDC) {
+				itemRegion = "india"
+			}
+			if itemRegion == region {
+				out = append(out, item)
+			}
+		}
+		return out
+	}
+	sumCores := func(items []domain.RenewalItem) int {
+		total := 0
+		for _, item := range items {
+			total += item.CPULogicalCores
+		}
+		return total
+	}
+	sumStorage := func(items []domain.RenewalItem) float64 {
+		total := 0.0
+		for _, item := range items {
+			total += item.StorageCapacityTB
+		}
+		return total
+	}
+	sumGPUCards := func(items []domain.RenewalItem) int {
+		total := 0
+		for _, item := range items {
+			total += item.GPUCardCount
+		}
+		return total
+	}
+	manualTarget := func(x domain.RenewalSceneTarget) float64 {
+		if x.Mode == domain.RenewalTargetModeMaximize {
+			return 0
+		}
+		return x.Target
+	}
 
-	requiredComputeCores := maxInt(0, int(targetComputeCores)-coveredComputeCores)
-	requiredWarmStorage := maxFloat(0, targetWarmStorage-coveredWarmStorage)
-	requiredHotStorage := maxFloat(0, targetHotStorage-coveredHotStorage)
-	requiredGPUCards := maxInt(0, int(targetGPUCards)-gpuCoveredCards)
+	targetComputeCores := manualTarget(req.Domestic.Compute) + manualTarget(req.India.Compute)
+	targetWarmStorage := manualTarget(req.Domestic.WarmStorage) + manualTarget(req.India.WarmStorage)
+	targetHotStorage := manualTarget(req.Domestic.HotStorage) + manualTarget(req.India.HotStorage)
+	requiredComputeCores := 0
+	requiredWarmStorage := 0.0
+	requiredHotStorage := 0.0
+	computeItems := make([]domain.RenewalItem, 0)
+	warmItems := make([]domain.RenewalItem, 0)
+	hotItems := make([]domain.RenewalItem, 0)
+	gpuItems := make([]domain.RenewalItem, 0)
+	computeCores := 0
+	warmStorage := 0.0
+	warmCores := 0
+	hotStorage := 0.0
+	hotCores := 0
+	gpuCardsSelected := 0
+	rankingPairs := make([]struct {
+		bucket   string
+		all      []domain.RenewalItem
+		selected []domain.RenewalItem
+	}, 0)
 
-	computeItems, computeCores := selectByCores(bucketItems["compute"], requiredComputeCores)
-	warmItems, warmStorage, warmCores := selectByStorage(bucketItems["warm_storage"], requiredWarmStorage)
-	hotItems, hotStorage, hotCores := selectByStorage(bucketItems["hot_storage"], requiredHotStorage)
-	gpuItems, gpuCardsSelected := selectByGPUCards(bucketItems["gpu"], requiredGPUCards)
+	for _, region := range []string{"domestic", "india"} {
+		regionCompute := filterItemsByRegion(bucketItems["compute"], region)
+		regionComputeReq := req.Domestic.Compute
+		if region == "india" {
+			regionComputeReq = req.India.Compute
+		}
+		if regionComputeReq.Mode == domain.RenewalTargetModeMaximize {
+			computeItems = append(computeItems, regionCompute...)
+			computeCores += sumCores(regionCompute)
+		} else {
+			need := maxInt(0, int(regionComputeReq.Target)-coveredComputeByRegion[region])
+			requiredComputeCores += need
+			selected, picked := selectByCores(regionCompute, need)
+			computeItems = append(computeItems, selected...)
+			computeCores += picked
+			rankingPairs = append(rankingPairs, struct {
+				bucket   string
+				all      []domain.RenewalItem
+				selected []domain.RenewalItem
+			}{bucket: "compute", all: regionCompute, selected: selected})
+		}
+
+		regionWarm := filterItemsByRegion(bucketItems["warm_storage"], region)
+		regionWarmReq := req.Domestic.WarmStorage
+		if region == "india" {
+			regionWarmReq = req.India.WarmStorage
+		}
+		if regionWarmReq.Mode == domain.RenewalTargetModeMaximize {
+			warmItems = append(warmItems, regionWarm...)
+			warmStorage += sumStorage(regionWarm)
+			warmCores += sumCores(regionWarm)
+		} else {
+			need := maxFloat(0, regionWarmReq.Target-coveredWarmByRegion[region])
+			requiredWarmStorage += need
+			selected, pickedStorage, pickedCores := selectByStorage(regionWarm, need)
+			warmItems = append(warmItems, selected...)
+			warmStorage += pickedStorage
+			warmCores += pickedCores
+			rankingPairs = append(rankingPairs, struct {
+				bucket   string
+				all      []domain.RenewalItem
+				selected []domain.RenewalItem
+			}{bucket: "warm_storage", all: regionWarm, selected: selected})
+		}
+
+		regionHot := filterItemsByRegion(bucketItems["hot_storage"], region)
+		regionHotReq := req.Domestic.HotStorage
+		if region == "india" {
+			regionHotReq = req.India.HotStorage
+		}
+		if regionHotReq.Mode == domain.RenewalTargetModeMaximize {
+			hotItems = append(hotItems, regionHot...)
+			hotStorage += sumStorage(regionHot)
+			hotCores += sumCores(regionHot)
+		} else {
+			need := maxFloat(0, regionHotReq.Target-coveredHotByRegion[region])
+			requiredHotStorage += need
+			selected, pickedStorage, pickedCores := selectByStorage(regionHot, need)
+			hotItems = append(hotItems, selected...)
+			hotStorage += pickedStorage
+			hotCores += pickedCores
+			rankingPairs = append(rankingPairs, struct {
+				bucket   string
+				all      []domain.RenewalItem
+				selected []domain.RenewalItem
+			}{bucket: "hot_storage", all: regionHot, selected: selected})
+		}
+
+		regionGPU := filterItemsByRegion(bucketItems["gpu"], region)
+		regionGPUReq := req.Domestic.GPU
+		if region == "india" {
+			regionGPUReq = req.India.GPU
+		}
+		if regionGPUReq.Mode == domain.RenewalTargetModeMaximize {
+			gpuItems = append(gpuItems, regionGPU...)
+			gpuCardsSelected += sumGPUCards(regionGPU)
+		} else {
+			need := maxInt(0, int(regionGPUReq.Target)-gpuCoveredCardsByRegion[region])
+			selected, picked := selectByGPUCards(regionGPU, need)
+			gpuItems = append(gpuItems, selected...)
+			gpuCardsSelected += picked
+		}
+	}
 
 	appendRankingNonRenewals := func(bucket string, all []domain.RenewalItem, selected []domain.RenewalItem) {
 		selectedSet := make(map[string]bool, len(selected))
@@ -416,9 +560,9 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			})
 		}
 	}
-	appendRankingNonRenewals("compute", bucketItems["compute"], computeItems)
-	appendRankingNonRenewals("warm_storage", bucketItems["warm_storage"], warmItems)
-	appendRankingNonRenewals("hot_storage", bucketItems["hot_storage"], hotItems)
+	for _, pair := range rankingPairs {
+		appendRankingNonRenewals(pair.bucket, pair.all, pair.selected)
+	}
 	gpuCores := 0
 	gpuStorage := 0.0
 	gpuRenewalCards := gpuCardsSelected
