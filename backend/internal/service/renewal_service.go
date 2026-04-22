@@ -136,7 +136,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 
 	pkgMap := map[string]domain.HostPackageConfig{}
 	for _, p := range packages {
-		pkgMap[strings.TrimSpace(p.ConfigType)] = p
+		pkgMap[normalizeConfigTypeKey(p.ConfigType)] = p
 	}
 
 	pkgAFRAvg := map[string]float64{}
@@ -206,7 +206,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			return domain.RenewalPlan{}, fmt.Errorf("invalid warranty_end_date for sn=%s: %v", srv.SN, err)
 		}
 
-		pkg, ok := pkgMap[srv.ConfigType]
+		pkg, ok := pkgMap[normalizeConfigTypeKey(srv.ConfigType)]
 		if !ok {
 			unmatchedConfigSet[strings.TrimSpace(srv.ConfigType)] = true
 			continue
@@ -857,6 +857,13 @@ func normalizeText(v string) string {
 	n = strings.ReplaceAll(n, "_", "")
 	n = strings.ReplaceAll(n, "-", "")
 	return n
+}
+
+func normalizeConfigTypeKey(v string) string {
+	n := strings.TrimSpace(v)
+	n = strings.ReplaceAll(n, "\u00A0", "")
+	n = strings.ReplaceAll(n, "\u3000", "")
+	return strings.ToLower(n)
 }
 
 func parseDate(v string) (time.Time, error) {
