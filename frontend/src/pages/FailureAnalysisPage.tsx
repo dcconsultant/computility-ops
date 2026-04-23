@@ -234,8 +234,9 @@ export default function FailureAnalysisPage() {
             children: (
               <Card title="套餐故障率表" extra={<Upload {...makeUploadProps('failure_package')}><Button icon={<UploadOutlined />} loading={uploading === 'failure_package'}>上传并导入</Button></Upload>}>
                 <Text type="secondary">故障率为年化值；过保故障率按投产满5年至今区间统计，仅供参考。</Text>
-                <Table rowKey="config_type" dataSource={fp} pagination={withTotalPagination(10)} columns={[
+                <Table rowKey={(r) => `${r.config_type}-${r.period || 'history'}-${r.year || 0}`} dataSource={fp} pagination={withTotalPagination(10)} columns={[
                   { title: '配置类型', dataIndex: 'config_type' },
+                  { title: '最近1年故障率', dataIndex: 'recent_1y_failure_rate', render: (v: number) => formatPercent(v) },
                   { title: '年化故障率', dataIndex: 'failure_rate', render: (v: number) => formatPercent(v) },
                   { title: '过保故障率(参考)', dataIndex: 'over_warranty_failure_rate', render: (v: number) => formatPercent(v) }
                 ]} />

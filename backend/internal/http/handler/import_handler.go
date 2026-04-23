@@ -24,6 +24,7 @@ type serverPackageStandardizedItem struct {
 	SN                     string `json:"sn"`
 	Manufacturer           string `json:"manufacturer"`
 	Model                  string `json:"model"`
+	DetailedConfig         string `json:"detailed_config,omitempty"`
 	PSA                    string `json:"psa"`
 	IDC                    string `json:"idc,omitempty"`
 	Environment            string `json:"environment,omitempty"`
@@ -100,13 +101,13 @@ func (h *ImportHandler) ExportServerPackageAnomalies(c *gin.Context) {
 	if format == "csv" {
 		buf := &bytes.Buffer{}
 		w := csv.NewWriter(buf)
-		header := []string{"SN", "制造商", "服务器型号", "PSA", "机房", "环境", "配置类型", "配置类型标准化", "保修结束日期", "投产日期"}
+		header := []string{"SN", "制造商", "服务器型号", "详细配置", "PSA", "机房", "环境", "配置类型", "配置类型标准化", "保修结束日期", "投产日期"}
 		if err := w.Write(header); err != nil {
 			fail(c, 50001, "导出失败")
 			return
 		}
 		for _, r := range exportRows {
-			record := []string{r.SN, r.Manufacturer, r.Model, r.PSA, r.IDC, r.Environment, r.ConfigType, r.ConfigTypeStandardized, r.WarrantyEndDate, r.LaunchDate}
+			record := []string{r.SN, r.Manufacturer, r.Model, r.DetailedConfig, r.PSA, r.IDC, r.Environment, r.ConfigType, r.ConfigTypeStandardized, r.WarrantyEndDate, r.LaunchDate}
 			if err := w.Write(record); err != nil {
 				fail(c, 50001, "导出失败")
 				return
@@ -124,7 +125,7 @@ func (h *ImportHandler) ExportServerPackageAnomalies(c *gin.Context) {
 
 	xf := excelize.NewFile()
 	sheet := xf.GetSheetName(0)
-	header := []string{"SN", "制造商", "服务器型号", "PSA", "机房", "环境", "配置类型", "配置类型标准化", "保修结束日期", "投产日期"}
+	header := []string{"SN", "制造商", "服务器型号", "详细配置", "PSA", "机房", "环境", "配置类型", "配置类型标准化", "保修结束日期", "投产日期"}
 	for i, h := range header {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		_ = xf.SetCellValue(sheet, cell, h)
@@ -134,13 +135,14 @@ func (h *ImportHandler) ExportServerPackageAnomalies(c *gin.Context) {
 		_ = xf.SetCellValue(sheet, fmt.Sprintf("A%d", row), r.SN)
 		_ = xf.SetCellValue(sheet, fmt.Sprintf("B%d", row), r.Manufacturer)
 		_ = xf.SetCellValue(sheet, fmt.Sprintf("C%d", row), r.Model)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("D%d", row), r.PSA)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("E%d", row), r.IDC)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("F%d", row), r.Environment)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("G%d", row), r.ConfigType)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("H%d", row), r.ConfigTypeStandardized)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("I%d", row), r.WarrantyEndDate)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("J%d", row), r.LaunchDate)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("D%d", row), r.DetailedConfig)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("E%d", row), r.PSA)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("F%d", row), r.IDC)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("G%d", row), r.Environment)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("H%d", row), r.ConfigType)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("I%d", row), r.ConfigTypeStandardized)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("J%d", row), r.WarrantyEndDate)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("K%d", row), r.LaunchDate)
 	}
 	buf, err := xf.WriteToBuffer()
 	if err != nil {
@@ -593,6 +595,7 @@ func (h *ImportHandler) buildServerPackageStandardizedRows(ctx context.Context) 
 			SN:                     s.SN,
 			Manufacturer:           s.Manufacturer,
 			Model:                  s.Model,
+			DetailedConfig:         s.DetailedConfig,
 			PSA:                    s.PSA,
 			IDC:                    s.IDC,
 			Environment:            s.Environment,
@@ -647,7 +650,7 @@ func mapRows(headers []string, rows [][]string) []map[string]string {
 }
 
 func serviceServerHeaderMap() map[string]string {
-	return map[string]string{"sn": "sn", "序列号": "sn", "制造商": "manufacturer", "厂商": "manufacturer", "manufacturer": "manufacturer", "型号": "model", "服务器型号": "model", "model": "model", "psa": "psa", "机房": "idc", "idc": "idc", "环境": "environment", "env": "environment", "environment": "environment", "配置类型": "config_type", "套餐": "config_type", "configtype": "config_type", "保修结束日期": "warranty_end_date", "保修截止日期": "warranty_end_date", "warrantyenddate": "warranty_end_date", "投产日期": "launch_date", "launchdate": "launch_date"}
+	return map[string]string{"sn": "sn", "序列号": "sn", "制造商": "manufacturer", "厂商": "manufacturer", "manufacturer": "manufacturer", "型号": "model", "服务器型号": "model", "model": "model", "详细配置": "detailed_config", "详细配置信息": "detailed_config", "detailedconfig": "detailed_config", "psa": "psa", "机房": "idc", "idc": "idc", "环境": "environment", "env": "environment", "environment": "environment", "配置类型": "config_type", "套餐": "config_type", "configtype": "config_type", "保修结束日期": "warranty_end_date", "保修截止日期": "warranty_end_date", "warrantyenddate": "warranty_end_date", "投产日期": "launch_date", "launchdate": "launch_date"}
 }
 func serviceHostPackageHeaderMap() map[string]string {
 	return map[string]string{"配置类型": "config_type", "套餐": "config_type", "configtype": "config_type", "场景大类": "scene_category", "scenecategory": "scene_category", "cpu逻辑核数": "cpu_logical_cores", "cpulogicalcores": "cpu_logical_cores", "gpu卡数": "gpu_card_count", "卡数": "gpu_card_count", "gpu_card_count": "gpu_card_count", "gpucardcount": "gpu_card_count", "数据盘类型": "data_disk_type", "数据盘种类": "data_disk_type", "datadisktype": "data_disk_type", "磁盘类型": "data_disk_type", "disktype": "data_disk_type", "数据盘数量": "data_disk_count", "datadiskcount": "data_disk_count", "存储容量(tb)": "storage_capacity_tb", "存储容量": "storage_capacity_tb", "storagecapacitytb": "storage_capacity_tb", "服务器价值分": "server_value_score", "价值分": "server_value_score", "servervaluescore": "server_value_score", "架构标准化系数": "arch_standardized_factor", "archstandardizedfactor": "arch_standardized_factor"}

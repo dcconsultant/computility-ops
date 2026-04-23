@@ -66,6 +66,9 @@ var serverHeaderMap = map[string]string{
 	"型号":              "model",
 	"服务器型号":           "model",
 	"model":           "model",
+	"详细配置":            "detailed_config",
+	"详细配置信息":          "detailed_config",
+	"detailedconfig":  "detailed_config",
 	"psa":             "psa",
 	"机房":              "idc",
 	"idc":             "idc",
@@ -122,6 +125,7 @@ func validateServerRow(raw map[string]string) (domain.Server, error) {
 		SN:              sn,
 		Manufacturer:    get("manufacturer"),
 		Model:           get("model"),
+		DetailedConfig:  get("detailed_config"),
 		PSA:             psa,
 		IDC:             get("idc"),
 		Environment:     get("environment"),
@@ -1139,6 +1143,11 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 			yearFaultRows = append(yearFaultRows, row)
 			continue
 		}
+		if !isCountedFaultTicketStatus(raw["ticket_status"]) {
+			row.Remark = "工单状态不计入故障（仅进行中/已关闭计入）"
+			yearFaultRows = append(yearFaultRows, row)
+			continue
+		}
 		matchedFaultRows++
 		var createdAtPtr *time.Time
 		if ts, ok := parseFlexibleDateTime(createdRaw); ok {
@@ -1224,6 +1233,12 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 	overallYearDenYears := map[string]float64{}
 	overallYearOverDenYears := map[string]float64{}
 
+	recent1ySampleByPkg := map[string]float64{}
+	recent1yFaultByPkg := map[string]float64{}
+	recent1yStorageFaultByPkg := map[string]float64{}
+	recent1yStorageDenByPkg := map[string]float64{}
+	recentWindowStart := now.AddDate(-1, 0, 0)
+
 	minFaultYear := now.Year()
 	overallBaseDen := map[string]float64{}
 	overallFaultByYear := map[int]map[string]float64{}
@@ -1270,6 +1285,26 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		modelKey := strings.Join([]string{strings.TrimSpace(srv.Manufacturer), strings.TrimSpace(srv.Model)}, "|")
 		pkgKey := strings.TrimSpace(pkg.ConfigType)
 		pkgModelKey := strings.Join([]string{pkgKey, strings.TrimSpace(srv.Manufacturer), strings.TrimSpace(srv.Model)}, "|")
+
+		recent1ySampleByPkg[pkgKey] += 1
+		hasRecent1YFault := false
+		for _, ev := range faultEventsBySN[srv.SN] {
+			if ev.createdAt == nil {
+				continue
+			}
+			ts := *ev.createdAt
+			if ts.Before(recentWindowStart) || ts.After(now) {
+				continue
+			}
+			hasRecent1YFault = true
+		}
+		if hasRecent1YFault {
+			recent1yFaultByPkg[pkgKey] += 1
+		}
+		if bucket == "warm_storage" || bucket == "hot_storage" {
+			recent1yStorageDenByPkg[pkgKey] += weight
+			recent1yStorageFaultByPkg[pkgKey] += float64(countRecent1YFaultEvents(faultEventsBySN[srv.SN], recentWindowStart, now))
+		}
 
 		weightedYears := weight * years
 		modelDen[modelKey] += weightedYears
@@ -1384,11 +1419,16 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 		if pkgOverDen[k] > 0 {
 			overRate = pkgOverNum[k] / pkgOverDen[k]
 		}
+		recent1YRate := safeDivide(recent1yFaultByPkg[k], recent1ySampleByPkg[k])
+		if recent1yStorageDenByPkg[k] > 0 {
+			recent1YRate = safeDivide(recent1yStorageFaultByPkg[k], recent1yStorageDenByPkg[k])
+		}
 		packageRates = append(packageRates, domain.PackageFailureRate{
 			Period:                  "history",
 			Year:                    0,
 			ConfigType:              k,
 			FailureRate:             pkgNum[k] / den,
+			Recent1YFailureRate:     recent1YRate,
 			OverWarrantyFailureRate: overRate,
 		})
 		yearRate := safeDivide(pkgYearNum[k], pkgBaseDen[k]) * annualizationFactor(now.Year(), now)
@@ -1397,6 +1437,7 @@ func (s *ImportService) AnalyzeFaultRates(ctx context.Context, rows []map[string
 			Year:                    now.Year(),
 			ConfigType:              k,
 			FailureRate:             yearRate,
+			Recent1YFailureRate:     recent1YRate,
 			OverWarrantyFailureRate: 0,
 		})
 	}
@@ -1633,6 +1674,21 @@ func safeDivide(num, den float64) float64 {
 	return num / den
 }
 
+func countRecent1YFaultEvents(events []faultEvent, start, end time.Time) int {
+	count := 0
+	for _, ev := range events {
+		if ev.createdAt == nil {
+			continue
+		}
+		ts := *ev.createdAt
+		if ts.Before(start) || ts.After(end) {
+			continue
+		}
+		count++
+	}
+	return count
+}
+
 func maxTime(a, b time.Time) time.Time {
 	if a.After(b) {
 		return a
@@ -1658,6 +1714,16 @@ func classifyScopeByEnv(env string) string {
 		return "product"
 	}
 	return "devtest"
+}
+
+func isCountedFaultTicketStatus(status string) bool {
+	s := normalizeText(status)
+	switch s {
+	case "进行中", "已关闭", "inprogress", "closed":
+		return true
+	default:
+		return false
+	}
 }
 
 func MapHeaders(headers []string, headerMap map[string]string) []string {

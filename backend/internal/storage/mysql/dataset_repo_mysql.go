@@ -278,15 +278,33 @@ func (r *DatasetRepo) ReplacePackageFailureRates(ctx context.Context, rows []dom
 	if _, err := tx.ExecContext(ctx, `DELETE FROM ops_package_failure_rates`); err != nil {
 		return err
 	}
-	stmt, err := tx.PrepareContext(ctx, `
+	withRecent1YCol, err := hasPackageRecent1YColumn(ctx, tx)
+	if err != nil {
+		return err
+	}
+	insertSQL := `
 		INSERT INTO ops_package_failure_rates (period, stat_year, config_type, failure_rate, over_warranty_failure_rate)
 		VALUES (?, ?, ?, ?, ?)
-	`)
+	`
+	if withRecent1YCol {
+		insertSQL = `
+			INSERT INTO ops_package_failure_rates (
+				period, stat_year, config_type, failure_rate, recent_1y_failure_rate, over_warranty_failure_rate
+			) VALUES (?, ?, ?, ?, ?, ?)
+		`
+	}
+	stmt, err := tx.PrepareContext(ctx, insertSQL)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 	for _, x := range rows {
+		if withRecent1YCol {
+			if _, err := stmt.ExecContext(ctx, x.Period, x.Year, x.ConfigType, x.FailureRate, x.Recent1YFailureRate, x.OverWarrantyFailureRate); err != nil {
+				return err
+			}
+			continue
+		}
 		if _, err := stmt.ExecContext(ctx, x.Period, x.Year, x.ConfigType, x.FailureRate, x.OverWarrantyFailureRate); err != nil {
 			return err
 		}
@@ -295,11 +313,23 @@ func (r *DatasetRepo) ReplacePackageFailureRates(ctx context.Context, rows []dom
 }
 
 func (r *DatasetRepo) ListPackageFailureRates(ctx context.Context) ([]domain.PackageFailureRate, error) {
-	rows, err := r.db.QueryContext(ctx, `
+	withRecent1YCol, err := hasPackageRecent1YColumn(ctx, r.db)
+	if err != nil {
+		return nil, err
+	}
+	querySQL := `
 		SELECT period, stat_year, config_type, failure_rate, over_warranty_failure_rate
 		FROM ops_package_failure_rates
 		ORDER BY created_at DESC
-	`)
+	`
+	if withRecent1YCol {
+		querySQL = `
+			SELECT period, stat_year, config_type, failure_rate, recent_1y_failure_rate, over_warranty_failure_rate
+			FROM ops_package_failure_rates
+			ORDER BY created_at DESC
+		`
+	}
+	rows, err := r.db.QueryContext(ctx, querySQL)
 	if err != nil {
 		return nil, err
 	}
@@ -307,8 +337,15 @@ func (r *DatasetRepo) ListPackageFailureRates(ctx context.Context) ([]domain.Pac
 	out := make([]domain.PackageFailureRate, 0)
 	for rows.Next() {
 		var x domain.PackageFailureRate
-		if err := rows.Scan(&x.Period, &x.Year, &x.ConfigType, &x.FailureRate, &x.OverWarrantyFailureRate); err != nil {
-			return nil, err
+		if withRecent1YCol {
+			if err := rows.Scan(&x.Period, &x.Year, &x.ConfigType, &x.FailureRate, &x.Recent1YFailureRate, &x.OverWarrantyFailureRate); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := rows.Scan(&x.Period, &x.Year, &x.ConfigType, &x.FailureRate, &x.OverWarrantyFailureRate); err != nil {
+				return nil, err
+			}
+			x.Recent1YFailureRate = 0
 		}
 		out = append(out, x)
 	}
@@ -761,6 +798,21 @@ func hasSpecialRuleReasonColumn(ctx context.Context, q rowQueryer) (bool, error)
 		WHERE TABLE_SCHEMA = DATABASE()
 		  AND TABLE_NAME = 'ops_special_rules'
 		  AND COLUMN_NAME = 'reason'
+	`).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count == 1, nil
+}
+
+func hasPackageRecent1YColumn(ctx context.Context, q rowQueryer) (bool, error) {
+	var count int
+	err := q.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM information_schema.COLUMNS
+		WHERE TABLE_SCHEMA = DATABASE()
+		  AND TABLE_NAME = 'ops_package_failure_rates'
+		  AND COLUMN_NAME = 'recent_1y_failure_rate'
 	`).Scan(&count)
 	if err != nil {
 		return false, err

@@ -4,6 +4,7 @@ type Server struct {
 	SN              string `json:"sn"`
 	Manufacturer    string `json:"manufacturer"`
 	Model           string `json:"model"`
+	DetailedConfig  string `json:"detailed_config,omitempty"`
 	PSA             string `json:"psa"`
 	IDC             string `json:"idc,omitempty"`
 	Environment     string `json:"environment,omitempty"`
@@ -49,6 +50,7 @@ type PackageFailureRate struct {
 	Year                    int     `json:"year,omitempty"`
 	ConfigType              string  `json:"config_type"`
 	FailureRate             float64 `json:"failure_rate"`
+	Recent1YFailureRate     float64 `json:"recent_1y_failure_rate,omitempty"`
 	OverWarrantyFailureRate float64 `json:"over_warranty_failure_rate,omitempty"`
 }
 

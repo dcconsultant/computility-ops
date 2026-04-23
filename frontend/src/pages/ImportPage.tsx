@@ -60,6 +60,7 @@ export default function ImportPage() {
       x.manufacturer,
       x.model,
       x.psa,
+      x.detailed_config,
       x.idc,
       x.environment,
       x.config_type,
@@ -160,6 +161,7 @@ export default function ImportPage() {
                     { title: 'SN', dataIndex: 'sn' },
                     { title: '制造商', dataIndex: 'manufacturer' },
                     { title: '服务器型号', dataIndex: 'model' },
+                    { title: '详细配置', dataIndex: 'detailed_config', width: 220, ellipsis: true },
                     { title: 'PSA', dataIndex: 'psa', render: (v: string) => formatMaybeNumber(v) },
                     { title: '机房', dataIndex: 'idc' },
                     { title: '环境', dataIndex: 'environment' },
@@ -170,7 +172,7 @@ export default function ImportPage() {
                   ]}
                 />
               </Space>,
-              '字段：SN、制造商、服务器型号、PSA、机房、环境、配置类型、配置类型标准化、保修结束日期、投产日期',
+              '字段：SN、制造商、服务器型号、详细配置、PSA、机房、环境、配置类型、配置类型标准化、保修结束日期、投产日期',
               <Space>
                 <Button onClick={() => exportServerPackageAnomalies('xlsx')}>下载套餐标准化异常清单</Button>
                 <Upload {...makeUploadProps('servers')}><Button icon={<UploadOutlined />} loading={uploading === 'servers'}>上传并导入</Button></Upload>

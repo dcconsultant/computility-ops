@@ -27,6 +27,7 @@ export interface ServerItem {
   sn: string;
   manufacturer?: string;
   model?: string;
+  detailed_config?: string;
   psa: string;
   idc?: string;
   environment?: string;
@@ -74,6 +75,7 @@ export interface PackageFailureRate {
   year?: number;
   config_type: string;
   failure_rate: number;
+  recent_1y_failure_rate?: number;
   over_warranty_failure_rate?: number;
 }
 
@@ -185,6 +187,7 @@ export interface PlanItem {
   sn: string;
   manufacturer?: string;
   model?: string;
+  detailed_config?: string;
   environment?: string;
   idc?: string;
   config_type: string;
@@ -192,6 +195,7 @@ export interface PlanItem {
   cpu_logical_cores: number;
   gpu_card_count?: number;
   storage_capacity_tb?: number;
+  recent_1y_failure_rate?: number;
   psa: string;
   arch_standardized_factor: number;
   base_score?: number;

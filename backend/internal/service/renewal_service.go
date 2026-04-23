@@ -140,8 +140,30 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	}
 
 	pkgAFRAvg := map[string]float64{}
+	pkgRecent1Y := map[string]float64{}
+	type pkgRecentSnapshot struct {
+		year int
+		rate float64
+	}
+	pkgRecentByYear := map[string]pkgRecentSnapshot{}
 	for _, p := range packageRates {
-		pkgAFRAvg[strings.TrimSpace(p.ConfigType)] = p.FailureRate
+		cfg := strings.TrimSpace(p.ConfigType)
+		if cfg == "" {
+			continue
+		}
+		if p.Period == "history" || p.Period == "" {
+			pkgAFRAvg[cfg] = p.FailureRate
+		}
+		rate := p.Recent1YFailureRate
+		if rate <= 0 && p.Period == "year" {
+			rate = p.FailureRate
+		}
+		if old, ok := pkgRecentByYear[cfg]; !ok || p.Year >= old.year {
+			pkgRecentByYear[cfg] = pkgRecentSnapshot{year: p.Year, rate: rate}
+		}
+	}
+	for k, v := range pkgRecentByYear {
+		pkgRecent1Y[k] = v.rate
 	}
 
 	type specialPolicyRule struct {
@@ -260,6 +282,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			Bucket:                 bucket,
 			Manufacturer:           srv.Manufacturer,
 			Model:                  srv.Model,
+			DetailedConfig:         strings.TrimSpace(srv.DetailedConfig),
 			Environment:            srv.Environment,
 			IDC:                    srv.IDC,
 			ConfigType:             srv.ConfigType,
@@ -267,6 +290,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			CPULogicalCores:        cores,
 			GPUCardCount:           gpuCards,
 			StorageCapacityTB:      pkg.StorageCapacityTB,
+			Recent1YFailureRate:    pkgRecent1Y[strings.TrimSpace(srv.ConfigType)],
 			PSA:                    domain.PSAString(strings.TrimSpace(srv.PSA)),
 			ArchStandardizedFactor: coef,
 			BaseScore:              baseScore,
