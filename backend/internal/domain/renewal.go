@@ -89,6 +89,7 @@ type RenewalItem struct {
 	Manufacturer           string    `json:"manufacturer"`
 	Model                  string    `json:"model"`
 	DetailedConfig         string    `json:"detailed_config,omitempty"`
+	LaunchDate             string    `json:"launch_date,omitempty"`
 	Environment            string    `json:"environment,omitempty"`
 	IDC                    string    `json:"idc,omitempty"`
 	ConfigType             string    `json:"config_type"`

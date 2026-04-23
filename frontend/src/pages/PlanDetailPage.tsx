@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Card, Space, Table, Tabs, Tag, Typography, message } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
-import { exportNonRenewalPlan, getPlan, listRenewalUnitPrices } from '../api';
+import { exportNonRenewalPlan, exportPlan, getPlan, listRenewalUnitPrices } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
 import type { RenewalPlan, RenewalUnitPrice } from '../types';
 
@@ -168,7 +168,7 @@ export default function PlanDetailPage() {
                 key: 'renewal',
                 label: `续保清单（${formatInt((plan.items || []).length)}）`,
                 children: (
-                  <Card title="续保清单" loading={loading}>
+                  <Card title="续保清单" loading={loading} extra={<Button onClick={() => exportPlan(plan.plan_id, 'xlsx')}>下载Excel</Button>}>
                     <Table
                       rowKey="sn"
                       dataSource={plan.items}

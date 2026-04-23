@@ -263,27 +263,157 @@ func buildCSV(plan domain.RenewalPlan) (*bytes.Buffer, error) {
 func buildXLSX(plan domain.RenewalPlan) (*bytes.Buffer, error) {
 	f := excelize.NewFile()
 	defer func() { _ = f.Close() }()
-	sheet := f.GetSheetName(0)
-	if err := f.SetSheetRow(sheet, "A1", &[]string{"plan_id", "target_date", "target_cores", "warm_target_storage_tb", "hot_target_storage_tb", "unmatched_config_count", "unmatched_config_types", "selected_cores", "selected_storage_tb", "selected_count"}); err != nil {
+
+	overviewSheet := "整体情况"
+	defaultSheet := f.GetSheetName(0)
+	f.SetSheetName(defaultSheet, overviewSheet)
+
+	domesticSheet := "国内"
+	indiaSheet := "印度"
+	f.NewSheet(domesticSheet)
+	f.NewSheet(indiaSheet)
+
+	if err := writePlanOverviewSheet(f, overviewSheet, plan); err != nil {
 		return nil, err
 	}
-	if err := f.SetSheetRow(sheet, "A2", &[]any{plan.PlanID, plan.TargetDate, plan.TargetCores, plan.WarmTargetStorageTB, plan.HotTargetStorageTB, plan.UnmatchedConfigCount, strings.Join(plan.UnmatchedConfigTypes, "|"), plan.SelectedCores, plan.SelectedStorageTB, plan.SelectedCount}); err != nil {
+	if err := writePlanRegionItemsSheet(f, domesticSheet, plan, false); err != nil {
 		return nil, err
 	}
-	if err := f.SetSheetRow(sheet, "A4", &[]string{"rank", "bucket", "sn", "manufacturer", "model", "environment", "config_type", "scene_category", "cpu_logical_cores", "gpu_card_count", "storage_capacity_tb", "psa", "arch_standardized_factor", "base_score", "afr_old", "afr_avg", "failure_adjust_factor", "final_score", "special_policy"}); err != nil {
+	if err := writePlanRegionItemsSheet(f, indiaSheet, plan, true); err != nil {
 		return nil, err
 	}
-	for i, item := range plan.Items {
-		cell, _ := excelize.CoordinatesToCellName(1, i+5)
-		if err := f.SetSheetRow(sheet, cell, &[]any{item.Rank, item.Bucket, item.SN, item.Manufacturer, item.Model, item.Environment, item.ConfigType, item.SceneCategory, item.CPULogicalCores, item.GPUCardCount, item.StorageCapacityTB, item.PSA, item.ArchStandardizedFactor, item.BaseScore, item.AFROld, item.AFRAvg, item.FailureAdjustFactor, item.FinalScore, item.SpecialPolicy}); err != nil {
-			return nil, err
-		}
-	}
+
 	buf, err := f.WriteToBuffer()
 	if err != nil {
 		return nil, err
 	}
 	return buf, nil
+}
+
+func writePlanOverviewSheet(f *excelize.File, sheet string, plan domain.RenewalPlan) error {
+	if err := f.SetSheetRow(sheet, "A1", &[]string{"指标", "数值"}); err != nil {
+		return err
+	}
+	rows := [][]any{
+		{"方案ID", plan.PlanID},
+		{"目标日期", plan.TargetDate},
+		{"计算目标（核）", plan.TargetCores},
+		{"温存储目标（TB）", plan.WarmTargetStorageTB},
+		{"热存储目标（TB）", plan.HotTargetStorageTB},
+		{"入选总台数", plan.SelectedCount},
+		{"入选总核数", plan.SelectedCores},
+		{"入选总存储（TB）", plan.SelectedStorageTB},
+	}
+	for i, row := range rows {
+		cell, _ := excelize.CoordinatesToCellName(1, i+2)
+		if err := f.SetSheetRow(sheet, cell, &row); err != nil {
+			return err
+		}
+	}
+
+	domesticItems, indiaItems := splitRenewalItemsByRegion(plan.Items)
+	if err := f.SetSheetRow(sheet, "A12", &[]string{"地区", "续保台数"}); err != nil {
+		return err
+	}
+	if err := f.SetSheetRow(sheet, "A13", &[]any{"国内", len(domesticItems)}); err != nil {
+		return err
+	}
+	if err := f.SetSheetRow(sheet, "A14", &[]any{"印度", len(indiaItems)}); err != nil {
+		return err
+	}
+
+	if err := f.SetSheetRow(sheet, "D12", &[]string{"场景大类", "续保台数"}); err != nil {
+		return err
+	}
+	bucketCount := map[string]int{}
+	for _, item := range plan.Items {
+		bucketCount[sceneCategoryLabel(item)]++
+	}
+	orderedScenes := []string{"计算", "温存储", "热存储", "GPU"}
+	rowNo := 13
+	for _, scene := range orderedScenes {
+		if err := f.SetSheetRow(sheet, fmt.Sprintf("D%d", rowNo), &[]any{scene, bucketCount[scene]}); err != nil {
+			return err
+		}
+		rowNo++
+	}
+	return nil
+}
+
+func writePlanRegionItemsSheet(f *excelize.File, sheet string, plan domain.RenewalPlan, india bool) error {
+	headers := []string{"场景大类", "配置类型", "SN", "型号", "最近1年故障率", "详细配置", "投产日期"}
+	if err := f.SetSheetRow(sheet, "A1", &headers); err != nil {
+		return err
+	}
+
+	row := 2
+	for _, item := range plan.Items {
+		if isIndiaIDC(item.IDC) != india {
+			continue
+		}
+		data := []any{
+			sceneCategoryLabel(item),
+			item.ConfigType,
+			item.SN,
+			item.Model,
+			fmt.Sprintf("%.2f%%", item.Recent1YFailureRate*100),
+			item.DetailedConfig,
+			item.LaunchDate,
+		}
+		cell, _ := excelize.CoordinatesToCellName(1, row)
+		if err := f.SetSheetRow(sheet, cell, &data); err != nil {
+			return err
+		}
+		row++
+	}
+	return nil
+}
+
+func splitRenewalItemsByRegion(items []domain.RenewalItem) ([]domain.RenewalItem, []domain.RenewalItem) {
+	domestic := make([]domain.RenewalItem, 0)
+	india := make([]domain.RenewalItem, 0)
+	for _, item := range items {
+		if isIndiaIDC(item.IDC) {
+			india = append(india, item)
+			continue
+		}
+		domestic = append(domestic, item)
+	}
+	return domestic, india
+}
+
+func sceneCategoryLabel(item domain.RenewalItem) string {
+	n := strings.ToLower(strings.TrimSpace(item.SceneCategory))
+	switch n {
+	case "compute", "计算", "计算型":
+		return "计算"
+	case "warm_storage", "warmstorage", "温存储":
+		return "温存储"
+	case "hot_storage", "hotstorage", "热存储":
+		return "热存储"
+	case "gpu", "gpu型":
+		return "GPU"
+	}
+	b := strings.ToLower(strings.TrimSpace(item.Bucket))
+	switch b {
+	case "compute":
+		return "计算"
+	case "warm_storage":
+		return "温存储"
+	case "hot_storage":
+		return "热存储"
+	case "gpu":
+		return "GPU"
+	default:
+		if item.SceneCategory != "" {
+			return item.SceneCategory
+		}
+		return item.Bucket
+	}
+}
+
+func isIndiaIDC(idc string) bool {
+	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(idc)), "IN")
 }
 
 func buildNonRenewalXLSX(plan domain.RenewalPlan) (*bytes.Buffer, error) {

@@ -283,6 +283,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			Manufacturer:           srv.Manufacturer,
 			Model:                  srv.Model,
 			DetailedConfig:         strings.TrimSpace(srv.DetailedConfig),
+			LaunchDate:             strings.TrimSpace(srv.LaunchDate),
 			Environment:            srv.Environment,
 			IDC:                    srv.IDC,
 			ConfigType:             srv.ConfigType,
