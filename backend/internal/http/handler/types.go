@@ -42,3 +42,23 @@ type ExportYearFaultAnalysisReq struct {
 	Year int                        `json:"year"`
 	Rows []service.FaultAnalysisRow `json:"rows" binding:"required"`
 }
+
+type CreateContractReq struct {
+	ContractName    string  `json:"contract_name" binding:"required"`
+	PeriodStart     string  `json:"period_start" binding:"required"`
+	PeriodEnd       string  `json:"period_end" binding:"required"`
+	PreTaxAmount    float64 `json:"pre_tax_amount" binding:"min=0"`
+	Supplier        string  `json:"supplier" binding:"required"`
+	BusinessContact string  `json:"business_contact" binding:"required"`
+	TechContact     string  `json:"tech_contact" binding:"required"`
+}
+
+type UpdateContractReq struct {
+	ContractName    string  `json:"contract_name" binding:"required"`
+	PeriodStart     string  `json:"period_start" binding:"required"`
+	PeriodEnd       string  `json:"period_end" binding:"required"`
+	PreTaxAmount    float64 `json:"pre_tax_amount" binding:"min=0"`
+	Supplier        string  `json:"supplier" binding:"required"`
+	BusinessContact string  `json:"business_contact" binding:"required"`
+	TechContact     string  `json:"tech_contact" binding:"required"`
+}

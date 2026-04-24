@@ -9,6 +9,7 @@ import (
 type Handlers struct {
 	Import        *handler.ImportHandler
 	Renewal       *handler.RenewalHandler
+	Contract      *handler.ContractHandler
 	System        *handler.SystemHandler
 	StorageDriver string
 }
@@ -54,6 +55,15 @@ func NewRouter(h Handlers) *gin.Engine {
 
 		v1.POST("/system/mysql/test", h.System.TestMySQLConnection)
 		v1.GET("/system/import-errors", h.System.ListImportErrors)
+
+		v1.POST("/contracts", h.Contract.CreateContract)
+		v1.GET("/contracts", h.Contract.ListContracts)
+		v1.GET("/contracts/:contract_id", h.Contract.GetContract)
+		v1.PUT("/contracts/:contract_id", h.Contract.UpdateContract)
+		v1.DELETE("/contracts/:contract_id", h.Contract.DeleteContract)
+		v1.POST("/contracts/:contract_id/attachments", h.Contract.UploadAttachment)
+		v1.GET("/contracts/:contract_id/attachments/:attachment_id/download", h.Contract.DownloadAttachment)
+		v1.DELETE("/contracts/:contract_id/attachments/:attachment_id", h.Contract.DeleteAttachment)
 
 		v1.POST("/renewals/plan", h.Renewal.CreatePlan)
 		v1.GET("/renewals/plans", h.Renewal.ListPlans)

@@ -21,7 +21,9 @@ import type {
   SpecialRule,
   StorageBucket,
   StorageTopServerRate,
-  ImportErrorInsight
+  ImportErrorInsight,
+  Contract,
+  ContractAttachment
 } from './types';
 
 const http = axios.create({ baseURL: '/api/v1' });
@@ -208,6 +210,54 @@ export async function listRenewalUnitPrices() {
 
 export async function updateRenewalUnitPrices(prices: RenewalUnitPrice[]) {
   const { data } = await http.put<ApiResp<ListData<RenewalUnitPrice>>>('/renewals/unit-prices', { prices });
+  return data;
+}
+
+export interface ContractPayload {
+  contract_name: string;
+  period_start: string;
+  period_end: string;
+  pre_tax_amount: number;
+  supplier: string;
+  business_contact: string;
+  tech_contact: string;
+}
+
+export async function listContracts() {
+  const { data } = await http.get<ApiResp<ListData<Contract>>>('/contracts');
+  return data;
+}
+
+export async function createContract(payload: ContractPayload) {
+  const { data } = await http.post<ApiResp<Contract>>('/contracts', payload);
+  return data;
+}
+
+export async function updateContract(contractId: string, payload: ContractPayload) {
+  const { data } = await http.put<ApiResp<Contract>>(`/contracts/${contractId}`, payload);
+  return data;
+}
+
+export async function deleteContract(contractId: string) {
+  const { data } = await http.delete<ApiResp<{ deleted: boolean; contract_id: string }>>(`/contracts/${contractId}`);
+  return data;
+}
+
+export async function uploadContractAttachment(contractId: string, file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await http.post<ApiResp<{ contract: Contract; attachment: ContractAttachment }>>(`/contracts/${contractId}/attachments`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
+  return data;
+}
+
+export function downloadContractAttachment(contractId: string, attachmentId: string) {
+  window.open(`/api/v1/contracts/${contractId}/attachments/${attachmentId}/download`, '_blank');
+}
+
+export async function deleteContractAttachment(contractId: string, attachmentId: string) {
+  const { data } = await http.delete<ApiResp<Contract>>(`/contracts/${contractId}/attachments/${attachmentId}`);
   return data;
 }
 

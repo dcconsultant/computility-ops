@@ -5,6 +5,7 @@ import PlanPage from './pages/PlanPage';
 import PlanDetailPage from './pages/PlanDetailPage';
 import FailureAnalysisPage from './pages/FailureAnalysisPage';
 import FailureDashboardPage from './pages/FailureDashboardPage';
+import ContractPage from './pages/ContractPage';
 
 export default function App() {
   return (
@@ -12,6 +13,7 @@ export default function App() {
       <Route element={<AppLayout />}>
         <Route path="/" element={<Navigate to="/import" replace />} />
         <Route path="/import" element={<ImportPage />} />
+        <Route path="/contracts" element={<ContractPage />} />
         <Route path="/plan" element={<PlanPage />} />
         <Route path="/plan/:planId" element={<PlanDetailPage />} />
         <Route path="/failure" element={<FailureAnalysisPage />} />

@@ -14,33 +14,35 @@ import (
 )
 
 func Build(cfg config.Config) (*gin.Engine, error) {
-	serverRepo, datasetRepo, renewalRepo, driver, err := buildRepos(cfg)
+	serverRepo, datasetRepo, renewalRepo, contractRepo, driver, err := buildRepos(cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	importSvc := service.NewImportService(serverRepo, datasetRepo)
 	renewalSvc := service.NewRenewalService(serverRepo, datasetRepo, renewalRepo)
+	contractSvc := service.NewContractService(contractRepo)
 
 	h := httpapi.Handlers{
 		Import:        handler.NewImportHandler(importSvc),
 		Renewal:       handler.NewRenewalHandler(renewalSvc),
+		Contract:      handler.NewContractHandler(contractSvc),
 		System:        handler.NewSystemHandler(),
 		StorageDriver: driver,
 	}
 	return httpapi.NewRouter(h), nil
 }
 
-func buildRepos(cfg config.Config) (repository.ServerRepo, repository.DatasetRepo, repository.RenewalPlanRepo, string, error) {
+func buildRepos(cfg config.Config) (repository.ServerRepo, repository.DatasetRepo, repository.RenewalPlanRepo, repository.ContractRepo, string, error) {
 	switch cfg.StorageDriver {
 	case "memory", "":
-		return mem.NewServerRepo(), mem.NewDatasetRepo(), mem.NewRenewalRepo(), "memory", nil
+		return mem.NewServerRepo(), mem.NewDatasetRepo(), mem.NewRenewalRepo(), mem.NewContractRepo(), "memory", nil
 	case "mysql":
 		if cfg.MySQLDSN == "" {
-			return nil, nil, nil, "", fmt.Errorf("MYSQL_DSN is required when STORAGE_DRIVER=mysql")
+			return nil, nil, nil, nil, "", fmt.Errorf("MYSQL_DSN is required when STORAGE_DRIVER=mysql")
 		}
-		return mysql.NewServerRepo(cfg.MySQLDSN), mysql.NewDatasetRepo(cfg.MySQLDSN), mysql.NewRenewalRepo(cfg.MySQLDSN), "mysql", nil
+		return mysql.NewServerRepo(cfg.MySQLDSN), mysql.NewDatasetRepo(cfg.MySQLDSN), mysql.NewRenewalRepo(cfg.MySQLDSN), mysql.NewContractRepo(cfg.MySQLDSN), "mysql", nil
 	default:
-		return nil, nil, nil, "", fmt.Errorf("unsupported STORAGE_DRIVER: %s", cfg.StorageDriver)
+		return nil, nil, nil, nil, "", fmt.Errorf("unsupported STORAGE_DRIVER: %s", cfg.StorageDriver)
 	}
 }

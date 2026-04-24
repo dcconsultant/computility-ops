@@ -1,0 +1,17 @@
+CREATE TABLE IF NOT EXISTS ops_contracts (
+  contract_id VARCHAR(64) PRIMARY KEY,
+  payload_json LONGTEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ops_contract_attachments (
+  attachment_id VARCHAR(64) PRIMARY KEY,
+  contract_id VARCHAR(64) NOT NULL,
+  file_name VARCHAR(255) NOT NULL,
+  storage_path VARCHAR(1024) NOT NULL,
+  file_size BIGINT NOT NULL DEFAULT 0,
+  mime_type VARCHAR(128) DEFAULT '',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_contract_id (contract_id)
+);

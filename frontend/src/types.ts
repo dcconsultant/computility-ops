@@ -306,3 +306,25 @@ export interface RenewalPlan {
   non_renewal_items?: NonRenewalItem[];
   sections?: RenewalPlanSection[];
 }
+
+export interface ContractAttachment {
+  attachment_id: string;
+  file_name: string;
+  file_size: number;
+  mime_type?: string;
+  uploaded_at: string;
+}
+
+export interface Contract {
+  contract_id: string;
+  contract_name: string;
+  period_start: string;
+  period_end: string;
+  pre_tax_amount: number;
+  supplier: string;
+  business_contact: string;
+  tech_contact: string;
+  attachments?: ContractAttachment[];
+  created_at?: string;
+  updated_at?: string;
+}
