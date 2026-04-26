@@ -411,8 +411,9 @@ export default function PlanPage() {
   const hostPackageByConfigType = useMemo(() => {
     const map = new Map<string, HostPackageConfig>();
     hostPackages.forEach((x) => {
-      if (x.config_type) {
-        map.set(x.config_type, x);
+      const key = normalizeConfigType(x.config_type);
+      if (key) {
+        map.set(key, x);
       }
     });
     return map;
@@ -422,8 +423,9 @@ export default function PlanPage() {
     const map = new Map<string, number>();
     packageFailureRates.forEach((x) => {
       const afr = Number(x.recent_1y_failure_rate ?? x.failure_rate ?? 0);
-      if (x.config_type) {
-        map.set(x.config_type, afr);
+      const key = normalizeConfigType(x.config_type);
+      if (key) {
+        map.set(key, afr);
       }
     });
     return map;
@@ -446,11 +448,13 @@ export default function PlanPage() {
       .sort((a, b) => a.value.localeCompare(b.value))
   ), [servers]);
 
-  const selectedConfigType = toolMode === 'sn'
+  const selectedConfigTypeRaw = toolMode === 'sn'
     ? (toolSN ? serverBySN.get(toolSN)?.config_type || '' : '')
     : toolConfigType;
+  const selectedConfigType = normalizeConfigType(selectedConfigTypeRaw);
 
   const selectedHostPackage = selectedConfigType ? hostPackageByConfigType.get(selectedConfigType) : undefined;
+  const selectedConfigTypeLabel = selectedHostPackage?.config_type || selectedConfigTypeRaw || '-';
   const sceneCategoryRaw = selectedHostPackage?.scene_category || 'warm_storage';
   const sceneCategory = normalizeSceneCategory(sceneCategoryRaw);
   const diskCount = Number(selectedHostPackage?.data_disk_count || 0);
@@ -480,10 +484,10 @@ export default function PlanPage() {
     toolWarnings.push('请先选择配置类型或 SN。');
   }
   if (selectedConfigType && !selectedHostPackage) {
-    toolWarnings.push(`配置类型 ${selectedConfigType} 在主机套餐表中无记录，无法获取磁盘数量。`);
+    toolWarnings.push(`配置类型 ${selectedConfigTypeLabel} 在主机套餐表中无记录，无法获取磁盘数量。`);
   }
   if (selectedConfigType && !afrByConfigType.has(selectedConfigType)) {
-    toolWarnings.push(`配置类型 ${selectedConfigType} 未找到 AFR（套型故障率）数据。`);
+    toolWarnings.push(`配置类型 ${selectedConfigTypeLabel} 未找到 AFR（套型故障率）数据。`);
   }
   if (selectedConfigType && !matchedUnitPrice) {
     toolWarnings.push(`未找到国家=${toolCountry}、场景=${sceneCategoryLabel(sceneCategory)} 的续保单价。`);
@@ -517,7 +521,7 @@ export default function PlanPage() {
       dayjs().format('YYYY-MM-DD HH:mm:ss'),
       toolCountry,
       toolMode === 'sn' ? 'SN' : '配置类型',
-      selectedConfigType || '',
+      selectedConfigTypeLabel === '-' ? '' : selectedConfigTypeLabel,
       toolMode === 'sn' ? toolSN : '',
       sceneCategoryLabel(sceneCategory),
       String(diskCount),
@@ -886,7 +890,7 @@ export default function PlanPage() {
                 <Divider style={{ margin: '8px 0' }} />
 
                 <Space wrap size="large">
-                  <Text>配置类型：<Text strong>{selectedConfigType || '-'}</Text></Text>
+                  <Text>配置类型：<Text strong>{selectedConfigTypeLabel}</Text></Text>
                   <Text>场景：<Text strong>{sceneCategoryLabel(sceneCategory)}</Text></Text>
                   <Text>磁盘数量：<Text strong>{formatInt(diskCount)}</Text></Text>
                   <Text>AFR：<Text strong>{formatPercent(afr)}</Text></Text>
@@ -1089,6 +1093,10 @@ function formatSignedPercent(v?: number) {
   const n = Number(v || 0) * 100;
   const prefix = n > 0 ? '+' : '';
   return `${prefix}${n.toFixed(2)}%`;
+}
+
+function normalizeConfigType(v?: string) {
+  return String(v || '').trim().toLowerCase();
 }
 
 function normalizeCountry(v?: string) {
