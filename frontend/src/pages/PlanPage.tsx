@@ -456,7 +456,19 @@ export default function PlanPage() {
   const diskCount = Number(selectedHostPackage?.data_disk_count || 0);
   const afr = Number((selectedConfigType ? afrByConfigType.get(selectedConfigType) : undefined) ?? 0);
 
-  const matchedUnitPrice = unitPrices.find((x) => x.country === toolCountry && normalizeSceneCategory(x.scene_category) === sceneCategory);
+  const countryOptions = useMemo(() => {
+    const set = new Set<string>(COUNTRY_OPTIONS as unknown as string[]);
+    unitPrices.forEach((x) => {
+      const v = String(x.country || '').trim();
+      if (v) set.add(v);
+    });
+    return Array.from(set).map((x) => ({ label: x, value: x }));
+  }, [unitPrices]);
+
+  const matchedUnitPrice = unitPrices.find((x) => (
+    normalizeCountry(x.country) === normalizeCountry(toolCountry)
+    && normalizeSceneCategory(x.scene_category) === sceneCategory
+  ));
   const baseRenewalPrice = Number(matchedUnitPrice?.unit_price || 0);
   const simulatedRenewalPrice = baseRenewalPrice * priceMultiplier;
   const denominator = diskCount + 1;
@@ -800,7 +812,7 @@ export default function PlanPage() {
                   <Select
                     style={{ width: 140 }}
                     value={toolCountry}
-                    options={COUNTRY_OPTIONS.map((x) => ({ label: x, value: x }))}
+                    options={countryOptions}
                     onChange={setToolCountry}
                   />
 
@@ -1077,6 +1089,17 @@ function formatSignedPercent(v?: number) {
   const n = Number(v || 0) * 100;
   const prefix = n > 0 ? '+' : '';
   return `${prefix}${n.toFixed(2)}%`;
+}
+
+function normalizeCountry(v?: string) {
+  const raw = String(v || '').trim();
+  if (!raw) return '';
+  const n = raw.toLowerCase().replace(/[\s_-]/g, '');
+
+  if (['国内', '中国', 'cn', 'china', 'mainlandchina'].includes(n)) return '国内';
+  if (['印度', 'india', 'in'].includes(n)) return '印度';
+
+  return raw;
 }
 
 function normalizeSceneCategory(v?: string) {
