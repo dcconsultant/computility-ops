@@ -451,11 +451,13 @@ export default function PlanPage() {
     : toolConfigType;
 
   const selectedHostPackage = selectedConfigType ? hostPackageByConfigType.get(selectedConfigType) : undefined;
-  const sceneCategory = selectedHostPackage?.scene_category || 'warm_storage';
+  const sceneCategoryRaw = selectedHostPackage?.scene_category || 'warm_storage';
+  const sceneCategory = normalizeSceneCategory(sceneCategoryRaw);
   const diskCount = Number(selectedHostPackage?.data_disk_count || 0);
   const afr = Number((selectedConfigType ? afrByConfigType.get(selectedConfigType) : undefined) ?? 0);
 
-  const baseRenewalPrice = Number(unitPrices.find((x) => x.country === toolCountry && x.scene_category === sceneCategory)?.unit_price || 0);
+  const matchedUnitPrice = unitPrices.find((x) => x.country === toolCountry && normalizeSceneCategory(x.scene_category) === sceneCategory);
+  const baseRenewalPrice = Number(matchedUnitPrice?.unit_price || 0);
   const simulatedRenewalPrice = baseRenewalPrice * priceMultiplier;
   const denominator = diskCount + 1;
   const renewalCostPerDisk = denominator > 0 ? simulatedRenewalPrice / denominator : 0;
@@ -471,7 +473,7 @@ export default function PlanPage() {
   if (selectedConfigType && !afrByConfigType.has(selectedConfigType)) {
     toolWarnings.push(`配置类型 ${selectedConfigType} 未找到 AFR（套型故障率）数据。`);
   }
-  if (selectedConfigType && !unitPrices.find((x) => x.country === toolCountry && x.scene_category === sceneCategory)) {
+  if (selectedConfigType && !matchedUnitPrice) {
     toolWarnings.push(`未找到国家=${toolCountry}、场景=${sceneCategoryLabel(sceneCategory)} 的续保单价。`);
   }
 
@@ -1077,6 +1079,20 @@ function formatSignedPercent(v?: number) {
   return `${prefix}${n.toFixed(2)}%`;
 }
 
+function normalizeSceneCategory(v?: string) {
+  const raw = String(v || '').trim();
+  if (!raw) return 'warm_storage';
+  const n = raw.toLowerCase().replace(/[\s_-]/g, '');
+
+  if (['compute', '计算'].includes(n)) return 'compute';
+  if (['gpu'].includes(n)) return 'gpu';
+  if (['warmstorage', '温存储', '温储', '温', '问存储', 'wenstorage'].includes(n)) return 'warm_storage';
+  if (['hotstorage', '热存储', '热储', '热'].includes(n)) return 'hot_storage';
+
+  return raw;
+}
+
 function sceneCategoryLabel(v?: string) {
-  return SCENE_OPTIONS.find((x) => x.key === v)?.label || v || '-';
+  const key = normalizeSceneCategory(v);
+  return SCENE_OPTIONS.find((x) => x.key === key)?.label || v || '-';
 }
