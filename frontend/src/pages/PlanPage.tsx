@@ -1,14 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Button,
   Card,
   DatePicker,
+  Divider,
   Dropdown,
   Input,
   InputNumber,
   Modal,
   Popconfirm,
   Select,
+  Slider,
   Space,
   Table,
   Tabs,
@@ -21,9 +24,33 @@ import { ExclamationCircleOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { UploadProps } from 'antd';
 import { useNavigate } from 'react-router-dom';
-import { createPlan, deletePlan, exportPlan, getRenewalSettings, importSpecialRules, listPlans, listRenewalUnitPrices, listSpecialRules, updateRenewalSettings, updateRenewalUnitPrices } from '../api';
+import {
+  createPlan,
+  deletePlan,
+  exportPlan,
+  getRenewalSettings,
+  importSpecialRules,
+  listHostPackages,
+  listPackageFailureRates,
+  listPlans,
+  listRenewalUnitPrices,
+  listServers,
+  listSpecialRules,
+  updateRenewalSettings,
+  updateRenewalUnitPrices
+} from '../api';
 import { ensureApiOk, parseApiError } from '../error';
-import type { RenewalPlan, RenewalPlanSettings, RenewalRequirements, RenewalTargetMode, RenewalUnitPrice, SpecialRule } from '../types';
+import type {
+  HostPackageConfig,
+  PackageFailureRate,
+  RenewalPlan,
+  RenewalPlanSettings,
+  RenewalRequirements,
+  RenewalTargetMode,
+  RenewalUnitPrice,
+  ServerItem,
+  SpecialRule
+} from '../types';
 
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -52,6 +79,19 @@ export default function PlanPage() {
   const [unitPrices, setUnitPrices] = useState<RenewalUnitPrice[]>([]);
   const [unitPriceLoading, setUnitPriceLoading] = useState(false);
   const [unitPriceSaving, setUnitPriceSaving] = useState(false);
+
+  const [servers, setServers] = useState<ServerItem[]>([]);
+  const [hostPackages, setHostPackages] = useState<HostPackageConfig[]>([]);
+  const [packageFailureRates, setPackageFailureRates] = useState<PackageFailureRate[]>([]);
+  const [toolLoading, setToolLoading] = useState(false);
+
+  const [toolCountry, setToolCountry] = useState<string>('国内');
+  const [toolMode, setToolMode] = useState<'config_type' | 'sn'>('config_type');
+  const [toolConfigType, setToolConfigType] = useState<string>('');
+  const [toolSN, setToolSN] = useState<string>('');
+  const [diskPrice, setDiskPrice] = useState<number>(0);
+  const [logisticsCost, setLogisticsCost] = useState<number>(0);
+  const [priceMultiplier, setPriceMultiplier] = useState<number>(1);
 
   const [queryPlanID, setQueryPlanID] = useState('');
   const [queryTargetDateRange, setQueryTargetDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
@@ -122,10 +162,29 @@ export default function PlanPage() {
     }
   }
 
+  async function reloadToolBaseData() {
+    setToolLoading(true);
+    try {
+      const [serverResp, hostPackageResp, packageRateResp] = await Promise.all([
+        listServers(),
+        listHostPackages(),
+        listPackageFailureRates()
+      ]);
+      setServers(ensureApiOk(serverResp).data.list || []);
+      setHostPackages(ensureApiOk(hostPackageResp).data.list || []);
+      setPackageFailureRates(ensureApiOk(packageRateResp).data.list || []);
+    } catch (e) {
+      message.error(parseApiError(e, '加载续保/自维修分析基础数据失败'));
+    } finally {
+      setToolLoading(false);
+    }
+  }
+
   useEffect(() => {
     loadInitialPlans();
     reloadSpecialRules();
     reloadUnitPrices();
+    reloadToolBaseData();
     reloadSettings();
   }, []);
 
@@ -342,6 +401,140 @@ export default function PlanPage() {
       )
     }
   ];
+
+  const serverBySN = useMemo(() => {
+    const map = new Map<string, ServerItem>();
+    servers.forEach((x) => map.set(x.sn, x));
+    return map;
+  }, [servers]);
+
+  const hostPackageByConfigType = useMemo(() => {
+    const map = new Map<string, HostPackageConfig>();
+    hostPackages.forEach((x) => {
+      if (x.config_type) {
+        map.set(x.config_type, x);
+      }
+    });
+    return map;
+  }, [hostPackages]);
+
+  const afrByConfigType = useMemo(() => {
+    const map = new Map<string, number>();
+    packageFailureRates.forEach((x) => {
+      const afr = Number(x.recent_1y_failure_rate ?? x.failure_rate ?? 0);
+      if (x.config_type) {
+        map.set(x.config_type, afr);
+      }
+    });
+    return map;
+  }, [packageFailureRates]);
+
+  const configTypeOptions = useMemo(() => {
+    const set = new Set<string>();
+    hostPackages.forEach((x) => { if (x.config_type) set.add(x.config_type); });
+    servers.forEach((x) => { if (x.config_type) set.add(x.config_type); });
+    return Array.from(set).sort().map((x) => ({ label: x, value: x }));
+  }, [hostPackages, servers]);
+
+  const snOptions = useMemo(() => (
+    servers
+      .filter((x) => x.sn)
+      .map((x) => ({
+        label: `${x.sn}${x.config_type ? `（${x.config_type}）` : ''}`,
+        value: x.sn
+      }))
+      .sort((a, b) => a.value.localeCompare(b.value))
+  ), [servers]);
+
+  const selectedConfigType = toolMode === 'sn'
+    ? (toolSN ? serverBySN.get(toolSN)?.config_type || '' : '')
+    : toolConfigType;
+
+  const selectedHostPackage = selectedConfigType ? hostPackageByConfigType.get(selectedConfigType) : undefined;
+  const sceneCategory = selectedHostPackage?.scene_category || 'warm_storage';
+  const diskCount = Number(selectedHostPackage?.data_disk_count || 0);
+  const afr = Number((selectedConfigType ? afrByConfigType.get(selectedConfigType) : undefined) ?? 0);
+
+  const baseRenewalPrice = Number(unitPrices.find((x) => x.country === toolCountry && x.scene_category === sceneCategory)?.unit_price || 0);
+  const simulatedRenewalPrice = baseRenewalPrice * priceMultiplier;
+  const denominator = diskCount + 1;
+  const renewalCostPerDisk = denominator > 0 ? simulatedRenewalPrice / denominator : 0;
+  const selfRepairCost = (Number(diskPrice || 0) + Number(logisticsCost || 0)) * afr;
+
+  const toolWarnings: string[] = [];
+  if (!selectedConfigType) {
+    toolWarnings.push('请先选择配置类型或 SN。');
+  }
+  if (selectedConfigType && !selectedHostPackage) {
+    toolWarnings.push(`配置类型 ${selectedConfigType} 在主机套餐表中无记录，无法获取磁盘数量。`);
+  }
+  if (selectedConfigType && !afrByConfigType.has(selectedConfigType)) {
+    toolWarnings.push(`配置类型 ${selectedConfigType} 未找到 AFR（套型故障率）数据。`);
+  }
+  if (selectedConfigType && !unitPrices.find((x) => x.country === toolCountry && x.scene_category === sceneCategory)) {
+    toolWarnings.push(`未找到国家=${toolCountry}、场景=${sceneCategoryLabel(sceneCategory)} 的续保单价。`);
+  }
+
+  const decision = selectedConfigType
+    ? renewalCostPerDisk <= selfRepairCost
+      ? '建议续保（单盘续保成本更低）'
+      : '建议买新盘自维修（期望成本更低）'
+    : '待分析（请先选择配置类型或 SN）';
+  const decisionType: 'success' | 'warning' | 'info' = selectedConfigType ? (renewalCostPerDisk <= selfRepairCost ? 'success' : 'warning') : 'info';
+
+  const costGap = renewalCostPerDisk - selfRepairCost;
+  const absCostGap = Math.abs(costGap);
+  const gapRatio = selfRepairCost !== 0 ? costGap / selfRepairCost : 0;
+  const gapDirection = selectedConfigType ? (costGap <= 0 ? '续保更省' : '自维修更省') : '-';
+
+  function onExportToolCSV() {
+    if (!selectedConfigType) {
+      message.warning('请先选择配置类型或 SN 再导出。');
+      return;
+    }
+
+    const headers = [
+      '分析时间', '国家', '分析维度', '配置类型', 'SN', '场景', '磁盘数量', 'AFR',
+      '单盘价格', '物流成本', '续保单价基准', '涨价倍数', '续保单价模拟',
+      '单盘续保成本', '买新盘自维修成本', '价差(续保-自维修)', '价差比例(相对自维修)', '结论', '备注'
+    ];
+
+    const row = [
+      dayjs().format('YYYY-MM-DD HH:mm:ss'),
+      toolCountry,
+      toolMode === 'sn' ? 'SN' : '配置类型',
+      selectedConfigType || '',
+      toolMode === 'sn' ? toolSN : '',
+      sceneCategoryLabel(sceneCategory),
+      String(diskCount),
+      formatPercent(afr),
+      formatMoney(diskPrice),
+      formatMoney(logisticsCost),
+      formatMoney(baseRenewalPrice),
+      priceMultiplier.toFixed(1),
+      formatMoney(simulatedRenewalPrice),
+      formatMoney(renewalCostPerDisk),
+      formatMoney(selfRepairCost),
+      formatMoney(costGap),
+      formatSignedPercent(gapRatio),
+      decision,
+      toolWarnings.join('；')
+    ];
+
+    const csv = [headers, row]
+      .map((line) => line.map((x) => `"${String(x).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `renewal-self-repair-analysis-${dayjs().format('YYYYMMDD-HHmmss')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <Tabs
@@ -581,6 +774,143 @@ export default function PlanPage() {
               </Space>
             </Card>
           )
+        },
+        {
+          key: 'renewal_tool',
+          label: '续保/自维修分析',
+          children: (
+            <Card
+              title="续保管理 - 小工具（续保 vs 买新盘自维修）"
+              extra={(
+                <Space>
+                  <Button onClick={reloadToolBaseData} loading={toolLoading}>刷新基础数据</Button>
+                  <Button onClick={onExportToolCSV}>导出当前分析CSV</Button>
+                </Space>
+              )}
+            >
+              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                <Text type="secondary">
+                  核心逻辑：续保成本 = 续保价格 / (磁盘数量 + 1)；买新盘自维修成本 = (单盘价格 + 物流成本) × AFR。系统会自动给出低成本方案建议。
+                </Text>
+
+                <Space wrap>
+                  <Text>国家</Text>
+                  <Select
+                    style={{ width: 140 }}
+                    value={toolCountry}
+                    options={COUNTRY_OPTIONS.map((x) => ({ label: x, value: x }))}
+                    onChange={setToolCountry}
+                  />
+
+                  <Text>分析对象</Text>
+                  <Select
+                    style={{ width: 160 }}
+                    value={toolMode}
+                    options={[{ label: '配置类型', value: 'config_type' }, { label: 'SN', value: 'sn' }]}
+                    onChange={(v) => setToolMode(v as 'config_type' | 'sn')}
+                  />
+
+                  {toolMode === 'config_type' ? (
+                    <Select
+                      showSearch
+                      optionFilterProp="label"
+                      style={{ width: 360 }}
+                      value={toolConfigType || undefined}
+                      options={configTypeOptions}
+                      placeholder="选择配置类型"
+                      onChange={setToolConfigType}
+                    />
+                  ) : (
+                    <Select
+                      showSearch
+                      optionFilterProp="label"
+                      style={{ width: 420 }}
+                      value={toolSN || undefined}
+                      options={snOptions}
+                      placeholder="选择 SN"
+                      onChange={setToolSN}
+                    />
+                  )}
+                </Space>
+
+                <Space wrap>
+                  <Text>单盘价格</Text>
+                  <InputNumber
+                    min={0}
+                    precision={2}
+                    step={100}
+                    style={{ width: 180 }}
+                    value={diskPrice}
+                    onChange={(v) => setDiskPrice(Number(v ?? 0))}
+                    addonAfter="CNY"
+                  />
+
+                  <Text>物流成本</Text>
+                  <InputNumber
+                    min={0}
+                    precision={2}
+                    step={50}
+                    style={{ width: 180 }}
+                    value={logisticsCost}
+                    onChange={(v) => setLogisticsCost(Number(v ?? 0))}
+                    addonAfter="CNY"
+                  />
+                </Space>
+
+                <div>
+                  <Text>续保涨价模拟（天平）：{priceMultiplier.toFixed(1)}x</Text>
+                  <Slider
+                    min={0.1}
+                    max={10}
+                    step={0.1}
+                    tooltip={{ formatter: (v) => `${Number(v || 0).toFixed(1)}x` }}
+                    value={priceMultiplier}
+                    onChange={(v) => setPriceMultiplier(Number(v))}
+                  />
+                </div>
+
+                <Divider style={{ margin: '8px 0' }} />
+
+                <Space wrap size="large">
+                  <Text>配置类型：<Text strong>{selectedConfigType || '-'}</Text></Text>
+                  <Text>场景：<Text strong>{sceneCategoryLabel(sceneCategory)}</Text></Text>
+                  <Text>磁盘数量：<Text strong>{formatInt(diskCount)}</Text></Text>
+                  <Text>AFR：<Text strong>{formatPercent(afr)}</Text></Text>
+                </Space>
+
+                <Space wrap size="large">
+                  <Text>续保单价（基准）：<Text strong>{formatMoney(baseRenewalPrice)}</Text></Text>
+                  <Text>续保单价（模拟后）：<Text strong>{formatMoney(simulatedRenewalPrice)}</Text></Text>
+                  <Text>单盘续保成本：<Text strong>{formatMoney(renewalCostPerDisk)}</Text></Text>
+                  <Text>买新盘自维修成本：<Text strong>{formatMoney(selfRepairCost)}</Text></Text>
+                  <Text>价差（续保-自维修）：<Text strong>{formatMoney(costGap)}</Text></Text>
+                  <Text>价差比例：<Text strong>{formatSignedPercent(gapRatio)}</Text></Text>
+                </Space>
+
+                <Alert
+                  type={decisionType}
+                  message={decision}
+                  description={selectedConfigType
+                    ? `结论依据：${formatMoney(renewalCostPerDisk)} vs ${formatMoney(selfRepairCost)}（取更低）；${gapDirection}，绝对价差 ${formatMoney(absCostGap)}，比例 ${formatSignedPercent(gapRatio)}`
+                    : '请选择分析对象后自动给出结论'}
+                  showIcon
+                />
+
+                {toolWarnings.length > 0 && (
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="数据提示"
+                    description={(
+                      <ul style={{ margin: 0, paddingLeft: 20 }}>
+                        {toolWarnings.map((x) => <li key={x}>{x}</li>)}
+                      </ul>
+                    )}
+                  />
+                )}
+              </Space>
+            </Card>
+          )
         }
       ]}
     />
@@ -731,4 +1061,22 @@ function formatInt(v?: number) {
 
 function formatFloat(v?: number) {
   return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatMoney(v?: number) {
+  return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatPercent(v?: number) {
+  return `${(Number(v || 0) * 100).toFixed(2)}%`;
+}
+
+function formatSignedPercent(v?: number) {
+  const n = Number(v || 0) * 100;
+  const prefix = n > 0 ? '+' : '';
+  return `${prefix}${n.toFixed(2)}%`;
+}
+
+function sceneCategoryLabel(v?: string) {
+  return SCENE_OPTIONS.find((x) => x.key === v)?.label || v || '-';
 }
