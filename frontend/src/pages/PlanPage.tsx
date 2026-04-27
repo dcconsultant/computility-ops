@@ -36,6 +36,7 @@ import {
   listRenewalUnitPrices,
   listServers,
   listSpecialRules,
+  listStorageTopServerRates,
   updateRenewalSettings,
   updateRenewalUnitPrices
 } from '../api';
@@ -49,7 +50,8 @@ import type {
   RenewalTargetMode,
   RenewalUnitPrice,
   ServerItem,
-  SpecialRule
+  SpecialRule,
+  StorageTopServerRate
 } from '../types';
 
 const { Text } = Typography;
@@ -84,6 +86,7 @@ export default function PlanPage() {
   const [servers, setServers] = useState<ServerItem[]>([]);
   const [hostPackages, setHostPackages] = useState<HostPackageConfig[]>([]);
   const [packageFailureRates, setPackageFailureRates] = useState<PackageFailureRate[]>([]);
+  const [storageTopServerRates, setStorageTopServerRates] = useState<StorageTopServerRate[]>([]);
   const [toolLoading, setToolLoading] = useState(false);
 
   const [toolCountry, setToolCountry] = useState<string>('国内');
@@ -167,14 +170,19 @@ export default function PlanPage() {
   async function reloadToolBaseData() {
     setToolLoading(true);
     try {
-      const [serverResp, hostPackageResp, packageRateResp] = await Promise.all([
+      const [serverResp, hostPackageResp, packageRateResp, warmTopResp, hotTopResp] = await Promise.all([
         listServers(),
         listHostPackages(),
-        listPackageFailureRates()
+        listPackageFailureRates(),
+        listStorageTopServerRates('warm_storage'),
+        listStorageTopServerRates('hot_storage')
       ]);
       setServers(ensureApiOk(serverResp).data.list || []);
       setHostPackages(ensureApiOk(hostPackageResp).data.list || []);
       setPackageFailureRates(ensureApiOk(packageRateResp).data.list || []);
+      const warmTop = ensureApiOk(warmTopResp).data.list || [];
+      const hotTop = ensureApiOk(hotTopResp).data.list || [];
+      setStorageTopServerRates([...warmTop, ...hotTop]);
     } catch (e) {
       message.error(parseApiError(e, '加载续保/自维修分析基础数据失败'));
     } finally {
@@ -433,6 +441,16 @@ export default function PlanPage() {
     return map;
   }, [packageFailureRates]);
 
+  const afrBySN = useMemo(() => {
+    const map = new Map<string, number>();
+    storageTopServerRates.forEach((x) => {
+      const sn = String(x.sn || '').trim();
+      if (!sn) return;
+      map.set(sn, Number(x.fault_rate || 0));
+    });
+    return map;
+  }, [storageTopServerRates]);
+
   const configTypeToSceneCategory = useMemo(() => {
     const map = new Map<string, string>();
     hostPackages.forEach((x) => {
@@ -487,7 +505,15 @@ export default function PlanPage() {
   const sceneCategoryRaw = selectedHostPackage?.scene_category || 'warm_storage';
   const sceneCategory = normalizeSceneCategory(sceneCategoryRaw);
   const diskCount = Number(selectedHostPackage?.data_disk_count || 0);
-  const afr = Number((selectedConfigType ? afrByConfigType.get(selectedConfigType) : undefined) ?? 0);
+  const hasConfigTypeAfr = Boolean(selectedConfigType && afrByConfigType.has(selectedConfigType));
+  const configTypeAfr = Number((selectedConfigType ? afrByConfigType.get(selectedConfigType) : undefined) ?? 0);
+  const hasDeviceAfr = Boolean(toolMode === 'sn' && toolSN && afrBySN.has(toolSN));
+  const selectedDeviceAfr = Number((toolMode === 'sn' && toolSN ? afrBySN.get(toolSN) : undefined) ?? 0);
+  const effectiveAfr = toolMode === 'sn' ? selectedDeviceAfr : configTypeAfr;
+  const configTypeAfrDisplay = hasConfigTypeAfr ? formatPercent(configTypeAfr) : '-';
+  const deviceAfrDisplay = toolMode === 'sn'
+    ? (toolSN ? (hasDeviceAfr ? formatPercent(selectedDeviceAfr) : '-') : '-')
+    : '-';
 
   const countryOptions = useMemo(() => {
     const set = new Set<string>(COUNTRY_OPTIONS as unknown as string[]);
@@ -506,7 +532,7 @@ export default function PlanPage() {
   const simulatedRenewalPrice = baseRenewalPrice * priceMultiplier;
   const denominator = diskCount + 1;
   const renewalCostPerDisk = denominator > 0 ? simulatedRenewalPrice / denominator : 0;
-  const selfRepairCost = (Number(diskPrice || 0) + Number(logisticsCost || 0)) * afr;
+  const selfRepairCost = (Number(diskPrice || 0) + Number(logisticsCost || 0)) * effectiveAfr;
 
   const toolWarnings: string[] = [];
   if (!selectedConfigType) {
@@ -515,8 +541,11 @@ export default function PlanPage() {
   if (selectedConfigType && !selectedHostPackage) {
     toolWarnings.push(`配置类型 ${selectedConfigTypeLabel} 在主机套餐表中无记录，无法获取磁盘数量。`);
   }
-  if (selectedConfigType && !afrByConfigType.has(selectedConfigType)) {
+  if (toolMode === 'config_type' && selectedConfigType && !afrByConfigType.has(selectedConfigType)) {
     toolWarnings.push(`配置类型 ${selectedConfigTypeLabel} 未找到 AFR（套型故障率）数据。`);
+  }
+  if (toolMode === 'sn' && toolSN && !afrBySN.has(toolSN)) {
+    toolWarnings.push(`SN ${toolSN} 未找到设备 AFR（温/热存储故障 TOP100 同源数据）。`);
   }
   if (selectedConfigType && !matchedUnitPrice) {
     toolWarnings.push(`未找到国家=${toolCountry}、场景=${sceneCategoryLabel(sceneCategory)} 的续保单价。`);
@@ -541,7 +570,7 @@ export default function PlanPage() {
     }
 
     const headers = [
-      '分析时间', '国家', '分析维度', '配置类型', 'SN', '场景', '磁盘数量', 'AFR',
+      '分析时间', '国家', '分析维度', '配置类型', 'SN', '场景', '磁盘数量', '配置类型AFR', '设备AFR', '生效AFR',
       '单盘价格', '物流成本', '续保单价基准', '涨价倍数', '续保单价模拟',
       '单盘续保成本', '买新盘自维修成本', '价差(续保-自维修)', '价差比例(相对自维修)', '结论', '备注'
     ];
@@ -554,7 +583,9 @@ export default function PlanPage() {
       toolMode === 'sn' ? toolSN : '',
       sceneCategoryLabel(sceneCategory),
       String(diskCount),
-      formatPercent(afr),
+      configTypeAfrDisplay,
+      deviceAfrDisplay,
+      formatPercent(effectiveAfr),
       formatMoney(diskPrice),
       formatMoney(logisticsCost),
       formatMoney(baseRenewalPrice),
@@ -837,7 +868,7 @@ export default function PlanPage() {
             >
               <Space direction="vertical" size="middle" style={{ width: '100%' }}>
                 <Text type="secondary">
-                  核心逻辑：续保成本 = 续保价格 / (磁盘数量 + 1)；买新盘自维修成本 = (单盘价格 + 物流成本) × AFR。系统会自动给出低成本方案建议。
+                  核心逻辑：续保成本 = 续保价格 / (磁盘数量 + 1)；买新盘自维修成本 = (单盘价格 + 物流成本) × AFR。分析对象=配置类型时使用配置类型AFR；分析对象=SN时使用设备AFR（来自温/热存储故障TOP100同源数据）。
                 </Text>
 
                 <Space wrap>
@@ -936,7 +967,10 @@ export default function PlanPage() {
                   <Text>配置类型：<Text strong>{selectedConfigTypeLabel}</Text></Text>
                   <Text>场景：<Text strong>{sceneCategoryLabel(sceneCategory)}</Text></Text>
                   <Text>磁盘数量：<Text strong>{formatInt(diskCount)}</Text></Text>
-                  <Text>AFR：<Text strong>{formatPercent(afr)}</Text></Text>
+                  <Text>配置类型AFR：<Text strong>{configTypeAfrDisplay}</Text></Text>
+                  <Text type={toolMode === 'sn' ? undefined : 'secondary'}>
+                    设备AFR：<Text strong>{deviceAfrDisplay}</Text>
+                  </Text>
                 </Space>
 
                 <Space wrap size="large">
