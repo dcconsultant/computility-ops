@@ -62,6 +62,7 @@ const SCENE_OPTIONS = [
   { key: 'hot_storage', label: '热存储' },
   { key: 'gpu', label: 'GPU' }
 ] as const;
+const ALL_SCENE_OPTION_VALUE = '__ALL__';
 
 export default function PlanPage() {
   const navigate = useNavigate();
@@ -87,6 +88,7 @@ export default function PlanPage() {
 
   const [toolCountry, setToolCountry] = useState<string>('国内');
   const [toolMode, setToolMode] = useState<'config_type' | 'sn'>('config_type');
+  const [toolConfigSceneCategory, setToolConfigSceneCategory] = useState<string | undefined>(undefined);
   const [toolConfigType, setToolConfigType] = useState<string>('');
   const [toolSN, setToolSN] = useState<string>('');
   const [diskPrice, setDiskPrice] = useState<number>(0);
@@ -431,12 +433,31 @@ export default function PlanPage() {
     return map;
   }, [packageFailureRates]);
 
+  const configTypeToSceneCategory = useMemo(() => {
+    const map = new Map<string, string>();
+    hostPackages.forEach((x) => {
+      const key = normalizeConfigType(x.config_type);
+      if (!key) return;
+      map.set(key, normalizeSceneCategory(x.scene_category));
+    });
+    return map;
+  }, [hostPackages]);
+
   const configTypeOptions = useMemo(() => {
     const set = new Set<string>();
     hostPackages.forEach((x) => { if (x.config_type) set.add(x.config_type); });
     servers.forEach((x) => { if (x.config_type) set.add(x.config_type); });
     return Array.from(set).sort().map((x) => ({ label: x, value: x }));
   }, [hostPackages, servers]);
+
+  const filteredConfigTypeOptions = useMemo(() => {
+    if (!toolConfigSceneCategory) {
+      return configTypeOptions;
+    }
+    return configTypeOptions.filter((x) => (
+      configTypeToSceneCategory.get(normalizeConfigType(x.value)) === toolConfigSceneCategory
+    ));
+  }, [configTypeOptions, configTypeToSceneCategory, toolConfigSceneCategory]);
 
   const snOptions = useMemo(() => (
     servers
@@ -447,6 +468,14 @@ export default function PlanPage() {
       }))
       .sort((a, b) => a.value.localeCompare(b.value))
   ), [servers]);
+
+  useEffect(() => {
+    if (toolMode !== 'config_type' || !toolConfigType) return;
+    const stillAvailable = filteredConfigTypeOptions.some((x) => x.value === toolConfigType);
+    if (!stillAvailable) {
+      setToolConfigType('');
+    }
+  }, [toolMode, toolConfigType, filteredConfigTypeOptions]);
 
   const selectedConfigTypeRaw = toolMode === 'sn'
     ? (toolSN ? serverBySN.get(toolSN)?.config_type || '' : '')
@@ -829,15 +858,29 @@ export default function PlanPage() {
                   />
 
                   {toolMode === 'config_type' ? (
-                    <Select
-                      showSearch
-                      optionFilterProp="label"
-                      style={{ width: 360 }}
-                      value={toolConfigType || undefined}
-                      options={configTypeOptions}
-                      placeholder="选择配置类型"
-                      onChange={setToolConfigType}
-                    />
+                    <>
+                      <Text>配置大类</Text>
+                      <Select
+                        allowClear
+                        style={{ width: 160 }}
+                        value={toolConfigSceneCategory || ALL_SCENE_OPTION_VALUE}
+                        options={[
+                          { label: '全部', value: ALL_SCENE_OPTION_VALUE },
+                          ...SCENE_OPTIONS.map((x) => ({ label: x.label, value: x.key }))
+                        ]}
+                        placeholder="全部"
+                        onChange={(v) => setToolConfigSceneCategory(v === ALL_SCENE_OPTION_VALUE ? undefined : v)}
+                      />
+                      <Select
+                        showSearch
+                        optionFilterProp="label"
+                        style={{ width: 360 }}
+                        value={toolConfigType || undefined}
+                        options={filteredConfigTypeOptions}
+                        placeholder="选择配置类型"
+                        onChange={setToolConfigType}
+                      />
+                    </>
                   ) : (
                     <Select
                       showSearch
