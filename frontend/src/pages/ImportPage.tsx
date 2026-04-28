@@ -382,6 +382,32 @@ function AssetTrendChart({ points, total, regionLabel }: { points: AssetTrendPoi
     .map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${yRatio(p.cumulativeOutRatio)}`)
     .join(' ');
 
+  const labelMinGap = 10;
+  const labelTop = m.top + 10;
+  const labelBottom = m.top + innerH - 2;
+  const clampLabelY = (v: number) => Math.max(labelTop, Math.min(labelBottom, v));
+  const labelPositions = points.map((p) => {
+    let barY = clampLabelY(yCount(p.outCount) - 6);
+    let lineY = clampLabelY(yRatio(p.cumulativeOutRatio) - 8);
+
+    if (Math.abs(barY - lineY) < labelMinGap) {
+      const linePreferAbove = lineY <= barY;
+      if (linePreferAbove) {
+        lineY = clampLabelY(barY - labelMinGap);
+        if (Math.abs(barY - lineY) < labelMinGap) {
+          barY = clampLabelY(lineY + labelMinGap);
+        }
+      } else {
+        lineY = clampLabelY(barY + labelMinGap);
+        if (Math.abs(barY - lineY) < labelMinGap) {
+          barY = clampLabelY(lineY - labelMinGap);
+        }
+      }
+    }
+
+    return { barY, lineY };
+  });
+
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
       <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', background: '#fff', borderRadius: 8 }}>
@@ -404,7 +430,7 @@ function AssetTrendChart({ points, total, regionLabel }: { points: AssetTrendPoi
             >
               <title>{`${p.year}年过保数量：${p.outCount}`}</title>
             </rect>
-            <text x={x(i)} y={Math.max(m.top + 10, yCount(p.outCount) - 6)} textAnchor="middle" fontSize="10" fill="#3b6ea8">{p.outCount}</text>
+            <text x={x(i)} y={labelPositions[i].barY} textAnchor="middle" fontSize="10" fill="#3b6ea8">{p.outCount}</text>
             <text x={x(i)} y={height - 22} textAnchor="middle" fontSize="11" fill="#666">{p.year}</text>
           </g>
         ))}
@@ -413,7 +439,7 @@ function AssetTrendChart({ points, total, regionLabel }: { points: AssetTrendPoi
         {points.map((p, i) => (
           <g key={`dot-${p.year}`}>
             <circle cx={x(i)} cy={yRatio(p.cumulativeOutRatio)} r="4" fill="#ff4d4f" />
-            <text x={x(i)} y={Math.max(m.top + 10, yRatio(p.cumulativeOutRatio) - 8)} textAnchor="middle" fontSize="10" fill="#c62828">
+            <text x={x(i)} y={labelPositions[i].lineY} textAnchor="middle" fontSize="10" fill="#c62828">
               {`${p.cumulativeOutRatio.toFixed(2)}%`}
             </text>
             <title>{`${p.year}年累计过保占比：${p.cumulativeOutRatio.toFixed(2)}%`}</title>
