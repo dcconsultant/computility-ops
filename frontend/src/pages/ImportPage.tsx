@@ -404,6 +404,7 @@ function AssetTrendChart({ points, total, regionLabel }: { points: AssetTrendPoi
             >
               <title>{`${p.year}年过保数量：${p.outCount}`}</title>
             </rect>
+            <text x={x(i)} y={Math.max(m.top + 10, yCount(p.outCount) - 6)} textAnchor="middle" fontSize="10" fill="#3b6ea8">{p.outCount}</text>
             <text x={x(i)} y={height - 22} textAnchor="middle" fontSize="11" fill="#666">{p.year}</text>
           </g>
         ))}
@@ -412,6 +413,9 @@ function AssetTrendChart({ points, total, regionLabel }: { points: AssetTrendPoi
         {points.map((p, i) => (
           <g key={`dot-${p.year}`}>
             <circle cx={x(i)} cy={yRatio(p.cumulativeOutRatio)} r="4" fill="#ff4d4f" />
+            <text x={x(i)} y={Math.max(m.top + 10, yRatio(p.cumulativeOutRatio) - 8)} textAnchor="middle" fontSize="10" fill="#c62828">
+              {`${p.cumulativeOutRatio.toFixed(2)}%`}
+            </text>
             <title>{`${p.year}年累计过保占比：${p.cumulativeOutRatio.toFixed(2)}%`}</title>
           </g>
         ))}
