@@ -239,11 +239,11 @@ export default function ImportPage() {
                   <Text type="secondary">口径：IDC 以 "IN" 开头判定为印度，其余归为国内；日期为空/异常按已过保处理。</Text>
                 </Card>
 
-                <Card title="国内服务器过保组合趋势图">
+                <Card title="国内服务器过保趋势图">
                   <AssetTrendChart points={assetAnalysis.trends.domestic} total={assetAnalysis.totals.domestic} regionLabel="国内" />
                 </Card>
 
-                <Card title="印度服务器过保组合趋势图">
+                <Card title="印度服务器过保趋势图">
                   <AssetTrendChart points={assetAnalysis.trends.india} total={assetAnalysis.totals.india} regionLabel="印度" />
                 </Card>
               </Space>
@@ -368,7 +368,7 @@ function AssetTrendChart({ points, total, regionLabel }: { points: AssetTrendPoi
 
   const width = 880;
   const height = 320;
-  const m = { left: 52, right: 54, top: 20, bottom: 54 };
+  const m = { left: 52, right: 54, top: 28, bottom: 54 };
   const innerW = width - m.left - m.right;
   const innerH = height - m.top - m.bottom;
   const maxCount = Math.max(1, ...points.map((p) => p.outCount));
@@ -383,25 +383,27 @@ function AssetTrendChart({ points, total, regionLabel }: { points: AssetTrendPoi
     .join(' ');
 
   const labelMinGap = 10;
-  const labelTop = m.top + 10;
+  const labelTop = m.top + 2;
   const labelBottom = m.top + innerH - 2;
   const clampLabelY = (v: number) => Math.max(labelTop, Math.min(labelBottom, v));
   const labelPositions = points.map((p) => {
-    let barY = clampLabelY(yCount(p.outCount) - 6);
-    let lineY = clampLabelY(yRatio(p.cumulativeOutRatio) - 8);
+    const nodeY = yRatio(p.cumulativeOutRatio);
 
+    let barY = clampLabelY(yCount(p.outCount) - 6);
+    let lineY = clampLabelY(nodeY - labelMinGap);
+
+    // 曲线数字始终在节点上方，且至少保持 1 个字符高度间隔
+    if (lineY > nodeY - labelMinGap) {
+      lineY = nodeY - labelMinGap;
+    }
+    lineY = clampLabelY(lineY);
+
+    // 柱状图数字与曲线数字保持最小间隔，避免重叠
     if (Math.abs(barY - lineY) < labelMinGap) {
-      const linePreferAbove = lineY <= barY;
-      if (linePreferAbove) {
-        lineY = clampLabelY(barY - labelMinGap);
-        if (Math.abs(barY - lineY) < labelMinGap) {
-          barY = clampLabelY(lineY + labelMinGap);
-        }
+      if (barY <= lineY) {
+        barY = clampLabelY(lineY - labelMinGap);
       } else {
-        lineY = clampLabelY(barY + labelMinGap);
-        if (Math.abs(barY - lineY) < labelMinGap) {
-          barY = clampLabelY(lineY - labelMinGap);
-        }
+        lineY = clampLabelY(barY - labelMinGap);
       }
     }
 
@@ -411,6 +413,14 @@ function AssetTrendChart({ points, total, regionLabel }: { points: AssetTrendPoi
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
       <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', background: '#fff', borderRadius: 8 }}>
+        <g>
+          <rect x={m.left} y={6} width="12" height="12" fill="#91caff" rx="2" />
+          <text x={m.left + 18} y={16} fontSize="11" fill="#666">当年过保数量（柱状）</text>
+          <line x1={m.left + 170} y1={12} x2={m.left + 194} y2={12} stroke="#ff4d4f" strokeWidth="2.5" />
+          <circle cx={m.left + 182} cy={12} r="3.5" fill="#ff4d4f" />
+          <text x={m.left + 202} y={16} fontSize="11" fill="#666">累计过保占比（曲线）</text>
+        </g>
+
         {[0, 25, 50, 75, 100].map((r) => (
           <g key={r}>
             <line x1={m.left} x2={width - m.right} y1={yRatio(r)} y2={yRatio(r)} stroke="#f0f0f0" strokeWidth="1" />
@@ -430,7 +440,7 @@ function AssetTrendChart({ points, total, regionLabel }: { points: AssetTrendPoi
             >
               <title>{`${p.year}年过保数量：${p.outCount}`}</title>
             </rect>
-            <text x={x(i)} y={labelPositions[i].barY} textAnchor="middle" fontSize="10" fill="#3b6ea8">{p.outCount}</text>
+            <text x={x(i)} y={labelPositions[i].barY} textAnchor="middle" fontSize="10" fill="#3b6ea8">{formatInt(p.outCount)}</text>
             <text x={x(i)} y={height - 22} textAnchor="middle" fontSize="11" fill="#666">{p.year}</text>
           </g>
         ))}
