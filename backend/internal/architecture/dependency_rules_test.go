@@ -9,7 +9,14 @@ import (
 	"testing"
 )
 
-const moduleImportPrefix = "computility-ops/backend/internal/modules/"
+const (
+	moduleImportPrefix = "computility-ops/backend/internal/modules/"
+	sharedImportPrefix = "computility-ops/backend/internal/shared/"
+)
+
+var sharedAllowlist = map[string]struct{}{
+	"kernel": {},
+}
 
 func TestModuleLayeringRules(t *testing.T) {
 	root := filepath.Join("..", "modules")
@@ -25,10 +32,16 @@ func TestModuleLayeringRules(t *testing.T) {
 		layer := filepath.Base(filepath.Dir(path))
 		module := filepath.Base(filepath.Dir(filepath.Dir(path)))
 		imports := parseImports(t, path)
+
 		for _, imp := range imports {
+			if strings.HasPrefix(imp, sharedImportPrefix) {
+				enforceSharedAllowlist(t, path, imp)
+				continue
+			}
 			if !strings.HasPrefix(imp, moduleImportPrefix) {
 				continue
 			}
+
 			trimmed := strings.TrimPrefix(imp, moduleImportPrefix)
 			parts := strings.Split(trimmed, "/")
 			if len(parts) < 2 {
@@ -37,19 +50,64 @@ func TestModuleLayeringRules(t *testing.T) {
 			targetModule := parts[0]
 			targetLayer := parts[1]
 
-			if layer == "domain" && targetLayer != "domain" {
-				t.Fatalf("domain layer cannot import non-domain: %s imports %s", path, imp)
-			}
-			if layer == "application" && targetLayer == "infrastructure" {
-				t.Fatalf("application layer cannot import infrastructure: %s imports %s", path, imp)
-			}
-			if layer == "api" && targetLayer == "infrastructure" {
-				t.Fatalf("api layer cannot import infrastructure: %s imports %s", path, imp)
-			}
-			if targetModule != module && targetLayer == "infrastructure" {
-				t.Fatalf("cross-module infrastructure import forbidden: %s imports %s", path, imp)
-			}
+			enforceLayerRules(t, path, layer, module, targetModule, targetLayer, imp)
 		}
+	}
+}
+
+func enforceLayerRules(t *testing.T, path, layer, module, targetModule, targetLayer, imp string) {
+	t.Helper()
+
+	if layer == "domain" {
+		if targetLayer != "domain" {
+			t.Fatalf("domain layer cannot import non-domain: %s imports %s", path, imp)
+		}
+		if targetModule != module {
+			t.Fatalf("domain layer cannot import other modules: %s imports %s", path, imp)
+		}
+	}
+
+	if layer == "application" {
+		if targetLayer == "api" || targetLayer == "infrastructure" {
+			t.Fatalf("application layer cannot import api/infrastructure: %s imports %s", path, imp)
+		}
+		if targetModule != module {
+			t.Fatalf("application layer cannot import other modules directly: %s imports %s", path, imp)
+		}
+	}
+
+	if layer == "api" {
+		if targetModule != module {
+			t.Fatalf("api layer cannot import other modules directly: %s imports %s", path, imp)
+		}
+		if targetLayer != "application" && targetLayer != "domain" {
+			t.Fatalf("api layer may only import application/domain: %s imports %s", path, imp)
+		}
+	}
+
+	if layer == "infrastructure" {
+		if targetLayer == "api" {
+			t.Fatalf("infrastructure layer cannot import api: %s imports %s", path, imp)
+		}
+		if targetModule != module && targetLayer != "domain" {
+			t.Fatalf("cross-module imports allowed only to domain: %s imports %s", path, imp)
+		}
+	}
+
+	if targetModule != module && targetLayer == "infrastructure" {
+		t.Fatalf("cross-module infrastructure import forbidden: %s imports %s", path, imp)
+	}
+}
+
+func enforceSharedAllowlist(t *testing.T, path, imp string) {
+	t.Helper()
+	trimmed := strings.TrimPrefix(imp, sharedImportPrefix)
+	parts := strings.Split(trimmed, "/")
+	if len(parts) == 0 || parts[0] == "" {
+		t.Fatalf("invalid shared import path: %s imports %s", path, imp)
+	}
+	if _, ok := sharedAllowlist[parts[0]]; !ok {
+		t.Fatalf("shared package not allowlisted: %s imports %s", path, imp)
 	}
 }
 
