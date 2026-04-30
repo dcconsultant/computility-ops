@@ -1,0 +1,5 @@
+scoring:
+  minAgeYears: 3
+  minAnnualFailure: 0.05
+  replaceCostFactor: 0.60
+  annualSavingFactor: 0.50

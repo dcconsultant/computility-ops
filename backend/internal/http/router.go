@@ -3,6 +3,10 @@ package http
 import (
 	"computility-ops/backend/internal/http/handler"
 	"computility-ops/backend/internal/http/middleware"
+	rcapi "computility-ops/backend/internal/modules/reconfig-planning/api"
+	renewalapi "computility-ops/backend/internal/modules/renewal/api"
+	rpapi "computility-ops/backend/internal/modules/replacement-planning/api"
+	srapi "computility-ops/backend/internal/modules/self-repair/api"
 	"github.com/gin-gonic/gin"
 )
 
@@ -12,6 +16,10 @@ type Handlers struct {
 	Contract      *handler.ContractHandler
 	System        *handler.SystemHandler
 	StorageDriver string
+	ReplacementPlanning *rpapi.Handler
+	ReconfigPlanning    *rcapi.Handler
+	SelfRepair          *srapi.Handler
+	RenewalRead         *renewalapi.LegacyQueryAdapter
 }
 
 func NewRouter(h Handlers) *gin.Engine {
@@ -75,6 +83,10 @@ func NewRouter(h Handlers) *gin.Engine {
 		v1.PUT("/renewals/settings", h.Renewal.UpdateSettings)
 		v1.GET("/renewals/unit-prices", h.Renewal.ListUnitPrices)
 		v1.PUT("/renewals/unit-prices", h.Renewal.UpdateUnitPrices)
+
+		v1.GET("/ops/decisions/replacement", h.ReplacementPlanning.ListSuggestions)
+		v1.GET("/ops/decisions/reconfig", h.ReconfigPlanning.ListSuggestions)
+		v1.GET("/ops/decisions/self-repair", h.SelfRepair.ListSuggestions)
 	}
 	return r
 }
