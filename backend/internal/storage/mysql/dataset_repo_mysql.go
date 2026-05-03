@@ -33,8 +33,9 @@ func (r *DatasetRepo) ReplaceHostPackages(ctx context.Context, rows []domain.Hos
 		INSERT INTO ops_host_packages (
 			config_type, scene_category, cpu_logical_cores, gpu_card_count,
 			data_disk_type, data_disk_count, storage_capacity_tb,
+			power_watts, release_year, memory_capacity_gb,
 			server_value_score, arch_standardized_factor
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -49,6 +50,9 @@ func (r *DatasetRepo) ReplaceHostPackages(ctx context.Context, rows []domain.Hos
 			nullIfEmpty(x.DataDiskType),
 			x.DataDiskCount,
 			x.StorageCapacityTB,
+			x.PowerWatts,
+			x.ReleaseYear,
+			x.MemoryCapacityGB,
 			x.ServerValueScore,
 			x.ArchStandardizedFactor,
 		); err != nil {
@@ -62,6 +66,7 @@ func (r *DatasetRepo) ListHostPackages(ctx context.Context) ([]domain.HostPackag
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT config_type, COALESCE(scene_category,''), cpu_logical_cores, gpu_card_count,
 			COALESCE(data_disk_type,''), data_disk_count, storage_capacity_tb,
+			power_watts, release_year, memory_capacity_gb,
 			server_value_score, arch_standardized_factor
 		FROM ops_host_packages
 		ORDER BY created_at DESC
@@ -81,6 +86,9 @@ func (r *DatasetRepo) ListHostPackages(ctx context.Context) ([]domain.HostPackag
 			&x.DataDiskType,
 			&x.DataDiskCount,
 			&x.StorageCapacityTB,
+			&x.PowerWatts,
+			&x.ReleaseYear,
+			&x.MemoryCapacityGB,
 			&x.ServerValueScore,
 			&x.ArchStandardizedFactor,
 		); err != nil {

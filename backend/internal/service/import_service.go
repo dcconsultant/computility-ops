@@ -157,6 +157,19 @@ var hostPackageHeaderMap = map[string]string{
 	"存储容量(tb)":               "storage_capacity_tb",
 	"存储容量":                   "storage_capacity_tb",
 	"storagecapacitytb":      "storage_capacity_tb",
+	"功率":                     "power_watts",
+	"功率(w)":                  "power_watts",
+	"功率（w）":                 "power_watts",
+	"power":                   "power_watts",
+	"powerw":                  "power_watts",
+	"发布年份":                   "release_year",
+	"年份":                     "release_year",
+	"releaseyear":             "release_year",
+	"内存容量(gb)":               "memory_capacity_gb",
+	"内存容量（gb）":              "memory_capacity_gb",
+	"内存容量":                   "memory_capacity_gb",
+	"memorycapacitygb":        "memory_capacity_gb",
+	"内存gb":                    "memory_capacity_gb",
 	"服务器价值分":                 "server_value_score",
 	"价值分":                    "server_value_score",
 	"servervaluescore":       "server_value_score",
@@ -212,6 +225,36 @@ func validateHostPackageRow(raw map[string]string) (domain.HostPackageConfig, er
 			return domain.HostPackageConfig{}, fmt.Errorf("服务器价值分 必须是数字")
 		}
 	}
+	powerWatts := 0.0
+	if v := get("power_watts"); v != "" {
+		powerWatts, err = strconv.ParseFloat(v, 64)
+		if err != nil {
+			return domain.HostPackageConfig{}, fmt.Errorf("功率 必须是数字")
+		}
+		if powerWatts < 0 {
+			return domain.HostPackageConfig{}, fmt.Errorf("功率 必须是大于等于0的数字")
+		}
+	}
+	releaseYear := 0
+	if v := get("release_year"); v != "" {
+		releaseYear, err = strconv.Atoi(v)
+		if err != nil {
+			return domain.HostPackageConfig{}, fmt.Errorf("发布年份 必须是整数")
+		}
+		if releaseYear < 0 {
+			return domain.HostPackageConfig{}, fmt.Errorf("发布年份 必须是大于等于0的整数")
+		}
+	}
+	memoryCapacityGB := 0.0
+	if v := get("memory_capacity_gb"); v != "" {
+		memoryCapacityGB, err = strconv.ParseFloat(v, 64)
+		if err != nil {
+			return domain.HostPackageConfig{}, fmt.Errorf("内存容量(GB) 必须是数字")
+		}
+		if memoryCapacityGB < 0 {
+			return domain.HostPackageConfig{}, fmt.Errorf("内存容量(GB) 必须是大于等于0的数字")
+		}
+	}
 	storage := 0.0
 	if v := get("storage_capacity_tb"); v != "" {
 		storage, err = strconv.ParseFloat(v, 64)
@@ -233,7 +276,20 @@ func validateHostPackageRow(raw map[string]string) (domain.HostPackageConfig, er
 			return domain.HostPackageConfig{}, fmt.Errorf("数据盘数量 必须是大于等于0的整数")
 		}
 	}
-	return domain.HostPackageConfig{ConfigType: cfg, SceneCategory: get("scene_category"), CPULogicalCores: cores, GPUCardCount: gpuCardCount, DataDiskType: get("data_disk_type"), DataDiskCount: dataDiskCount, StorageCapacityTB: storage, ServerValueScore: serverValueScore, ArchStandardizedFactor: coef}, nil
+	return domain.HostPackageConfig{
+		ConfigType:             cfg,
+		SceneCategory:          get("scene_category"),
+		CPULogicalCores:        cores,
+		GPUCardCount:           gpuCardCount,
+		DataDiskType:           get("data_disk_type"),
+		DataDiskCount:          dataDiskCount,
+		StorageCapacityTB:      storage,
+		PowerWatts:             powerWatts,
+		ReleaseYear:            releaseYear,
+		MemoryCapacityGB:       memoryCapacityGB,
+		ServerValueScore:       serverValueScore,
+		ArchStandardizedFactor: coef,
+	}, nil
 }
 
 var specialHeaderMap = map[string]string{

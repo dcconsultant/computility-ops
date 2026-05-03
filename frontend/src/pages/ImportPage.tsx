@@ -82,6 +82,9 @@ export default function ImportPage() {
       x.data_disk_type,
       x.data_disk_count,
       x.storage_capacity_tb,
+      x.power_watts,
+      x.release_year,
+      x.memory_capacity_gb,
       x.server_value_score,
       x.arch_standardized_factor
     ].some((v) => String(v ?? '').toLowerCase().includes(q)));
@@ -207,12 +210,15 @@ export default function ImportPage() {
                     { title: '数据盘类型', dataIndex: 'data_disk_type' },
                     { title: '数据盘数量', dataIndex: 'data_disk_count', render: (v: number) => formatInt(v) },
                     { title: '存储容量(TB)', dataIndex: 'storage_capacity_tb', render: (v: number) => formatFloat(v) },
+                    { title: '功率(W)', dataIndex: 'power_watts', render: (v: number) => formatFloat(v) },
+                    { title: '发布年份', dataIndex: 'release_year', render: (v: number) => formatInt(v) },
+                    { title: '内存容量(GB)', dataIndex: 'memory_capacity_gb', render: (v: number) => formatFloat(v) },
                     { title: '服务器价值分', dataIndex: 'server_value_score', render: (v: number) => formatFloat(v) },
                     { title: '架构标准化系数', dataIndex: 'arch_standardized_factor', render: (v: number) => formatFloat(v) }
                   ]}
                 />
               </Space>,
-              '服务器管理表通过配置类型关联此表；需维护服务器价值分（PSA非数字时基准）与GPU卡数（GPU汇总统计依赖）。'
+              '服务器管理表通过配置类型关联此表；需维护服务器价值分（PSA非数字时基准）、GPU卡数（GPU汇总统计依赖），以及功率/发布年份/内存容量用于后续评估。'
             )
           },
           {
