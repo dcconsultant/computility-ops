@@ -3,9 +3,11 @@ services:
     build:
       context: ./backend
     environment:
-      STORAGE_DRIVER: memory
-      APP_ADDR: :8080
-      AUDIT_LOG_PATH: /var/log/computility/audit.log
+      # 生产口径：默认走 MySQL（可被 .env 覆盖）
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-mysql}
+      MYSQL_DSN: ${MYSQL_DSN:-root:root@tcp(host.docker.internal:3306)/computility_ops?parseTime=true&loc=Local&charset=utf8mb4}
+      APP_ADDR: ${APP_ADDR:-:8080}
+      AUDIT_LOG_PATH: ${AUDIT_LOG_PATH:-/var/log/computility/audit.log}
     volumes:
       - ./logs:/var/log/computility
     restart: unless-stopped

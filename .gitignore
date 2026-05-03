@@ -18,6 +18,7 @@ backend/bin/
 # env files
 .env
 .env.*
+!.env.example
 
 # local: ignore GitHub workflow until auth scope is ready
 .github/workflows/ci.yml
