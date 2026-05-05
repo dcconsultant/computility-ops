@@ -339,6 +339,7 @@ export default function ImportPage() {
                       <Text>最低额定功率(KW)：{formatFloat(cabinetBaseline.min_rated_power_kw)}</Text>
                       <Text>对应机柜月租(CNY)：{formatFloat(cabinetBaseline.monthly_rent_cny)}</Text>
                       <Text>折旧月数：固定 60（5*12）</Text>
+                      <Text>月TCO口径：机柜费 + 折旧 + 网络机柜等分摊 + 其他固定成本</Text>
                       <Text>机柜成本公式：{cabinetBaseline.formula}</Text>
                       <Text type="secondary">样本机柜数：{cabinetBaseline.source_count}</Text>
                       {cabinetBaseline.note ? <Text type={cabinetBaseline.status === 'warning' ? 'danger' : 'secondary'}>{cabinetBaseline.note}</Text> : null}
@@ -366,6 +367,8 @@ export default function ImportPage() {
                     { title: '功率(KW)', dataIndex: 'power_kw', render: (v: number) => formatFloat(v) },
                     { title: '机柜费/月', dataIndex: 'cabinet_cost_monthly', render: (v: number) => formatFloat(v) },
                     { title: '折旧/月', dataIndex: 'depreciation_monthly', render: (v: number) => formatFloat(v) },
+                    { title: '网络机柜分摊/月', dataIndex: 'network_cabinet_monthly', render: (v: number) => formatFloat(v) },
+                    { title: '其他固定成本/月', dataIndex: 'other_fixed_cost_monthly', render: (v: number) => formatFloat(v) },
                     { title: '月TCO', dataIndex: 'total_tco_monthly', render: (v: number) => formatFloat(v) }
                   ]} />
                 </Card>

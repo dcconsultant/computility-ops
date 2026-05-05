@@ -81,6 +81,8 @@ export interface ValueScoreTCOItem {
   power_kw: number;
   cabinet_cost_monthly: number;
   depreciation_monthly: number;
+  network_cabinet_monthly: number;
+  other_fixed_cost_monthly: number;
   total_tco_monthly: number;
 }
 

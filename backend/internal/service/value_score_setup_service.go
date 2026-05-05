@@ -92,13 +92,19 @@ func (s *ValueScoreSetupService) CalculateMonthlyTCO(ctx context.Context, req do
 			cabCost = baseline.MonthlyRentCNY * powerKW / (baseline.MinRatedPowerKW * baseline.CabinetUtilization)
 		}
 		cabCost = round4(cabCost)
+		depreciation := round4(p.MonthlyDepreciationCNY)
+		networkShare := round4(p.NetworkCabinetShareCNY)
+		otherFixed := round4(p.OtherFixedCostCNY)
+		totalTCO := round4(cabCost + depreciation + networkShare + otherFixed)
 		item := domain.ValueScoreTCOItem{
-			ConfigType:          p.ConfigType,
-			PowerWatts:          round4(powerW),
-			PowerKW:             powerKW,
-			CabinetCostMonthly:  cabCost,
-			DepreciationMonthly: 0,
-			TotalTCOMonthly:     cabCost,
+			ConfigType:            p.ConfigType,
+			PowerWatts:            round4(powerW),
+			PowerKW:               powerKW,
+			CabinetCostMonthly:    cabCost,
+			DepreciationMonthly:   depreciation,
+			NetworkCabinetMonthly: networkShare,
+			OtherFixedCostMonthly: otherFixed,
+			TotalTCOMonthly:       totalTCO,
 		}
 		items = append(items, item)
 	}
@@ -114,7 +120,7 @@ func (s *ValueScoreSetupService) CalculateMonthlyTCO(ctx context.Context, req do
 		DepreciationMonths: 60,
 		Formula:            baseline.Formula,
 		Items:              items,
-		Note:               "折旧月数固定 60（5*12）；当前折旧月值待后续接入真实折旧数据",
+		Note:               "月TCO口径：机柜费 + 折旧 + 网络机柜等分摊 + 其他固定成本；折旧月数固定60（5*12）",
 	}
 	if baseline.Status != "ok" && baseline.Note != "" {
 		res.Note = baseline.Note

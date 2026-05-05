@@ -24,8 +24,11 @@ type HostPackageConfig struct {
 	PowerWatts             float64 `json:"power_watts,omitempty"`
 	ReleaseYear            int     `json:"release_year,omitempty"`
 	MemoryCapacityGB       float64 `json:"memory_capacity_gb,omitempty"`
-	ServerValueScore       float64 `json:"server_value_score,omitempty"`
-	ArchStandardizedFactor float64 `json:"arch_standardized_factor"`
+	ServerValueScore            float64 `json:"server_value_score,omitempty"`
+	MonthlyDepreciationCNY      float64 `json:"monthly_depreciation_cny,omitempty"`
+	NetworkCabinetShareCNY      float64 `json:"network_cabinet_share_cny,omitempty"`
+	OtherFixedCostCNY           float64 `json:"other_fixed_cost_cny,omitempty"`
+	ArchStandardizedFactor      float64 `json:"arch_standardized_factor"`
 }
 
 type SpecialRule struct {

@@ -173,6 +173,18 @@ var hostPackageHeaderMap = map[string]string{
 	"服务器价值分":                 "server_value_score",
 	"价值分":                    "server_value_score",
 	"servervaluescore":       "server_value_score",
+	"月折旧(cny)":                "monthly_depreciation_cny",
+	"月折旧（cny）":               "monthly_depreciation_cny",
+	"月折旧":                     "monthly_depreciation_cny",
+	"monthlydepreciationcny": "monthly_depreciation_cny",
+	"网络机柜分摊(cny)":             "network_cabinet_share_cny",
+	"网络机柜分摊（cny）":            "network_cabinet_share_cny",
+	"网络机柜分摊":                  "network_cabinet_share_cny",
+	"networkcabinetsharecny": "network_cabinet_share_cny",
+	"其他固定成本(cny)":             "other_fixed_cost_cny",
+	"其他固定成本（cny）":            "other_fixed_cost_cny",
+	"其他固定成本":                  "other_fixed_cost_cny",
+	"otherfixedcostcny":      "other_fixed_cost_cny",
 	"架构标准化系数":                "arch_standardized_factor",
 	"archstandardizedfactor": "arch_standardized_factor",
 }
@@ -223,6 +235,36 @@ func validateHostPackageRow(raw map[string]string) (domain.HostPackageConfig, er
 		serverValueScore, err = strconv.ParseFloat(v, 64)
 		if err != nil {
 			return domain.HostPackageConfig{}, fmt.Errorf("服务器价值分 必须是数字")
+		}
+	}
+	monthlyDepreciationCNY := 0.0
+	if v := get("monthly_depreciation_cny"); v != "" {
+		monthlyDepreciationCNY, err = strconv.ParseFloat(v, 64)
+		if err != nil {
+			return domain.HostPackageConfig{}, fmt.Errorf("月折旧(CNY) 必须是数字")
+		}
+		if monthlyDepreciationCNY < 0 {
+			return domain.HostPackageConfig{}, fmt.Errorf("月折旧(CNY) 必须是大于等于0的数字")
+		}
+	}
+	networkCabinetShareCNY := 0.0
+	if v := get("network_cabinet_share_cny"); v != "" {
+		networkCabinetShareCNY, err = strconv.ParseFloat(v, 64)
+		if err != nil {
+			return domain.HostPackageConfig{}, fmt.Errorf("网络机柜分摊(CNY) 必须是数字")
+		}
+		if networkCabinetShareCNY < 0 {
+			return domain.HostPackageConfig{}, fmt.Errorf("网络机柜分摊(CNY) 必须是大于等于0的数字")
+		}
+	}
+	otherFixedCostCNY := 0.0
+	if v := get("other_fixed_cost_cny"); v != "" {
+		otherFixedCostCNY, err = strconv.ParseFloat(v, 64)
+		if err != nil {
+			return domain.HostPackageConfig{}, fmt.Errorf("其他固定成本(CNY) 必须是数字")
+		}
+		if otherFixedCostCNY < 0 {
+			return domain.HostPackageConfig{}, fmt.Errorf("其他固定成本(CNY) 必须是大于等于0的数字")
 		}
 	}
 	powerWatts := 0.0
@@ -288,6 +330,9 @@ func validateHostPackageRow(raw map[string]string) (domain.HostPackageConfig, er
 		ReleaseYear:            releaseYear,
 		MemoryCapacityGB:       memoryCapacityGB,
 		ServerValueScore:       serverValueScore,
+		MonthlyDepreciationCNY: monthlyDepreciationCNY,
+		NetworkCabinetShareCNY: networkCabinetShareCNY,
+		OtherFixedCostCNY:      otherFixedCostCNY,
 		ArchStandardizedFactor: coef,
 	}, nil
 }

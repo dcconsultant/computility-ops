@@ -8,9 +8,11 @@ type ValueScoreTCOItem struct {
 	ConfigType          string  `json:"config_type"`
 	PowerWatts          float64 `json:"power_watts"`
 	PowerKW             float64 `json:"power_kw"`
-	CabinetCostMonthly  float64 `json:"cabinet_cost_monthly"`
-	DepreciationMonthly float64 `json:"depreciation_monthly"`
-	TotalTCOMonthly     float64 `json:"total_tco_monthly"`
+	CabinetCostMonthly      float64 `json:"cabinet_cost_monthly"`
+	DepreciationMonthly     float64 `json:"depreciation_monthly"`
+	NetworkCabinetMonthly   float64 `json:"network_cabinet_monthly"`
+	OtherFixedCostMonthly   float64 `json:"other_fixed_cost_monthly"`
+	TotalTCOMonthly         float64 `json:"total_tco_monthly"`
 }
 
 type ValueScoreTCOCalculateResult struct {
