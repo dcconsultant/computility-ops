@@ -6,6 +6,8 @@ import type {
   ListData,
   CabinetConfig,
   CabinetUtilizationSetting,
+  ValueScoreCostSettings,
+  PackageCabinetMappingCheckItem,
   ModelFailureRate,
   FaultAnalysisResult,
   FaultYearAnalysisRow,
@@ -94,6 +96,21 @@ export async function updateCabinetConfig(id: number, payload: Omit<CabinetConfi
 
 export async function deleteCabinetConfig(id: number) {
   const { data } = await http.delete<ApiResp<{ deleted: boolean; id: number }>>(`/cabinet-config/${id}`);
+  return data;
+}
+
+export async function getValueScoreCostSettings() {
+  const { data } = await http.get<ApiResp<ValueScoreCostSettings>>('/value-score/cost-settings');
+  return data;
+}
+
+export async function updateValueScoreCostSettings(payload: ValueScoreCostSettings) {
+  const { data } = await http.put<ApiResp<ValueScoreCostSettings>>('/value-score/cost-settings', payload);
+  return data;
+}
+
+export async function checkPackageCabinetMapping() {
+  const { data } = await http.get<ApiResp<{ status: string; unmatched: number; list: PackageCabinetMappingCheckItem[]; total: number; page: number; page_size: number }>>('/value-score/package-cabinet-mapping/check');
   return data;
 }
 
