@@ -10,6 +10,7 @@ import {
   getCabinetUtilization,
   importHostPackages,
   importServers,
+  importCabinetConfigs,
   listCabinetConfigs,
   listHostPackages,
   listServers,
@@ -234,16 +235,27 @@ export default function ImportPage() {
                 }}>保存</Button>}>
                   <Space>
                     <Text>利用率（小数）</Text>
-                    <InputNumber min={0.0001} max={2} step={0.0001} value={cabinetUtilization} onChange={(v) => setCabinetUtilization(Number(v || 0))} style={{ width: 180 }} />
+                    <InputNumber min={0.0001} max={2} step={0.0001} value={cabinetUtilization} stringMode onChange={(v) => setCabinetUtilization(Number(v || 0))} style={{ width: 180 }} />
                     <Text type="secondary">前端展示：{(cabinetUtilization * 100).toFixed(2)}%</Text>
                   </Space>
                 </Card>
 
-                <Card title="机柜配置表" extra={<Button onClick={() => { setEditingCabinet(null); setCabinetForm({ idc: '', rated_power_kw: 0, monthly_rent: 0 }); setCabinetModalOpen(true); }}>新增机柜配置</Button>}>
+                <Card title="机柜配置表" extra={<Space><Upload maxCount={1} accept=".xlsx" showUploadList={false} customRequest={async (options) => {
+                  const file = options.file as File;
+                  try {
+                    const resp = ensureApiOk(await importCabinetConfigs(file));
+                    message.success(`导入完成：成功 ${resp.data.success} 条`);
+                    await reloadAll();
+                    options.onSuccess?.({}, new XMLHttpRequest());
+                  } catch (e) {
+                    message.error(parseApiError(e, '导入失败'));
+                    options.onError?.(new Error('import failed'));
+                  }
+                }}><Button icon={<UploadOutlined />}>Excel模板导入</Button></Upload><Button onClick={() => { setEditingCabinet(null); setCabinetForm({ idc: '', rated_power_kw: 0, monthly_rent: 0 }); setCabinetModalOpen(true); }}>新增机柜配置</Button></Space>}>
                   <Table rowKey="id" dataSource={cabinetRows} pagination={withTotalPagination(10)} columns={[
                     { title: '机房', dataIndex: 'idc' },
                     { title: '额定功率(KW)', dataIndex: 'rated_power_kw', render: (v: number) => formatFloat(v) },
-                    { title: '机柜月租', dataIndex: 'monthly_rent', render: (v: number) => formatFloat(v) },
+                    { title: '机柜月租(CNY)', dataIndex: 'monthly_rent', render: (v: number) => formatFloat(v) },
                     { title: '操作', render: (_, row) => (
                       <Space>
                         <Button size="small" onClick={() => { setEditingCabinet(row); setCabinetForm({ idc: row.idc, rated_power_kw: row.rated_power_kw, monthly_rent: row.monthly_rent }); setCabinetModalOpen(true); }}>编辑</Button>
@@ -282,7 +294,7 @@ export default function ImportPage() {
                   <Space direction="vertical" style={{ width: '100%' }}>
                     <Input placeholder="机房" value={cabinetForm.idc} onChange={(e) => setCabinetForm({ ...cabinetForm, idc: e.target.value })} />
                     <InputNumber placeholder="额定功率(KW)" min={0.0001} value={cabinetForm.rated_power_kw} onChange={(v) => setCabinetForm({ ...cabinetForm, rated_power_kw: Number(v || 0) })} style={{ width: '100%' }} />
-                    <InputNumber placeholder="机柜月租" min={0.0001} value={cabinetForm.monthly_rent} onChange={(v) => setCabinetForm({ ...cabinetForm, monthly_rent: Number(v || 0) })} style={{ width: '100%' }} />
+                    <InputNumber placeholder="机柜月租(CNY)" min={0.0001} value={cabinetForm.monthly_rent} onChange={(v) => setCabinetForm({ ...cabinetForm, monthly_rent: Number(v || 0) })} style={{ width: '100%' }} />
                   </Space>
                 </Modal>
               </Space>

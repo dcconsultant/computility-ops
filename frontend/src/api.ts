@@ -69,6 +69,10 @@ export async function updateCabinetUtilization(utilization: number) {
   return data;
 }
 
+export async function importCabinetConfigs(file: File) {
+  return uploadImport('/cabinet-config/import', file);
+}
+
 export async function listCabinetConfigs() {
   const { data } = await http.get<ApiResp<ListData<CabinetConfig>>>('/cabinet-config');
   return data;

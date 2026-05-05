@@ -6,6 +6,7 @@ import (
 	"computility-ops/backend/internal/domain"
 	"computility-ops/backend/internal/service"
 	"github.com/gin-gonic/gin"
+	"github.com/xuri/excelize/v2"
 )
 
 type CabinetHandler struct {
@@ -96,6 +97,88 @@ func (h *CabinetHandler) Update(c *gin.Context) {
 		return
 	}
 	ok(c, row)
+}
+
+func (h *CabinetHandler) Import(c *gin.Context) {
+	c.Set("audit_action", "cabinet.config.import")
+	headers, rows, okRead := readSimpleXlsxRows(c)
+	if !okRead {
+		return
+	}
+	mapped := mapCabinetRows(headers, rows)
+	res, err := h.service.ImportCabinetConfigs(c.Request.Context(), mapped)
+	if err != nil {
+		fail(c, 50001, "导入失败")
+		return
+	}
+	ok(c, res)
+}
+
+func readSimpleXlsxRows(c *gin.Context) ([]string, [][]string, bool) {
+	file, err := c.FormFile("file")
+	if err != nil {
+		fail(c, 40001, "请上传 file")
+		return nil, nil, false
+	}
+	if !strings.HasSuffix(strings.ToLower(file.Filename), ".xlsx") {
+		fail(c, 40002, "仅支持 .xlsx 文件")
+		return nil, nil, false
+	}
+	f, err := file.Open()
+	if err != nil {
+		fail(c, 50001, "读取文件失败")
+		return nil, nil, false
+	}
+	defer f.Close()
+	xf, err := excelize.OpenReader(f)
+	if err != nil {
+		fail(c, 40003, "文件格式无效，请确认是标准 .xlsx")
+		return nil, nil, false
+	}
+	sheet := xf.GetSheetName(0)
+	if sheet == "" {
+		fail(c, 40001, "空文件")
+		return nil, nil, false
+	}
+	all, err := xf.GetRows(sheet)
+	if err != nil || len(all) == 0 {
+		fail(c, 40001, "空文件")
+		return nil, nil, false
+	}
+	headers := all[0]
+	if len(headers) == 0 {
+		fail(c, 40001, "缺少表头")
+		return nil, nil, false
+	}
+	return headers, all[1:], true
+}
+
+func mapCabinetRows(headers []string, rows [][]string) []map[string]string {
+	out := make([]map[string]string, 0, len(rows))
+	norm := make([]string, len(headers))
+	for i, h := range headers {
+		norm[i] = normalizeCabinetHeaderName(h)
+	}
+	for _, r := range rows {
+		item := make(map[string]string, len(headers))
+		for i := range headers {
+			v := ""
+			if i < len(r) {
+				v = strings.TrimSpace(r[i])
+			}
+			item[norm[i]] = v
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func normalizeCabinetHeaderName(raw string) string {
+	n := strings.TrimSpace(strings.ToLower(raw))
+	n = strings.ReplaceAll(n, " ", "")
+	n = strings.ReplaceAll(n, "-", "")
+	n = strings.ReplaceAll(n, "_", "")
+	return n
 }
 
 func (h *CabinetHandler) Delete(c *gin.Context) {
