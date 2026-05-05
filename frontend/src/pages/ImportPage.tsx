@@ -8,9 +8,7 @@ import {
   deleteCabinetConfig,
   exportServerPackageAnomalies,
   getCabinetUtilization,
-  getValueScoreCostSettings,
-  checkPackageCabinetMapping,
-  updateValueScoreCostSettings,
+  getValueScoreCabinetBaseline,
   importHostPackages,
   importServers,
   importCabinetConfigs,
@@ -27,8 +25,7 @@ import type {
   HostPackageConfig,
   ImportResult,
   ServerItem,
-  ValueScoreCostSettings,
-  PackageCabinetMappingCheckItem
+  ValueScoreCabinetBaseline
 } from '../types';
 
 const { Text } = Typography;
@@ -56,27 +53,22 @@ export default function ImportPage() {
   const [cabinetModalOpen, setCabinetModalOpen] = useState(false);
   const [editingCabinet, setEditingCabinet] = useState<CabinetConfig | null>(null);
   const [cabinetForm, setCabinetForm] = useState({ idc: '', rated_power_kw: 0, monthly_rent: 0 });
-  const [costSettings, setCostSettings] = useState<ValueScoreCostSettings>({ electricity_price_cny_per_kwh: 0, depreciation_months: 60, cabinet_utilization: 1 });
-  const [mappingChecks, setMappingChecks] = useState<PackageCabinetMappingCheckItem[]>([]);
-  const [mappingUnmatched, setMappingUnmatched] = useState(0);
+  const [cabinetBaseline, setCabinetBaseline] = useState<ValueScoreCabinetBaseline | null>(null);
 
   async function reloadAll() {
     try {
-      const [s1, s2, s3, s4, s5, s6] = await Promise.all([
+      const [s1, s2, s3, s4, s5] = await Promise.all([
         listServers(),
         listHostPackages(),
         getCabinetUtilization(),
         listCabinetConfigs(),
-        getValueScoreCostSettings(),
-        checkPackageCabinetMapping()
+        getValueScoreCabinetBaseline()
       ]);
       setServers(ensureApiOk(s1).data.list);
       setPackages(ensureApiOk(s2).data.list);
       setCabinetUtilization(ensureApiOk(s3).data.utilization || 1);
       setCabinetRows(ensureApiOk(s4).data.list || []);
-      setCostSettings(ensureApiOk(s5).data);
-      setMappingChecks(ensureApiOk(s6).data.list || []);
-      setMappingUnmatched(ensureApiOk(s6).data.unmatched || 0);
+      setCabinetBaseline(ensureApiOk(s5).data);
     } catch (e) {
       message.error(parseApiError(e, '加载失败'));
     }
@@ -324,46 +316,25 @@ export default function ImportPage() {
             key: 'value_score_setup',
             label: '价值评分配置底座',
             children: (
-              <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                <Card title="成本参数配置" extra={<Button type="primary" onClick={async () => {
-                  try {
-                    const resp = ensureApiOk(await updateValueScoreCostSettings(costSettings));
-                    setCostSettings(resp.data);
-                    message.success('成本参数已保存');
-                  } catch (e) {
-                    message.error(parseApiError(e, '保存失败'));
-                  }
-                }}>保存</Button>}>
-                  <Space wrap>
-                    <Text>电费单价(CNY/kWh)</Text>
-                    <InputNumber min={0} step={0.0001} value={costSettings.electricity_price_cny_per_kwh} onChange={(v) => setCostSettings({ ...costSettings, electricity_price_cny_per_kwh: Number(v || 0) })} style={{ width: 180 }} />
-                    <Text>折旧月数</Text>
-                    <InputNumber min={1} step={1} precision={0} value={costSettings.depreciation_months} onChange={(v) => setCostSettings({ ...costSettings, depreciation_months: Number(v || 60) })} style={{ width: 140 }} />
-                    <Text>机柜利用率（小数）</Text>
-                    <InputNumber min={0.0001} max={2} step={0.0001} value={costSettings.cabinet_utilization} onChange={(v) => setCostSettings({ ...costSettings, cabinet_utilization: Number(v || 1) })} style={{ width: 160 }} />
+              <Card
+                title="价值评分参数基线（只读）"
+                extra={<Button onClick={reloadAll}>刷新</Button>}
+              >
+                {cabinetBaseline ? (
+                  <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                    <Text>目标机房：{cabinetBaseline.idc}</Text>
+                    <Text>机柜利用率（来自机柜配置管理）：{formatFloat(cabinetBaseline.cabinet_utilization)}</Text>
+                    <Text>最低额定功率(KW)：{formatFloat(cabinetBaseline.min_rated_power_kw)}</Text>
+                    <Text>对应机柜月租(CNY)：{formatFloat(cabinetBaseline.monthly_rent_cny)}</Text>
+                    <Text>折旧月数：固定 60（5*12）</Text>
+                    <Text>机柜成本公式：{cabinetBaseline.formula}</Text>
+                    <Text type="secondary">样本机柜数：{cabinetBaseline.source_count}</Text>
+                    {cabinetBaseline.note ? <Text type={cabinetBaseline.status === 'warning' ? 'danger' : 'secondary'}>{cabinetBaseline.note}</Text> : null}
                   </Space>
-                </Card>
-
-                <Card title="套餐/机柜关联可用性校验" extra={<Space><Button onClick={async () => {
-                  try {
-                    const resp = ensureApiOk(await checkPackageCabinetMapping());
-                    setMappingChecks(resp.data.list || []);
-                    setMappingUnmatched(resp.data.unmatched || 0);
-                    message.success('校验已刷新');
-                  } catch (e) {
-                    message.error(parseApiError(e, '刷新失败'));
-                  }
-                }}>刷新校验</Button><Text type={mappingUnmatched > 0 ? 'danger' : 'secondary'}>未匹配：{mappingUnmatched}</Text></Space>}>
-                  <Table rowKey={(r) => `${r.config_type}-${r.idc}-${r.power_kw}`} dataSource={mappingChecks} pagination={withTotalPagination(10)} columns={[
-                    { title: '配置类型', dataIndex: 'config_type' },
-                    { title: '机房(IDC)', dataIndex: 'idc', render: (v?: string) => v || '-' },
-                    { title: '功率(W)', dataIndex: 'power_watts', render: (v: number) => formatFloat(v) },
-                    { title: '功率(KW)', dataIndex: 'power_kw', render: (v: number) => formatFloat(v) },
-                    { title: '匹配状态', dataIndex: 'matched', render: (v: boolean) => v ? '已匹配' : '未匹配' },
-                    { title: '原因', dataIndex: 'reason', render: (v?: string) => v || '-' }
-                  ]} />
-                </Card>
-              </Space>
+                ) : (
+                  <Text type="secondary">暂无基线数据</Text>
+                )}
+              </Card>
             )
           },
           {

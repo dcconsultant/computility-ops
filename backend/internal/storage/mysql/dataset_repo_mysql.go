@@ -20,38 +20,59 @@ func NewDatasetRepo(dsn string) *DatasetRepo {
 	return &DatasetRepo{db: db}
 }
 
-func (r *DatasetRepo) GetValueScoreCostSettings(ctx context.Context) (domain.ValueScoreCostSettings, error) {
-	row := r.db.QueryRowContext(ctx, `
-		SELECT electricity_price_cny_per_kwh, depreciation_months, cabinet_utilization
-		FROM ops_value_score_cost_settings
-		WHERE id=1
-	`)
-	var v domain.ValueScoreCostSettings
-	if err := row.Scan(&v.ElectricityPriceCNYPerKWh, &v.DepreciationMonths, &v.CabinetUtilization); err != nil {
-		if err == sql.ErrNoRows {
-			return domain.ValueScoreCostSettings{ElectricityPriceCNYPerKWh: 0, DepreciationMonths: 60, CabinetUtilization: 1}, nil
-		}
-		return domain.ValueScoreCostSettings{}, err
+func (r *DatasetRepo) GetValueScoreCabinetBaseline(ctx context.Context) (domain.ValueScoreCabinetBaseline, error) {
+	utilRow := r.db.QueryRowContext(ctx, `SELECT utilization FROM ops_cabinet_settings WHERE id=1`)
+	util := 1.0
+	if err := utilRow.Scan(&util); err != nil && err != sql.ErrNoRows {
+		return domain.ValueScoreCabinetBaseline{}, err
 	}
-	if v.CabinetUtilization <= 0 {
-		v.CabinetUtilization = 1
+	if util <= 0 {
+		util = 1
 	}
-	if v.DepreciationMonths <= 0 {
-		v.DepreciationMonths = 60
-	}
-	return v, nil
-}
 
-func (r *DatasetRepo) SetValueScoreCostSettings(ctx context.Context, settings domain.ValueScoreCostSettings) error {
-	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO ops_value_score_cost_settings (id, electricity_price_cny_per_kwh, depreciation_months, cabinet_utilization)
-		VALUES (1, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			electricity_price_cny_per_kwh=VALUES(electricity_price_cny_per_kwh),
-			depreciation_months=VALUES(depreciation_months),
-			cabinet_utilization=VALUES(cabinet_utilization)
-	`, settings.ElectricityPriceCNYPerKWh, settings.DepreciationMonths, settings.CabinetUtilization)
-	return err
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT rated_power_kw, monthly_rent
+		FROM ops_cabinet_config
+		WHERE idc = ?
+		ORDER BY rated_power_kw ASC, monthly_rent ASC
+	`, "CN-N01-TJ01-ZJ01")
+	if err != nil {
+		return domain.ValueScoreCabinetBaseline{}, err
+	}
+	defer rows.Close()
+
+	count := 0
+	minPower := 0.0
+	minRent := 0.0
+	for rows.Next() {
+		var p, rnt float64
+		if err := rows.Scan(&p, &rnt); err != nil {
+			return domain.ValueScoreCabinetBaseline{}, err
+		}
+		count++
+		if minPower == 0 {
+			minPower = p
+			minRent = rnt
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return domain.ValueScoreCabinetBaseline{}, err
+	}
+
+	out := domain.ValueScoreCabinetBaseline{
+		Status:             "ok",
+		IDC:                "CN-N01-TJ01-ZJ01",
+		CabinetUtilization: util,
+		MinRatedPowerKW:    minPower,
+		MonthlyRentCNY:     minRent,
+		Formula:            "机柜月租 * (功率(W)/1000) / (额定功率(KW) * 机柜利用率)",
+		SourceCount:        count,
+	}
+	if count == 0 || minPower <= 0 || minRent <= 0 {
+		out.Status = "warning"
+		out.Note = "目标机房没有可用机柜配置"
+	}
+	return out, nil
 }
 
 func (r *DatasetRepo) ReplaceHostPackages(ctx context.Context, rows []domain.HostPackageConfig) error {

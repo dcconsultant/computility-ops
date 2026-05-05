@@ -64,19 +64,15 @@ export interface CabinetConfig {
   monthly_rent: number;
 }
 
-export interface ValueScoreCostSettings {
-  electricity_price_cny_per_kwh: number;
-  depreciation_months: number;
-  cabinet_utilization: number;
-}
-
-export interface PackageCabinetMappingCheckItem {
-  config_type: string;
+export interface ValueScoreCabinetBaseline {
+  status: string;
   idc: string;
-  power_watts: number;
-  power_kw: number;
-  matched: boolean;
-  reason?: string;
+  cabinet_utilization: number;
+  min_rated_power_kw: number;
+  monthly_rent_cny: number;
+  formula: string;
+  source_count: number;
+  note?: string;
 }
 
 export interface SpecialRule {

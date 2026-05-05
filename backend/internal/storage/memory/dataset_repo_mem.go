@@ -11,9 +11,8 @@ import (
 type DatasetRepo struct {
 	mu sync.RWMutex
 
-	hostPackages        []domain.HostPackageConfig
-	valueScoreCostSettings domain.ValueScoreCostSettings
-	cabinetUtilization  domain.CabinetUtilizationSetting
+	hostPackages       []domain.HostPackageConfig
+	cabinetUtilization domain.CabinetUtilizationSetting
 	cabinetConfigs      []domain.CabinetConfig
 	cabinetAutoID       int64
 	specialRules        []domain.SpecialRule
@@ -29,8 +28,7 @@ type DatasetRepo struct {
 
 func NewDatasetRepo() *DatasetRepo {
 	return &DatasetRepo{
-		valueScoreCostSettings: domain.ValueScoreCostSettings{ElectricityPriceCNYPerKWh: 0, DepreciationMonths: 60, CabinetUtilization: 1},
-		cabinetUtilization:  domain.CabinetUtilizationSetting{Utilization: 1},
+		cabinetUtilization: domain.CabinetUtilizationSetting{Utilization: 1},
 	}
 }
 
@@ -46,22 +44,35 @@ func (r *DatasetRepo) ListHostPackages(_ context.Context) ([]domain.HostPackageC
 	return append([]domain.HostPackageConfig(nil), r.hostPackages...), nil
 }
 
-func (r *DatasetRepo) GetValueScoreCostSettings(_ context.Context) (domain.ValueScoreCostSettings, error) {
+func (r *DatasetRepo) GetValueScoreCabinetBaseline(_ context.Context) (domain.ValueScoreCabinetBaseline, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	v := r.valueScoreCostSettings
-	if v.CabinetUtilization <= 0 {
-		v.CabinetUtilization = r.cabinetUtilization.Utilization
+	minPower := 0.0
+	minRent := 0.0
+	count := 0
+	for _, c := range r.cabinetConfigs {
+		if c.IDC == "CN-N01-TJ01-ZJ01" {
+			count++
+			if minPower == 0 || c.RatedPowerKW < minPower || (c.RatedPowerKW == minPower && c.MonthlyRent < minRent) {
+				minPower = c.RatedPowerKW
+				minRent = c.MonthlyRent
+			}
+		}
 	}
-	return v, nil
-}
-
-func (r *DatasetRepo) SetValueScoreCostSettings(_ context.Context, settings domain.ValueScoreCostSettings) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.valueScoreCostSettings = settings
-	r.cabinetUtilization = domain.CabinetUtilizationSetting{Utilization: settings.CabinetUtilization}
-	return nil
+	out := domain.ValueScoreCabinetBaseline{
+		Status:             "ok",
+		IDC:                "CN-N01-TJ01-ZJ01",
+		CabinetUtilization: r.cabinetUtilization.Utilization,
+		MinRatedPowerKW:    minPower,
+		MonthlyRentCNY:     minRent,
+		Formula:            "机柜月租 * (功率(W)/1000) / (额定功率(KW) * 机柜利用率)",
+		SourceCount:        count,
+	}
+	if count == 0 || minPower <= 0 || minRent <= 0 {
+		out.Status = "warning"
+		out.Note = "目标机房没有可用机柜配置"
+	}
+	return out, nil
 }
 
 func (r *DatasetRepo) GetCabinetUtilization(_ context.Context) (domain.CabinetUtilizationSetting, error) {

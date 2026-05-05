@@ -45,9 +45,7 @@ func NewRouter(h Handlers) *gin.Engine {
 		v1.POST("/host-packages/import", h.Import.ImportHostPackages)
 		v1.GET("/host-packages", h.Import.ListHostPackages)
 
-		v1.GET("/value-score/cost-settings", h.ValueScoreSetup.GetCostSettings)
-		v1.PUT("/value-score/cost-settings", h.ValueScoreSetup.UpdateCostSettings)
-		v1.GET("/value-score/package-cabinet-mapping/check", h.ValueScoreSetup.CheckPackageCabinetMapping)
+		v1.GET("/value-score/cabinet-baseline", h.ValueScoreSetup.GetCabinetBaseline)
 
 		v1.GET("/cabinet-config/utilization", h.Cabinet.GetUtilization)
 		v1.PUT("/cabinet-config/utilization", h.Cabinet.UpdateUtilization)
