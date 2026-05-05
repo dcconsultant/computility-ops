@@ -53,6 +53,17 @@ export interface HostPackageConfig {
   arch_standardized_factor: number;
 }
 
+export interface CabinetUtilizationSetting {
+  utilization: number;
+}
+
+export interface CabinetConfig {
+  id: number;
+  idc: string;
+  rated_power_kw: number;
+  monthly_rent: number;
+}
+
 export interface SpecialRule {
   sn: string;
   manufacturer?: string;

@@ -16,6 +16,13 @@ type DatasetRepo interface {
 	ReplaceHostPackages(ctx context.Context, rows []domain.HostPackageConfig) error
 	ListHostPackages(ctx context.Context) ([]domain.HostPackageConfig, error)
 
+	GetCabinetUtilization(ctx context.Context) (domain.CabinetUtilizationSetting, error)
+	SetCabinetUtilization(ctx context.Context, setting domain.CabinetUtilizationSetting) error
+	CreateCabinetConfig(ctx context.Context, row domain.CabinetConfig) (domain.CabinetConfig, error)
+	UpdateCabinetConfig(ctx context.Context, row domain.CabinetConfig) (domain.CabinetConfig, error)
+	DeleteCabinetConfig(ctx context.Context, id int64) error
+	ListCabinetConfigs(ctx context.Context) ([]domain.CabinetConfig, error)
+
 	ReplaceSpecialRules(ctx context.Context, rows []domain.SpecialRule) error
 	ListSpecialRules(ctx context.Context) ([]domain.SpecialRule, error)
 

@@ -32,6 +32,7 @@ func Build(cfg config.Config) (*gin.Engine, error) {
 	}
 
 	importSvc := service.NewImportService(serverRepo, datasetRepo)
+	cabinetSvc := service.NewCabinetService(datasetRepo)
 	renewalSvc := service.NewRenewalService(serverRepo, datasetRepo, renewalRepo)
 	contractSvc := service.NewContractService(contractRepo)
 
@@ -48,6 +49,7 @@ func Build(cfg config.Config) (*gin.Engine, error) {
 		Import:               handler.NewImportHandler(importSvc),
 		Renewal:              handler.NewRenewalHandler(renewalSvc),
 		Contract:             handler.NewContractHandler(contractSvc),
+		Cabinet:              handler.NewCabinetHandler(cabinetSvc),
 		System:               handler.NewSystemHandler(),
 		StorageDriver:        driver,
 		ReplacementPlanning:  rpapi.NewHandler(replacementSvc),

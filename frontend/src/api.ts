@@ -4,6 +4,8 @@ import type {
   HostPackageConfig,
   ImportResult,
   ListData,
+  CabinetConfig,
+  CabinetUtilizationSetting,
   ModelFailureRate,
   FaultAnalysisResult,
   FaultYearAnalysisRow,
@@ -54,6 +56,36 @@ export async function importHostPackages(file: File) {
 }
 export async function listHostPackages() {
   const { data } = await http.get<ApiResp<ListData<HostPackageConfig>>>('/host-packages');
+  return data;
+}
+
+export async function getCabinetUtilization() {
+  const { data } = await http.get<ApiResp<CabinetUtilizationSetting>>('/cabinet-config/utilization');
+  return data;
+}
+
+export async function updateCabinetUtilization(utilization: number) {
+  const { data } = await http.put<ApiResp<CabinetUtilizationSetting>>('/cabinet-config/utilization', { utilization });
+  return data;
+}
+
+export async function listCabinetConfigs() {
+  const { data } = await http.get<ApiResp<ListData<CabinetConfig>>>('/cabinet-config');
+  return data;
+}
+
+export async function createCabinetConfig(payload: Omit<CabinetConfig, 'id'>) {
+  const { data } = await http.post<ApiResp<CabinetConfig>>('/cabinet-config', payload);
+  return data;
+}
+
+export async function updateCabinetConfig(id: number, payload: Omit<CabinetConfig, 'id'>) {
+  const { data } = await http.put<ApiResp<CabinetConfig>>(`/cabinet-config/${id}`, payload);
+  return data;
+}
+
+export async function deleteCabinetConfig(id: number) {
+  const { data } = await http.delete<ApiResp<{ deleted: boolean; id: number }>>(`/cabinet-config/${id}`);
   return data;
 }
 

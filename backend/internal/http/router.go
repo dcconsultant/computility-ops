@@ -14,6 +14,7 @@ type Handlers struct {
 	Import        *handler.ImportHandler
 	Renewal       *handler.RenewalHandler
 	Contract      *handler.ContractHandler
+	Cabinet       *handler.CabinetHandler
 	System        *handler.SystemHandler
 	StorageDriver string
 	ReplacementPlanning *rpapi.Handler
@@ -42,6 +43,13 @@ func NewRouter(h Handlers) *gin.Engine {
 
 		v1.POST("/host-packages/import", h.Import.ImportHostPackages)
 		v1.GET("/host-packages", h.Import.ListHostPackages)
+
+		v1.GET("/cabinet-config/utilization", h.Cabinet.GetUtilization)
+		v1.PUT("/cabinet-config/utilization", h.Cabinet.UpdateUtilization)
+		v1.GET("/cabinet-config", h.Cabinet.List)
+		v1.POST("/cabinet-config", h.Cabinet.Create)
+		v1.PUT("/cabinet-config/:id", h.Cabinet.Update)
+		v1.DELETE("/cabinet-config/:id", h.Cabinet.Delete)
 
 		v1.POST("/special-rules/import", h.Import.ImportSpecialRules)
 		v1.GET("/special-rules", h.Import.ListSpecialRules)

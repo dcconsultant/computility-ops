@@ -19,6 +19,25 @@ func (fakeServerRepo) List(ctx context.Context) ([]domain.Server, error) {
 
 func (fakeDatasetRepo) ReplaceHostPackages(ctx context.Context, rows []domain.HostPackageConfig) error { _ = ctx; _ = rows; return nil }
 func (fakeDatasetRepo) ListHostPackages(ctx context.Context) ([]domain.HostPackageConfig, error) { _ = ctx; return nil, nil }
+func (fakeDatasetRepo) GetCabinetUtilization(ctx context.Context) (domain.CabinetUtilizationSetting, error) {
+	_ = ctx
+	return domain.CabinetUtilizationSetting{Utilization: 1}, nil
+}
+func (fakeDatasetRepo) SetCabinetUtilization(ctx context.Context, setting domain.CabinetUtilizationSetting) error {
+	_ = ctx
+	_ = setting
+	return nil
+}
+func (fakeDatasetRepo) CreateCabinetConfig(ctx context.Context, row domain.CabinetConfig) (domain.CabinetConfig, error) {
+	_ = ctx
+	return row, nil
+}
+func (fakeDatasetRepo) UpdateCabinetConfig(ctx context.Context, row domain.CabinetConfig) (domain.CabinetConfig, error) {
+	_ = ctx
+	return row, nil
+}
+func (fakeDatasetRepo) DeleteCabinetConfig(ctx context.Context, id int64) error { _ = ctx; _ = id; return nil }
+func (fakeDatasetRepo) ListCabinetConfigs(ctx context.Context) ([]domain.CabinetConfig, error) { _ = ctx; return nil, nil }
 func (fakeDatasetRepo) ReplaceSpecialRules(ctx context.Context, rows []domain.SpecialRule) error { _ = ctx; _ = rows; return nil }
 func (fakeDatasetRepo) ListSpecialRules(ctx context.Context) ([]domain.SpecialRule, error) { _ = ctx; return nil, nil }
 func (fakeDatasetRepo) ReplaceModelFailureRates(ctx context.Context, rows []domain.ModelFailureRate) error { _ = ctx; _ = rows; return nil }

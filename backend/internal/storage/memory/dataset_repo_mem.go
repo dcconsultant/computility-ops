@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"computility-ops/backend/internal/domain"
@@ -10,19 +11,24 @@ import (
 type DatasetRepo struct {
 	mu sync.RWMutex
 
-	hostPackages      []domain.HostPackageConfig
-	specialRules      []domain.SpecialRule
-	modelFailureRates []domain.ModelFailureRate
-	pkgFailureRates   []domain.PackageFailureRate
-	pkgModelRates     []domain.PackageModelFailureRate
-	overallRates      []domain.FailureRateSummary
-	overviewCards     []domain.FailureOverviewCard
-	ageTrendPoints    []domain.FailureAgeTrendPoint
-	featureFacts      []domain.FailureFeatureFact
-	storageTopRates   []domain.StorageTopServerRate
+	hostPackages        []domain.HostPackageConfig
+	cabinetUtilization  domain.CabinetUtilizationSetting
+	cabinetConfigs      []domain.CabinetConfig
+	cabinetAutoID       int64
+	specialRules        []domain.SpecialRule
+	modelFailureRates   []domain.ModelFailureRate
+	pkgFailureRates     []domain.PackageFailureRate
+	pkgModelRates       []domain.PackageModelFailureRate
+	overallRates        []domain.FailureRateSummary
+	overviewCards       []domain.FailureOverviewCard
+	ageTrendPoints      []domain.FailureAgeTrendPoint
+	featureFacts        []domain.FailureFeatureFact
+	storageTopRates     []domain.StorageTopServerRate
 }
 
-func NewDatasetRepo() *DatasetRepo { return &DatasetRepo{} }
+func NewDatasetRepo() *DatasetRepo {
+	return &DatasetRepo{cabinetUtilization: domain.CabinetUtilizationSetting{Utilization: 1}}
+}
 
 func (r *DatasetRepo) ReplaceHostPackages(_ context.Context, rows []domain.HostPackageConfig) error {
 	r.mu.Lock()
@@ -34,6 +40,71 @@ func (r *DatasetRepo) ListHostPackages(_ context.Context) ([]domain.HostPackageC
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return append([]domain.HostPackageConfig(nil), r.hostPackages...), nil
+}
+
+func (r *DatasetRepo) GetCabinetUtilization(_ context.Context) (domain.CabinetUtilizationSetting, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.cabinetUtilization, nil
+}
+
+func (r *DatasetRepo) SetCabinetUtilization(_ context.Context, setting domain.CabinetUtilizationSetting) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cabinetUtilization = setting
+	return nil
+}
+
+func (r *DatasetRepo) CreateCabinetConfig(_ context.Context, row domain.CabinetConfig) (domain.CabinetConfig, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, item := range r.cabinetConfigs {
+		if item.IDC == row.IDC && item.RatedPowerKW == row.RatedPowerKW {
+			return domain.CabinetConfig{}, fmt.Errorf("duplicate key")
+		}
+	}
+	r.cabinetAutoID++
+	row.ID = r.cabinetAutoID
+	r.cabinetConfigs = append(r.cabinetConfigs, row)
+	return row, nil
+}
+
+func (r *DatasetRepo) UpdateCabinetConfig(_ context.Context, row domain.CabinetConfig) (domain.CabinetConfig, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, item := range r.cabinetConfigs {
+		if item.ID != row.ID && item.IDC == row.IDC && item.RatedPowerKW == row.RatedPowerKW {
+			return domain.CabinetConfig{}, fmt.Errorf("duplicate key")
+		}
+	}
+	for i := range r.cabinetConfigs {
+		if r.cabinetConfigs[i].ID == row.ID {
+			r.cabinetConfigs[i].IDC = row.IDC
+			r.cabinetConfigs[i].RatedPowerKW = row.RatedPowerKW
+			r.cabinetConfigs[i].MonthlyRent = row.MonthlyRent
+			return r.cabinetConfigs[i], nil
+		}
+	}
+	return domain.CabinetConfig{}, fmt.Errorf("not found")
+}
+
+func (r *DatasetRepo) DeleteCabinetConfig(_ context.Context, id int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]domain.CabinetConfig, 0, len(r.cabinetConfigs))
+	for _, item := range r.cabinetConfigs {
+		if item.ID != id {
+			out = append(out, item)
+		}
+	}
+	r.cabinetConfigs = out
+	return nil
+}
+
+func (r *DatasetRepo) ListCabinetConfigs(_ context.Context) ([]domain.CabinetConfig, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return append([]domain.CabinetConfig(nil), r.cabinetConfigs...), nil
 }
 
 func (r *DatasetRepo) ReplaceSpecialRules(_ context.Context, rows []domain.SpecialRule) error {
