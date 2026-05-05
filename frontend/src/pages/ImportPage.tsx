@@ -10,6 +10,7 @@ import {
   getCabinetUtilization,
   getValueScoreCabinetBaseline,
   calculateValueScoreTCO,
+  exportValueScoreTCO,
   importHostPackages,
   importServers,
   importCabinetConfigs,
@@ -347,7 +348,7 @@ export default function ImportPage() {
                   )}
                 </Card>
 
-                <Card title="服务器月TCO试算" extra={<Button loading={tcoLoading} onClick={async () => {
+                <Card title="服务器月TCO试算" extra={<Space><Button onClick={exportValueScoreTCO}>导出Excel</Button><Button loading={tcoLoading} onClick={async () => {
                   setTcoLoading(true);
                   try {
                     const tco = ensureApiOk(await calculateValueScoreTCO());
@@ -358,7 +359,7 @@ export default function ImportPage() {
                   } finally {
                     setTcoLoading(false);
                   }
-                }}>刷新试算</Button>}>
+                }}>刷新试算</Button></Space>}>
                   <Table rowKey="config_type" dataSource={tcoResult?.items || []} pagination={withTotalPagination(10)} columns={[
                     { title: '配置类型', dataIndex: 'config_type' },
                     { title: '功率(W)', dataIndex: 'power_watts', render: (v: number) => formatFloat(v) },

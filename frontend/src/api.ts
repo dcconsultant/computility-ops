@@ -109,6 +109,10 @@ export async function calculateValueScoreTCO(configTypes?: string[]) {
   return data;
 }
 
+export function exportValueScoreTCO() {
+  window.open('/api/v1/value-score/tco/export', '_blank');
+}
+
 export async function importSpecialRules(file: File) {
   return uploadImport('/special-rules/import', file);
 }
