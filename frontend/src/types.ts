@@ -75,6 +75,27 @@ export interface ValueScoreCabinetBaseline {
   note?: string;
 }
 
+export interface ValueScoreTCOItem {
+  config_type: string;
+  power_watts: number;
+  power_kw: number;
+  cabinet_cost_monthly: number;
+  depreciation_monthly: number;
+  total_tco_monthly: number;
+}
+
+export interface ValueScoreTCOResult {
+  status: string;
+  idc: string;
+  cabinet_utilization: number;
+  min_rated_power_kw: number;
+  monthly_rent_cny: number;
+  depreciation_months: number;
+  formula: string;
+  items: ValueScoreTCOItem[];
+  note?: string;
+}
+
 export interface SpecialRule {
   sn: string;
   manufacturer?: string;

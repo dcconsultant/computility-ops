@@ -9,6 +9,7 @@ import {
   exportServerPackageAnomalies,
   getCabinetUtilization,
   getValueScoreCabinetBaseline,
+  calculateValueScoreTCO,
   importHostPackages,
   importServers,
   importCabinetConfigs,
@@ -25,7 +26,8 @@ import type {
   HostPackageConfig,
   ImportResult,
   ServerItem,
-  ValueScoreCabinetBaseline
+  ValueScoreCabinetBaseline,
+  ValueScoreTCOResult
 } from '../types';
 
 const { Text } = Typography;
@@ -54,6 +56,8 @@ export default function ImportPage() {
   const [editingCabinet, setEditingCabinet] = useState<CabinetConfig | null>(null);
   const [cabinetForm, setCabinetForm] = useState({ idc: '', rated_power_kw: 0, monthly_rent: 0 });
   const [cabinetBaseline, setCabinetBaseline] = useState<ValueScoreCabinetBaseline | null>(null);
+  const [tcoResult, setTcoResult] = useState<ValueScoreTCOResult | null>(null);
+  const [tcoLoading, setTcoLoading] = useState(false);
 
   async function reloadAll() {
     try {
@@ -69,6 +73,12 @@ export default function ImportPage() {
       setCabinetUtilization(ensureApiOk(s3).data.utilization || 1);
       setCabinetRows(ensureApiOk(s4).data.list || []);
       setCabinetBaseline(ensureApiOk(s5).data);
+      try {
+        const tco = ensureApiOk(await calculateValueScoreTCO());
+        setTcoResult(tco.data);
+      } catch {
+        setTcoResult(null);
+      }
     } catch (e) {
       message.error(parseApiError(e, '加载失败'));
     }
@@ -316,25 +326,49 @@ export default function ImportPage() {
             key: 'value_score_setup',
             label: '价值评分配置底座',
             children: (
-              <Card
-                title="价值评分参数基线（只读）"
-                extra={<Button onClick={reloadAll}>刷新</Button>}
-              >
-                {cabinetBaseline ? (
-                  <Space direction="vertical" style={{ width: '100%' }} size="middle">
-                    <Text>目标机房：{cabinetBaseline.idc}</Text>
-                    <Text>机柜利用率（来自机柜配置管理）：{formatFloat(cabinetBaseline.cabinet_utilization)}</Text>
-                    <Text>最低额定功率(KW)：{formatFloat(cabinetBaseline.min_rated_power_kw)}</Text>
-                    <Text>对应机柜月租(CNY)：{formatFloat(cabinetBaseline.monthly_rent_cny)}</Text>
-                    <Text>折旧月数：固定 60（5*12）</Text>
-                    <Text>机柜成本公式：{cabinetBaseline.formula}</Text>
-                    <Text type="secondary">样本机柜数：{cabinetBaseline.source_count}</Text>
-                    {cabinetBaseline.note ? <Text type={cabinetBaseline.status === 'warning' ? 'danger' : 'secondary'}>{cabinetBaseline.note}</Text> : null}
-                  </Space>
-                ) : (
-                  <Text type="secondary">暂无基线数据</Text>
-                )}
-              </Card>
+              <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                <Card
+                  title="价值评分参数基线（只读）"
+                  extra={<Button onClick={reloadAll}>刷新</Button>}
+                >
+                  {cabinetBaseline ? (
+                    <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                      <Text>目标机房：{cabinetBaseline.idc}</Text>
+                      <Text>机柜利用率（来自机柜配置管理）：{formatFloat(cabinetBaseline.cabinet_utilization)}</Text>
+                      <Text>最低额定功率(KW)：{formatFloat(cabinetBaseline.min_rated_power_kw)}</Text>
+                      <Text>对应机柜月租(CNY)：{formatFloat(cabinetBaseline.monthly_rent_cny)}</Text>
+                      <Text>折旧月数：固定 60（5*12）</Text>
+                      <Text>机柜成本公式：{cabinetBaseline.formula}</Text>
+                      <Text type="secondary">样本机柜数：{cabinetBaseline.source_count}</Text>
+                      {cabinetBaseline.note ? <Text type={cabinetBaseline.status === 'warning' ? 'danger' : 'secondary'}>{cabinetBaseline.note}</Text> : null}
+                    </Space>
+                  ) : (
+                    <Text type="secondary">暂无基线数据</Text>
+                  )}
+                </Card>
+
+                <Card title="服务器月TCO试算" extra={<Button loading={tcoLoading} onClick={async () => {
+                  setTcoLoading(true);
+                  try {
+                    const tco = ensureApiOk(await calculateValueScoreTCO());
+                    setTcoResult(tco.data);
+                    message.success('月TCO已刷新');
+                  } catch (e) {
+                    message.error(parseApiError(e, '刷新失败'));
+                  } finally {
+                    setTcoLoading(false);
+                  }
+                }}>刷新试算</Button>}>
+                  <Table rowKey="config_type" dataSource={tcoResult?.items || []} pagination={withTotalPagination(10)} columns={[
+                    { title: '配置类型', dataIndex: 'config_type' },
+                    { title: '功率(W)', dataIndex: 'power_watts', render: (v: number) => formatFloat(v) },
+                    { title: '功率(KW)', dataIndex: 'power_kw', render: (v: number) => formatFloat(v) },
+                    { title: '机柜费/月', dataIndex: 'cabinet_cost_monthly', render: (v: number) => formatFloat(v) },
+                    { title: '折旧/月', dataIndex: 'depreciation_monthly', render: (v: number) => formatFloat(v) },
+                    { title: '月TCO', dataIndex: 'total_tco_monthly', render: (v: number) => formatFloat(v) }
+                  ]} />
+                </Card>
+              </Space>
             )
           },
           {

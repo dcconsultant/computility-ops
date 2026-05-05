@@ -7,6 +7,7 @@ import type {
   CabinetConfig,
   CabinetUtilizationSetting,
   ValueScoreCabinetBaseline,
+  ValueScoreTCOResult,
   ModelFailureRate,
   FaultAnalysisResult,
   FaultYearAnalysisRow,
@@ -100,6 +101,11 @@ export async function deleteCabinetConfig(id: number) {
 
 export async function getValueScoreCabinetBaseline() {
   const { data } = await http.get<ApiResp<ValueScoreCabinetBaseline>>('/value-score/cabinet-baseline');
+  return data;
+}
+
+export async function calculateValueScoreTCO(configTypes?: string[]) {
+  const { data } = await http.post<ApiResp<ValueScoreTCOResult>>('/value-score/tco/calculate', { config_types: configTypes || [] });
   return data;
 }
 
