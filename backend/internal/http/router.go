@@ -47,6 +47,7 @@ func NewRouter(h Handlers) *gin.Engine {
 		v1.GET("/cabinet-config/utilization", h.Cabinet.GetUtilization)
 		v1.PUT("/cabinet-config/utilization", h.Cabinet.UpdateUtilization)
 		v1.POST("/cabinet-config/import", h.Cabinet.Import)
+		v1.GET("/cabinet-config/template/export", h.Cabinet.ExportTemplate)
 		v1.GET("/cabinet-config", h.Cabinet.List)
 		v1.POST("/cabinet-config", h.Cabinet.Create)
 		v1.PUT("/cabinet-config/:id", h.Cabinet.Update)

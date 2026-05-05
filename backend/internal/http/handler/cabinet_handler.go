@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
 	"computility-ops/backend/internal/domain"
 	"computility-ops/backend/internal/service"
@@ -179,6 +181,29 @@ func normalizeCabinetHeaderName(raw string) string {
 	n = strings.ReplaceAll(n, "-", "")
 	n = strings.ReplaceAll(n, "_", "")
 	return n
+}
+
+func (h *CabinetHandler) ExportTemplate(c *gin.Context) {
+	c.Set("audit_action", "cabinet.config.template.export")
+	f := excelize.NewFile()
+	sheet := f.GetSheetName(0)
+	headers := []string{"机房", "额定功率(KW)", "机柜月租(CNY)"}
+	for i, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		_ = f.SetCellValue(sheet, cell, h)
+	}
+	_ = f.SetCellValue(sheet, "A2", "IDC-SG-01")
+	_ = f.SetCellValue(sheet, "B2", 10)
+	_ = f.SetCellValue(sheet, "C2", 3500)
+
+	filename := fmt.Sprintf("cabinet-import-template-%s.xlsx", time.Now().Format("20060102"))
+	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	if err := f.Write(c.Writer); err != nil {
+		fail(c, 50001, "导出失败")
+		return
+	}
+	c.Set("audit_result", "ok")
 }
 
 func (h *CabinetHandler) Delete(c *gin.Context) {

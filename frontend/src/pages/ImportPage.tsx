@@ -11,6 +11,7 @@ import {
   importHostPackages,
   importServers,
   importCabinetConfigs,
+  exportCabinetTemplate,
   listCabinetConfigs,
   listHostPackages,
   listServers,
@@ -235,12 +236,17 @@ export default function ImportPage() {
                 }}>保存</Button>}>
                   <Space>
                     <Text>利用率（小数）</Text>
-                    <InputNumber min={0.0001} max={2} step={0.0001} value={cabinetUtilization} stringMode onChange={(v) => setCabinetUtilization(Number(v || 0))} style={{ width: 180 }} />
+                    <InputNumber min={0.0001} max={2} step={0.0001} value={cabinetUtilization} stringMode onChange={(v) => setCabinetUtilization(Number(v || 0))} formatter={(value) => {
+                      if (value === undefined || value === null) return '';
+                      const s = String(value);
+                      if (!s.includes('.')) return s;
+                      return s.replace(/\.?0+$/, '');
+                    }} style={{ width: 180 }} />
                     <Text type="secondary">前端展示：{(cabinetUtilization * 100).toFixed(2)}%</Text>
                   </Space>
                 </Card>
 
-                <Card title="机柜配置表" extra={<Space><Upload maxCount={1} accept=".xlsx" showUploadList={false} customRequest={async (options) => {
+                <Card title="机柜配置表" extra={<Space><Button onClick={() => exportCabinetTemplate()}>下载导入模板</Button><Upload maxCount={1} accept=".xlsx" showUploadList={false} customRequest={async (options) => {
                   const file = options.file as File;
                   try {
                     const resp = ensureApiOk(await importCabinetConfigs(file));

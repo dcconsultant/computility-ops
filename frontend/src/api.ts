@@ -73,6 +73,10 @@ export async function importCabinetConfigs(file: File) {
   return uploadImport('/cabinet-config/import', file);
 }
 
+export function exportCabinetTemplate() {
+  window.open('/api/v1/cabinet-config/template/export', '_blank');
+}
+
 export async function listCabinetConfigs() {
   const { data } = await http.get<ApiResp<ListData<CabinetConfig>>>('/cabinet-config');
   return data;
