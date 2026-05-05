@@ -19,6 +19,15 @@ func (fakeServerRepo) List(ctx context.Context) ([]domain.Server, error) {
 
 func (fakeDatasetRepo) ReplaceHostPackages(ctx context.Context, rows []domain.HostPackageConfig) error { _ = ctx; _ = rows; return nil }
 func (fakeDatasetRepo) ListHostPackages(ctx context.Context) ([]domain.HostPackageConfig, error) { _ = ctx; return nil, nil }
+func (fakeDatasetRepo) GetValueScoreCostSettings(ctx context.Context) (domain.ValueScoreCostSettings, error) {
+	_ = ctx
+	return domain.ValueScoreCostSettings{ElectricityPriceCNYPerKWh: 0, DepreciationMonths: 60, CabinetUtilization: 1}, nil
+}
+func (fakeDatasetRepo) SetValueScoreCostSettings(ctx context.Context, settings domain.ValueScoreCostSettings) error {
+	_ = ctx
+	_ = settings
+	return nil
+}
 func (fakeDatasetRepo) GetCabinetUtilization(ctx context.Context) (domain.CabinetUtilizationSetting, error) {
 	_ = ctx
 	return domain.CabinetUtilizationSetting{Utilization: 1}, nil

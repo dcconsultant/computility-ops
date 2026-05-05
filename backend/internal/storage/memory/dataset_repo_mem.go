@@ -12,6 +12,7 @@ type DatasetRepo struct {
 	mu sync.RWMutex
 
 	hostPackages        []domain.HostPackageConfig
+	valueScoreCostSettings domain.ValueScoreCostSettings
 	cabinetUtilization  domain.CabinetUtilizationSetting
 	cabinetConfigs      []domain.CabinetConfig
 	cabinetAutoID       int64
@@ -27,7 +28,10 @@ type DatasetRepo struct {
 }
 
 func NewDatasetRepo() *DatasetRepo {
-	return &DatasetRepo{cabinetUtilization: domain.CabinetUtilizationSetting{Utilization: 1}}
+	return &DatasetRepo{
+		valueScoreCostSettings: domain.ValueScoreCostSettings{ElectricityPriceCNYPerKWh: 0, DepreciationMonths: 60, CabinetUtilization: 1},
+		cabinetUtilization:  domain.CabinetUtilizationSetting{Utilization: 1},
+	}
 }
 
 func (r *DatasetRepo) ReplaceHostPackages(_ context.Context, rows []domain.HostPackageConfig) error {
@@ -40,6 +44,24 @@ func (r *DatasetRepo) ListHostPackages(_ context.Context) ([]domain.HostPackageC
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return append([]domain.HostPackageConfig(nil), r.hostPackages...), nil
+}
+
+func (r *DatasetRepo) GetValueScoreCostSettings(_ context.Context) (domain.ValueScoreCostSettings, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	v := r.valueScoreCostSettings
+	if v.CabinetUtilization <= 0 {
+		v.CabinetUtilization = r.cabinetUtilization.Utilization
+	}
+	return v, nil
+}
+
+func (r *DatasetRepo) SetValueScoreCostSettings(_ context.Context, settings domain.ValueScoreCostSettings) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.valueScoreCostSettings = settings
+	r.cabinetUtilization = domain.CabinetUtilizationSetting{Utilization: settings.CabinetUtilization}
+	return nil
 }
 
 func (r *DatasetRepo) GetCabinetUtilization(_ context.Context) (domain.CabinetUtilizationSetting, error) {

@@ -20,6 +20,40 @@ func NewDatasetRepo(dsn string) *DatasetRepo {
 	return &DatasetRepo{db: db}
 }
 
+func (r *DatasetRepo) GetValueScoreCostSettings(ctx context.Context) (domain.ValueScoreCostSettings, error) {
+	row := r.db.QueryRowContext(ctx, `
+		SELECT electricity_price_cny_per_kwh, depreciation_months, cabinet_utilization
+		FROM ops_value_score_cost_settings
+		WHERE id=1
+	`)
+	var v domain.ValueScoreCostSettings
+	if err := row.Scan(&v.ElectricityPriceCNYPerKWh, &v.DepreciationMonths, &v.CabinetUtilization); err != nil {
+		if err == sql.ErrNoRows {
+			return domain.ValueScoreCostSettings{ElectricityPriceCNYPerKWh: 0, DepreciationMonths: 60, CabinetUtilization: 1}, nil
+		}
+		return domain.ValueScoreCostSettings{}, err
+	}
+	if v.CabinetUtilization <= 0 {
+		v.CabinetUtilization = 1
+	}
+	if v.DepreciationMonths <= 0 {
+		v.DepreciationMonths = 60
+	}
+	return v, nil
+}
+
+func (r *DatasetRepo) SetValueScoreCostSettings(ctx context.Context, settings domain.ValueScoreCostSettings) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO ops_value_score_cost_settings (id, electricity_price_cny_per_kwh, depreciation_months, cabinet_utilization)
+		VALUES (1, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE
+			electricity_price_cny_per_kwh=VALUES(electricity_price_cny_per_kwh),
+			depreciation_months=VALUES(depreciation_months),
+			cabinet_utilization=VALUES(cabinet_utilization)
+	`, settings.ElectricityPriceCNYPerKWh, settings.DepreciationMonths, settings.CabinetUtilization)
+	return err
+}
+
 func (r *DatasetRepo) ReplaceHostPackages(ctx context.Context, rows []domain.HostPackageConfig) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {

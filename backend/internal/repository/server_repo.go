@@ -16,6 +16,9 @@ type DatasetRepo interface {
 	ReplaceHostPackages(ctx context.Context, rows []domain.HostPackageConfig) error
 	ListHostPackages(ctx context.Context) ([]domain.HostPackageConfig, error)
 
+	GetValueScoreCostSettings(ctx context.Context) (domain.ValueScoreCostSettings, error)
+	SetValueScoreCostSettings(ctx context.Context, settings domain.ValueScoreCostSettings) error
+
 	GetCabinetUtilization(ctx context.Context) (domain.CabinetUtilizationSetting, error)
 	SetCabinetUtilization(ctx context.Context, setting domain.CabinetUtilizationSetting) error
 	CreateCabinetConfig(ctx context.Context, row domain.CabinetConfig) (domain.CabinetConfig, error)
