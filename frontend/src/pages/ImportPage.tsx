@@ -243,7 +243,7 @@ export default function ImportPage() {
                   { title: '架构标准化系数', dataIndex: 'arch_standardized_factor', render: (v: number) => formatFloat(v) }
                 ]} />
               </Space>,
-              '服务器管理表通过配置类型关联此表；需维护服务器价值分（PSA非数字时基准）、服务器平均原值（用于3.1.2折旧计算）、GPU卡数（GPU汇总统计依赖），以及功率/发布年份/内存容量用于后续评估。',
+              '服务器管理表通过配置类型关联此表；需维护服务器价值分（PSA非数字时基准）、GPU卡数（GPU汇总统计依赖），以及功率/发布年份/内存容量用于后续评估。',
               <Space>
                 <Button onClick={exportHostPackageTemplate}>下载导入模板</Button>
                 <Upload {...makeUploadProps('packages')}><Button icon={<UploadOutlined />} loading={uploading === 'packages'}>上传并导入</Button></Upload>

@@ -89,9 +89,9 @@ func (r *DatasetRepo) ReplaceHostPackages(ctx context.Context, rows []domain.Hos
 			config_type, scene_category, cpu_logical_cores, gpu_card_count,
 			data_disk_type, data_disk_count, storage_capacity_tb,
 			power_watts, release_year, memory_capacity_gb,
-			server_value_score, server_avg_original_value_cny, monthly_depreciation_cny, network_cabinet_share_cny, other_fixed_cost_cny,
+			server_value_score, monthly_depreciation_cny, network_cabinet_share_cny, other_fixed_cost_cny,
 			arch_standardized_factor
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -110,7 +110,6 @@ func (r *DatasetRepo) ReplaceHostPackages(ctx context.Context, rows []domain.Hos
 			x.ReleaseYear,
 			x.MemoryCapacityGB,
 			x.ServerValueScore,
-			x.ServerAvgOriginalValueCNY,
 			x.MonthlyDepreciationCNY,
 			x.NetworkCabinetShareCNY,
 			x.OtherFixedCostCNY,
@@ -128,7 +127,6 @@ func (r *DatasetRepo) ListHostPackages(ctx context.Context) ([]domain.HostPackag
 			COALESCE(data_disk_type,''), data_disk_count, storage_capacity_tb,
 			power_watts, release_year, memory_capacity_gb,
 			server_value_score,
-			COALESCE(server_avg_original_value_cny,0),
 			COALESCE(monthly_depreciation_cny,0), COALESCE(network_cabinet_share_cny,0), COALESCE(other_fixed_cost_cny,0),
 			arch_standardized_factor
 		FROM ops_host_packages
@@ -153,7 +151,6 @@ func (r *DatasetRepo) ListHostPackages(ctx context.Context) ([]domain.HostPackag
 			&x.ReleaseYear,
 			&x.MemoryCapacityGB,
 			&x.ServerValueScore,
-			&x.ServerAvgOriginalValueCNY,
 			&x.MonthlyDepreciationCNY,
 			&x.NetworkCabinetShareCNY,
 			&x.OtherFixedCostCNY,

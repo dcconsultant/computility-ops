@@ -25,7 +25,6 @@ type HostPackageConfig struct {
 	ReleaseYear            int     `json:"release_year,omitempty"`
 	MemoryCapacityGB       float64 `json:"memory_capacity_gb,omitempty"`
 	ServerValueScore            float64 `json:"server_value_score,omitempty"`
-	ServerAvgOriginalValueCNY   float64 `json:"server_avg_original_value_cny,omitempty"`
 	MonthlyDepreciationCNY      float64 `json:"monthly_depreciation_cny,omitempty"`
 	NetworkCabinetShareCNY      float64 `json:"network_cabinet_share_cny,omitempty"`
 	OtherFixedCostCNY           float64 `json:"other_fixed_cost_cny,omitempty"`
