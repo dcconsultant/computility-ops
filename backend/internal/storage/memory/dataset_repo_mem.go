@@ -14,6 +14,7 @@ type DatasetRepo struct {
 	hostPackages       []domain.HostPackageConfig
 	cabinetUtilization domain.CabinetUtilizationSetting
 	valueScoreCostParams domain.ValueScoreCostParams
+	valueScoreOriginalValues []domain.ValueScoreOriginalValue
 	cabinetConfigs      []domain.CabinetConfig
 	cabinetAutoID       int64
 	specialRules        []domain.SpecialRule
@@ -30,7 +31,7 @@ type DatasetRepo struct {
 func NewDatasetRepo() *DatasetRepo {
 	return &DatasetRepo{
 		cabinetUtilization:  domain.CabinetUtilizationSetting{Utilization: 1},
-		valueScoreCostParams: domain.ValueScoreCostParams{DepreciationMonths: 60, ServerAvgOriginalValueCNY: 0, NetworkDeviceShareCNY: 0, ServerRenewalFeeCNY: 0},
+		valueScoreCostParams: domain.ValueScoreCostParams{DepreciationMonths: 60, NetworkDeviceShareCNY: 0, ServerRenewalFeeCNY: 0},
 	}
 }
 
@@ -97,9 +98,6 @@ func (r *DatasetRepo) GetValueScoreCostParams(_ context.Context) (domain.ValueSc
 	if out.DepreciationMonths <= 0 {
 		out.DepreciationMonths = 60
 	}
-	if out.ServerAvgOriginalValueCNY < 0 {
-		out.ServerAvgOriginalValueCNY = 0
-	}
 	if out.NetworkDeviceShareCNY < 0 {
 		out.NetworkDeviceShareCNY = 0
 	}
@@ -115,9 +113,6 @@ func (r *DatasetRepo) SetValueScoreCostParams(_ context.Context, params domain.V
 	if params.DepreciationMonths <= 0 {
 		params.DepreciationMonths = 60
 	}
-	if params.ServerAvgOriginalValueCNY < 0 {
-		params.ServerAvgOriginalValueCNY = 0
-	}
 	if params.NetworkDeviceShareCNY < 0 {
 		params.NetworkDeviceShareCNY = 0
 	}
@@ -126,6 +121,19 @@ func (r *DatasetRepo) SetValueScoreCostParams(_ context.Context, params domain.V
 	}
 	r.valueScoreCostParams = params
 	return nil
+}
+
+func (r *DatasetRepo) ReplaceValueScoreOriginalValues(_ context.Context, rows []domain.ValueScoreOriginalValue) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.valueScoreOriginalValues = append([]domain.ValueScoreOriginalValue(nil), rows...)
+	return nil
+}
+
+func (r *DatasetRepo) ListValueScoreOriginalValues(_ context.Context) ([]domain.ValueScoreOriginalValue, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return append([]domain.ValueScoreOriginalValue(nil), r.valueScoreOriginalValues...), nil
 }
 
 func (r *DatasetRepo) CreateCabinetConfig(_ context.Context, row domain.CabinetConfig) (domain.CabinetConfig, error) {

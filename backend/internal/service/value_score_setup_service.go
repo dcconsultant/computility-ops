@@ -69,9 +69,6 @@ func (s *ValueScoreSetupService) GetCostParams(ctx context.Context) (domain.Valu
 	if params.DepreciationMonths <= 0 {
 		params.DepreciationMonths = 60
 	}
-	if params.ServerAvgOriginalValueCNY < 0 {
-		params.ServerAvgOriginalValueCNY = 0
-	}
 	if params.NetworkDeviceShareCNY < 0 {
 		params.NetworkDeviceShareCNY = 0
 	}
@@ -84,9 +81,6 @@ func (s *ValueScoreSetupService) GetCostParams(ctx context.Context) (domain.Valu
 func (s *ValueScoreSetupService) UpdateCostParams(ctx context.Context, params domain.ValueScoreCostParams) (domain.ValueScoreCostParams, error) {
 	// 020301口径：折旧月数固定60，不允许编辑
 	params.DepreciationMonths = 60
-	if params.ServerAvgOriginalValueCNY < 0 {
-		return domain.ValueScoreCostParams{}, fmt.Errorf("服务器平均原值(CNY) 必须大于等于0")
-	}
 	if params.NetworkDeviceShareCNY < 0 {
 		return domain.ValueScoreCostParams{}, fmt.Errorf("网络设备分摊成本(CNY) 必须大于等于0")
 	}
@@ -97,6 +91,23 @@ func (s *ValueScoreSetupService) UpdateCostParams(ctx context.Context, params do
 		return domain.ValueScoreCostParams{}, err
 	}
 	return params, nil
+}
+
+func (s *ValueScoreSetupService) ReplaceOriginalValues(ctx context.Context, rows []domain.ValueScoreOriginalValue) error {
+	for i := range rows {
+		rows[i].ConfigType = strings.TrimSpace(rows[i].ConfigType)
+		if rows[i].ConfigType == "" {
+			return fmt.Errorf("第%d行配置类型不能为空", i+1)
+		}
+		if rows[i].ServerOriginalCNY < 0 {
+			return fmt.Errorf("第%d行原值(CNY) 必须大于等于0", i+1)
+		}
+	}
+	return s.repo.ReplaceValueScoreOriginalValues(ctx, rows)
+}
+
+func (s *ValueScoreSetupService) ListOriginalValues(ctx context.Context) ([]domain.ValueScoreOriginalValue, error) {
+	return s.repo.ListValueScoreOriginalValues(ctx)
 }
 
 func (s *ValueScoreSetupService) CalculateMonthlyTCO(ctx context.Context, req domain.ValueScoreTCOCalculateRequest) (domain.ValueScoreTCOCalculateResult, error) {
@@ -111,6 +122,22 @@ func (s *ValueScoreSetupService) CalculateMonthlyTCO(ctx context.Context, req do
 	pkgs, err := s.repo.ListHostPackages(ctx)
 	if err != nil {
 		return domain.ValueScoreTCOCalculateResult{}, err
+	}
+	originalRows, err := s.repo.ListValueScoreOriginalValues(ctx)
+	if err != nil {
+		return domain.ValueScoreTCOCalculateResult{}, err
+	}
+	originalByConfig := map[string]float64{}
+	for _, r := range originalRows {
+		k := strings.TrimSpace(r.ConfigType)
+		if k == "" {
+			continue
+		}
+		if r.ServerOriginalCNY < 0 {
+			originalByConfig[k] = 0
+			continue
+		}
+		originalByConfig[k] = r.ServerOriginalCNY
 	}
 
 	filter := make(map[string]struct{})
@@ -135,6 +162,7 @@ func (s *ValueScoreSetupService) CalculateMonthlyTCO(ctx context.Context, req do
 			cabCost = baseline.MonthlyRentCNY * powerKW / (baseline.MinRatedPowerKW * baseline.CabinetUtilization)
 		}
 		cabCost = round4(cabCost)
+		original := round4(originalByConfig[p.ConfigType])
 		depreciation := 0.0
 		if params.DepreciationMonths > 0 {
 			age := 0
@@ -144,7 +172,7 @@ func (s *ValueScoreSetupService) CalculateMonthlyTCO(ctx context.Context, req do
 			if age >= 5 {
 				depreciation = 0
 			} else {
-				depreciation = params.ServerAvgOriginalValueCNY * 0.95 / float64(params.DepreciationMonths)
+				depreciation = original * 0.95 / float64(params.DepreciationMonths)
 			}
 		}
 		depreciation = round4(depreciation)
@@ -154,12 +182,12 @@ func (s *ValueScoreSetupService) CalculateMonthlyTCO(ctx context.Context, req do
 		otherFixed := round4(networkDevice + serverRenewal)
 		totalTCO := round4(cabCost + depreciation + networkDevice + networkCabinetShare + serverRenewal)
 		item := domain.ValueScoreTCOItem{
-			ConfigType:               p.ConfigType,
-			PowerWatts:               round4(powerW),
-			PowerKW:                  powerKW,
-			CabinetCostMonthly:       cabCost,
-			ServerAvgOriginalValueCNY: round4(params.ServerAvgOriginalValueCNY),
-			DepreciationMonthly:      depreciation,
+			ConfigType:          p.ConfigType,
+			PowerWatts:          round4(powerW),
+			PowerKW:             powerKW,
+			CabinetCostMonthly:  cabCost,
+			ServerOriginalCNY:   original,
+			DepreciationMonthly: depreciation,
 			NetworkDeviceMonthly:  networkDevice,
 			NetworkCabinetMonthly: networkCabinetShare,
 			ServerRenewalMonthly:  serverRenewal,

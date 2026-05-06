@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Alert, Button, Card, Input, InputNumber, Modal, Popconfirm, message, Space, Table, Tabs, Typography, Upload } from 'antd';
+import { Alert, Button, Card, Col, Input, InputNumber, Modal, Popconfirm, Row, message, Space, Table, Tabs, Typography, Upload } from 'antd';
 import type { UploadProps } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import {
@@ -9,6 +9,7 @@ import {
   exportServerPackageAnomalies,
   exportHostPackageTemplate,
   exportValueScoreCostParamsTemplate,
+  exportValueScoreOriginalValueTemplate,
   getCabinetUtilization,
   getValueScoreCabinetBaseline,
   getValueScoreCostParams,
@@ -19,6 +20,7 @@ import {
   importServers,
   importCabinetConfigs,
   importValueScoreCostParams,
+  importValueScoreOriginalValues,
   exportCabinetTemplate,
   listCabinetConfigs,
   listHostPackages,
@@ -63,7 +65,7 @@ export default function ImportPage() {
   const [editingCabinet, setEditingCabinet] = useState<CabinetConfig | null>(null);
   const [cabinetForm, setCabinetForm] = useState({ idc: '', rated_power_kw: 0, monthly_rent: 0 });
   const [cabinetBaseline, setCabinetBaseline] = useState<ValueScoreCabinetBaseline | null>(null);
-  const [costParams, setCostParams] = useState<ValueScoreCostParams>({ depreciation_months: 60, server_avg_original_value_cny: 0, network_device_share_cny: 0, server_renewal_fee_cny: 0 });
+  const [costParams, setCostParams] = useState<ValueScoreCostParams>({ depreciation_months: 60, network_device_share_cny: 0, server_renewal_fee_cny: 0 });
   const [tcoResult, setTcoResult] = useState<ValueScoreTCOResult | null>(null);
   const [tcoLoading, setTcoLoading] = useState(false);
 
@@ -340,74 +342,92 @@ export default function ImportPage() {
             key: 'value_score_setup',
             label: '价值评分配置底座',
             children: (
-              <Space direction="vertical" size="middle" style={{ width: '100%', maxWidth: 960 }}>
-                <Card
-                  title="价值评分参数基线（只读）"
-                  extra={<Button onClick={reloadAll}>刷新</Button>}
-                >
-                  {cabinetBaseline ? (
-                    <Space direction="vertical" style={{ width: '100%', maxWidth: 680 }} size="small">
-                      <Text>目标机房：{cabinetBaseline.idc}</Text>
-                      <Text>机柜利用率（来自机柜配置管理）：{formatFloat(cabinetBaseline.cabinet_utilization)}</Text>
-                      <Text>最低额定功率(KW)：{formatFloat(cabinetBaseline.min_rated_power_kw)}</Text>
-                      <Text>对应机柜月租(CNY)：{formatFloat(cabinetBaseline.monthly_rent_cny)}</Text>
-                      <Text>折旧月数：固定 {costParams.depreciation_months}</Text>
-                      <Text>网络设备分摊成本(CNY/月)：{formatFloat(costParams.network_device_share_cny)}</Text>
-                      <Text>服务器续保费(CNY/月)：{formatFloat(costParams.server_renewal_fee_cny)}</Text>
-                      <Text>月TCO口径：机柜费 + 折旧 + 网络设备分摊成本 + 网络机柜等分摊 + 服务器续保费</Text>
-                      <Text>机柜成本公式：{cabinetBaseline.formula}</Text>
-                      <Text type="secondary">样本机柜数：{cabinetBaseline.source_count}</Text>
-                      {cabinetBaseline.note ? <Text type={cabinetBaseline.status === 'warning' ? 'danger' : 'secondary'}>{cabinetBaseline.note}</Text> : null}
-                    </Space>
-                  ) : (
-                    <Text type="secondary">暂无基线数据</Text>
-                  )}
-                </Card>
+              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                <Row gutter={[16, 16]}>
+                  <Col xs={24} lg={12}>
+                    <Card
+                      title="价值评分参数基线（只读）"
+                      extra={<Button onClick={reloadAll}>刷新</Button>}
+                    >
+                      {cabinetBaseline ? (
+                        <Space direction="vertical" style={{ width: '100%' }} size="small">
+                          <Text>目标机房：{cabinetBaseline.idc}</Text>
+                          <Text>机柜利用率（来自机柜配置管理）：{formatFloat(cabinetBaseline.cabinet_utilization)}</Text>
+                          <Text>最低额定功率(KW)：{formatFloat(cabinetBaseline.min_rated_power_kw)}</Text>
+                          <Text>对应机柜月租(CNY)：{formatFloat(cabinetBaseline.monthly_rent_cny)}</Text>
+                          <Text>折旧月数：固定 {costParams.depreciation_months}</Text>
+                          <Text>网络设备分摊成本(CNY/月)：{formatFloat(costParams.network_device_share_cny)}</Text>
+                          <Text>服务器续保费(CNY/月)：{formatFloat(costParams.server_renewal_fee_cny)}</Text>
+                          <Text>月TCO口径：机柜费 + 折旧 + 网络设备分摊成本 + 网络机柜等分摊 + 服务器续保费</Text>
+                          <Text>机柜成本公式：{cabinetBaseline.formula}</Text>
+                          <Text type="secondary">样本机柜数：{cabinetBaseline.source_count}</Text>
+                          {cabinetBaseline.note ? <Text type={cabinetBaseline.status === 'warning' ? 'danger' : 'secondary'}>{cabinetBaseline.note}</Text> : null}
+                        </Space>
+                      ) : (
+                        <Text type="secondary">暂无基线数据</Text>
+                      )}
+                    </Card>
+                  </Col>
 
-                <Card title="3.1.1 成本参数配置" extra={<Space><Button onClick={exportValueScoreCostParamsTemplate}>下载导入模板</Button><Upload maxCount={1} accept=".xlsx" showUploadList={false} customRequest={async (options) => {
+                  <Col xs={24} lg={12}>
+                    <Card title="3.1.1 成本参数配置" extra={<Space><Button onClick={exportValueScoreCostParamsTemplate}>下载导入模板</Button><Upload maxCount={1} accept=".xlsx" showUploadList={false} customRequest={async (options) => {
+                      const file = options.file as File;
+                      try {
+                        const resp = ensureApiOk(await importValueScoreCostParams(file));
+                        setCostParams(resp.data);
+                        const tco = ensureApiOk(await calculateValueScoreTCO());
+                        setTcoResult(tco.data);
+                        message.success('成本参数导入成功并刷新月TCO');
+                        options.onSuccess?.({}, new XMLHttpRequest());
+                      } catch (e) {
+                        message.error(parseApiError(e, '导入失败'));
+                        options.onError?.(new Error('import failed'));
+                      }
+                    }}><Button icon={<UploadOutlined />}>导入Excel</Button></Upload><Button onClick={async () => {
+                      try {
+                        const saved = ensureApiOk(await updateValueScoreCostParams(costParams));
+                        setCostParams(saved.data);
+                        const tco = ensureApiOk(await calculateValueScoreTCO());
+                        setTcoResult(tco.data);
+                        message.success('成本参数已保存并刷新月TCO');
+                      } catch (e) {
+                        message.error(parseApiError(e, '保存失败'));
+                      }
+                    }}>保存参数</Button></Space>}>
+                      <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                        <Space size="small" align="center">
+                          <Text style={{ width: 160 }}>折旧月数</Text>
+                          <InputNumber min={60} max={60} value={costParams.depreciation_months} disabled />
+                          <Text type="secondary">固定60，不可编辑</Text>
+                        </Space>
+                        <Space size="small" align="center">
+                          <Text style={{ width: 160 }}>网络设备分摊成本(CNY/月)</Text>
+                          <InputNumber min={0} value={costParams.network_device_share_cny} onChange={(v) => setCostParams({ ...costParams, network_device_share_cny: Number(v || 0) })} />
+                        </Space>
+                        <Space size="small" align="center">
+                          <Text style={{ width: 160 }}>服务器续保费(CNY/月)</Text>
+                          <InputNumber min={0} value={costParams.server_renewal_fee_cny} onChange={(v) => setCostParams({ ...costParams, server_renewal_fee_cny: Number(v || 0) })} />
+                        </Space>
+                        <Text type="secondary">当前口径：机柜费 + 折旧 + 网络设备分摊成本 + 网络机柜等分摊 + 服务器续保费</Text>
+                      </Space>
+                    </Card>
+                  </Col>
+                </Row>
+
+                <Card title="3.1.2 原值导入（按配置类型）" extra={<Space><Button onClick={exportValueScoreOriginalValueTemplate}>下载导入模板</Button><Upload maxCount={1} accept=".xlsx" showUploadList={false} customRequest={async (options) => {
                   const file = options.file as File;
                   try {
-                    const resp = ensureApiOk(await importValueScoreCostParams(file));
-                    setCostParams(resp.data);
+                    ensureApiOk(await importValueScoreOriginalValues(file));
                     const tco = ensureApiOk(await calculateValueScoreTCO());
                     setTcoResult(tco.data);
-                    message.success('成本参数导入成功并刷新月TCO');
+                    message.success('原值导入成功并刷新月TCO');
                     options.onSuccess?.({}, new XMLHttpRequest());
                   } catch (e) {
                     message.error(parseApiError(e, '导入失败'));
                     options.onError?.(new Error('import failed'));
                   }
-                }}><Button icon={<UploadOutlined />}>导入Excel</Button></Upload><Button onClick={async () => {
-                  try {
-                    const saved = ensureApiOk(await updateValueScoreCostParams(costParams));
-                    setCostParams(saved.data);
-                    const tco = ensureApiOk(await calculateValueScoreTCO());
-                    setTcoResult(tco.data);
-                    message.success('成本参数已保存并刷新月TCO');
-                  } catch (e) {
-                    message.error(parseApiError(e, '保存失败'));
-                  }
-                }}>保存参数</Button></Space>}>
-                  <Space direction="vertical" size="small" style={{ width: '100%', maxWidth: 560 }}>
-                    <Space size="small" align="center">
-                      <Text style={{ width: 160 }}>折旧月数</Text>
-                      <InputNumber min={60} max={60} value={costParams.depreciation_months} disabled />
-                      <Text type="secondary">固定60，不可编辑</Text>
-                    </Space>
-                    <Space size="small" align="center">
-                      <Text style={{ width: 160 }}>服务器平均原值(CNY)</Text>
-                      <InputNumber min={0} value={costParams.server_avg_original_value_cny} onChange={(v) => setCostParams({ ...costParams, server_avg_original_value_cny: Number(v || 0) })} />
-                    </Space>
-                    <Space size="small" align="center">
-                      <Text style={{ width: 160 }}>网络设备分摊成本(CNY/月)</Text>
-                      <InputNumber min={0} value={costParams.network_device_share_cny} onChange={(v) => setCostParams({ ...costParams, network_device_share_cny: Number(v || 0) })} />
-                    </Space>
-                    <Space size="small" align="center">
-                      <Text style={{ width: 160 }}>服务器续保费(CNY/月)</Text>
-                      <InputNumber min={0} value={costParams.server_renewal_fee_cny} onChange={(v) => setCostParams({ ...costParams, server_renewal_fee_cny: Number(v || 0) })} />
-                    </Space>
-                    <Text type="secondary">当前口径：机柜费 + 折旧 + 网络设备分摊成本 + 网络机柜等分摊 + 服务器续保费</Text>
-                  </Space>
+                }}><Button icon={<UploadOutlined />}>导入Excel</Button></Upload></Space>}>
+                  <Text type="secondary">模板仅包含“配置类型、原值(CNY)”两列；用于按套餐维护原值。</Text>
                 </Card>
 
                 <Card title="服务器月TCO试算" extra={<Space><Button onClick={exportValueScoreTCO}>导出Excel</Button><Button loading={tcoLoading} onClick={async () => {
@@ -427,7 +447,7 @@ export default function ImportPage() {
                     { title: '功率(W)', dataIndex: 'power_watts', render: (v: number) => formatFloat(v) },
                     { title: '功率(KW)', dataIndex: 'power_kw', render: (v: number) => formatFloat(v) },
                     { title: '机柜费/月', dataIndex: 'cabinet_cost_monthly', render: (v: number) => formatFloat(v) },
-                    { title: '服务器平均原值(CNY)', dataIndex: 'server_avg_original_value_cny', render: (v: number) => formatFloat(v) },
+                    { title: '原值(CNY)', dataIndex: 'server_original_cny', render: (v: number) => formatFloat(v) },
                     { title: '折旧/月', dataIndex: 'depreciation_monthly', render: (v: number) => formatFloat(v) },
                     { title: '网络设备分摊/月', dataIndex: 'network_device_monthly', render: (v: number) => formatFloat(v) },
                     { title: '网络机柜等分摊/月', dataIndex: 'network_cabinet_monthly', render: (v: number) => formatFloat(v) },

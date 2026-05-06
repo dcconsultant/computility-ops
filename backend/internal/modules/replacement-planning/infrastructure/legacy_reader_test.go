@@ -41,6 +41,15 @@ func (fakeDatasetRepo) SetValueScoreCostParams(ctx context.Context, params domai
 	_ = params
 	return nil
 }
+func (fakeDatasetRepo) ReplaceValueScoreOriginalValues(ctx context.Context, rows []domain.ValueScoreOriginalValue) error {
+	_ = ctx
+	_ = rows
+	return nil
+}
+func (fakeDatasetRepo) ListValueScoreOriginalValues(ctx context.Context) ([]domain.ValueScoreOriginalValue, error) {
+	_ = ctx
+	return nil, nil
+}
 func (fakeDatasetRepo) CreateCabinetConfig(ctx context.Context, row domain.CabinetConfig) (domain.CabinetConfig, error) {
 	_ = ctx
 	return row, nil

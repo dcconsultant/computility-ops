@@ -8,6 +8,7 @@ import type {
   CabinetUtilizationSetting,
   ValueScoreCabinetBaseline,
   ValueScoreCostParams,
+  ValueScoreOriginalValue,
   ValueScoreTCOResult,
   ModelFailureRate,
   FaultAnalysisResult,
@@ -134,6 +135,24 @@ export async function importValueScoreCostParams(file: File) {
   const { data } = await http.post<ApiResp<ValueScoreCostParams>>('/value-score/cost-params/import', form, {
     headers: { 'Content-Type': 'multipart/form-data' }
   });
+  return data;
+}
+
+export function exportValueScoreOriginalValueTemplate() {
+  window.open('/api/v1/value-score/original-values/template/export', '_blank');
+}
+
+export async function importValueScoreOriginalValues(file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await http.post<ApiResp<{ imported: number }>>('/value-score/original-values/import', form, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
+  return data;
+}
+
+export async function listValueScoreOriginalValues() {
+  const { data } = await http.get<ApiResp<{ list: ValueScoreOriginalValue[] }>>('/value-score/original-values');
   return data;
 }
 
