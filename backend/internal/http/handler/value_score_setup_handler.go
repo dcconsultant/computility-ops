@@ -3,6 +3,9 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
 	"computility-ops/backend/internal/domain"
 	"computility-ops/backend/internal/service"
@@ -68,6 +71,115 @@ func (h *ValueScoreSetupHandler) CalculateMonthlyTCO(c *gin.Context) {
 	ok(c, v)
 }
 
+func (h *ValueScoreSetupHandler) ImportCostParams(c *gin.Context) {
+	c.Set("audit_action", "value_score.cost_params.import")
+	file, _, err := c.Request.FormFile("file")
+	if err != nil {
+		fail(c, 40001, "请上传文件")
+		return
+	}
+	defer file.Close()
+	xf, err := excelize.OpenReader(file)
+	if err != nil {
+		fail(c, 40003, "文件格式无效，请确认是标准 .xlsx")
+		return
+	}
+	defer func() { _ = xf.Close() }()
+	sheets := xf.GetSheetList()
+	if len(sheets) == 0 {
+		fail(c, 40003, "Excel 中没有可用工作表")
+		return
+	}
+	rows, err := xf.GetRows(sheets[0])
+	if err != nil || len(rows) < 2 {
+		fail(c, 40003, "模板至少需要表头+一行数据")
+		return
+	}
+	headers := rows[0]
+	values := rows[1]
+	get := func(name string) string {
+		for i, h := range headers {
+			if strings.EqualFold(strings.TrimSpace(h), name) {
+				if i < len(values) {
+					return strings.TrimSpace(values[i])
+				}
+				return ""
+			}
+		}
+		return ""
+	}
+	dep := 60
+	if s := get("折旧月数"); s != "" {
+		v, e := strconv.Atoi(s)
+		if e != nil {
+			fail(c, 40004, "折旧月数必须是整数")
+			return
+		}
+		dep = v
+	}
+	avg := 0.0
+	if s := get("服务器平均原值(CNY)"); s != "" {
+		v, e := strconv.ParseFloat(s, 64)
+		if e != nil {
+			fail(c, 40004, "服务器平均原值(CNY) 必须是数字")
+			return
+		}
+		avg = v
+	}
+	network := 0.0
+	if s := get("网络设备分摊成本(CNY/月)"); s != "" {
+		v, e := strconv.ParseFloat(s, 64)
+		if e != nil {
+			fail(c, 40004, "网络设备分摊成本(CNY/月) 必须是数字")
+			return
+		}
+		network = v
+	}
+	renewal := 0.0
+	if s := get("服务器续保费(CNY/月)"); s != "" {
+		v, e := strconv.ParseFloat(s, 64)
+		if e != nil {
+			fail(c, 40004, "服务器续保费(CNY/月) 必须是数字")
+			return
+		}
+		renewal = v
+	}
+	out, err := h.svc.UpdateCostParams(c.Request.Context(), domain.ValueScoreCostParams{
+		DepreciationMonths:       dep,
+		ServerAvgOriginalValueCNY: avg,
+		NetworkDeviceShareCNY:    network,
+		ServerRenewalFeeCNY:      renewal,
+	})
+	if err != nil {
+		fail(c, 40004, err.Error())
+		return
+	}
+	ok(c, out)
+}
+
+func (h *ValueScoreSetupHandler) ExportCostParamsTemplate(c *gin.Context) {
+	c.Set("audit_action", "value_score.cost_params.template.export")
+	xf := excelize.NewFile()
+	sheet := xf.GetSheetName(0)
+	headers := []string{"折旧月数", "服务器平均原值(CNY)", "网络设备分摊成本(CNY/月)", "服务器续保费(CNY/月)"}
+	for i, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		_ = xf.SetCellValue(sheet, cell, h)
+	}
+	_ = xf.SetCellValue(sheet, "A2", 60)
+	_ = xf.SetCellValue(sheet, "B2", 0)
+	_ = xf.SetCellValue(sheet, "C2", 0)
+	_ = xf.SetCellValue(sheet, "D2", 0)
+	buf, err := xf.WriteToBuffer()
+	if err != nil {
+		fail(c, 50001, "导出失败")
+		return
+	}
+	filename := fmt.Sprintf("value-score-cost-params-template-%s.xlsx", time.Now().Format("20060102"))
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buf.Bytes())
+}
+
 func (h *ValueScoreSetupHandler) ExportMonthlyTCO(c *gin.Context) {
 	c.Set("audit_action", "value_score.tco.export")
 	res, err := h.svc.CalculateMonthlyTCO(c.Request.Context(), domain.ValueScoreTCOCalculateRequest{})
@@ -92,7 +204,7 @@ func (h *ValueScoreSetupHandler) ExportMonthlyTCO(c *gin.Context) {
 	_ = xf.SetCellValue(sheet, "A6", "公式")
 	_ = xf.SetCellValue(sheet, "B6", res.Formula)
 
-	headers := []string{"配置类型", "功率(W)", "功率(KW)", "机柜费/月", "折旧/月", "网络设备分摊/月", "网络机柜等分摊/月", "服务器续保费/月", "其他固定成本/月", "月TCO"}
+	headers := []string{"配置类型", "功率(W)", "功率(KW)", "机柜费/月", "服务器平均原值(CNY)", "折旧/月", "网络设备分摊/月", "网络机柜等分摊/月", "服务器续保费/月", "其他固定成本/月", "月TCO"}
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 8)
 		_ = xf.SetCellValue(sheet, cell, h)
@@ -103,12 +215,13 @@ func (h *ValueScoreSetupHandler) ExportMonthlyTCO(c *gin.Context) {
 		_ = xf.SetCellValue(sheet, fmt.Sprintf("B%d", row), item.PowerWatts)
 		_ = xf.SetCellValue(sheet, fmt.Sprintf("C%d", row), item.PowerKW)
 		_ = xf.SetCellValue(sheet, fmt.Sprintf("D%d", row), item.CabinetCostMonthly)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("E%d", row), item.DepreciationMonthly)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("F%d", row), item.NetworkDeviceMonthly)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("G%d", row), item.NetworkCabinetMonthly)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("H%d", row), item.ServerRenewalMonthly)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("I%d", row), item.OtherFixedCostMonthly)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("J%d", row), item.TotalTCOMonthly)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("E%d", row), item.ServerAvgOriginalValueCNY)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("F%d", row), item.DepreciationMonthly)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("G%d", row), item.NetworkDeviceMonthly)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("H%d", row), item.NetworkCabinetMonthly)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("I%d", row), item.ServerRenewalMonthly)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("J%d", row), item.OtherFixedCostMonthly)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("K%d", row), item.TotalTCOMonthly)
 	}
 
 	if res.Note != "" {

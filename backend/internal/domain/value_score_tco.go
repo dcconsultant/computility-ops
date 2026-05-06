@@ -9,6 +9,7 @@ type ValueScoreTCOItem struct {
 	PowerWatts             float64 `json:"power_watts"`
 	PowerKW                float64 `json:"power_kw"`
 	CabinetCostMonthly     float64 `json:"cabinet_cost_monthly"`
+	ServerAvgOriginalValueCNY float64 `json:"server_avg_original_value_cny"`
 	DepreciationMonthly    float64 `json:"depreciation_monthly"`
 	NetworkDeviceMonthly   float64 `json:"network_device_monthly"`
 	NetworkCabinetMonthly  float64 `json:"network_cabinet_monthly"`

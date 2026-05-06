@@ -124,6 +124,19 @@ export async function calculateValueScoreTCO(configTypes?: string[]) {
   return data;
 }
 
+export function exportValueScoreCostParamsTemplate() {
+  window.open('/api/v1/value-score/cost-params/template/export', '_blank');
+}
+
+export async function importValueScoreCostParams(file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await http.post<ApiResp<ValueScoreCostParams>>('/value-score/cost-params/import', form, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
+  return data;
+}
+
 export function exportValueScoreTCO() {
   window.open('/api/v1/value-score/tco/export', '_blank');
 }

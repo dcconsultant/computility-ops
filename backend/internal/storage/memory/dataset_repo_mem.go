@@ -30,7 +30,7 @@ type DatasetRepo struct {
 func NewDatasetRepo() *DatasetRepo {
 	return &DatasetRepo{
 		cabinetUtilization:  domain.CabinetUtilizationSetting{Utilization: 1},
-		valueScoreCostParams: domain.ValueScoreCostParams{DepreciationMonths: 60, NetworkDeviceShareCNY: 0, ServerRenewalFeeCNY: 0},
+		valueScoreCostParams: domain.ValueScoreCostParams{DepreciationMonths: 60, ServerAvgOriginalValueCNY: 0, NetworkDeviceShareCNY: 0, ServerRenewalFeeCNY: 0},
 	}
 }
 
@@ -97,6 +97,9 @@ func (r *DatasetRepo) GetValueScoreCostParams(_ context.Context) (domain.ValueSc
 	if out.DepreciationMonths <= 0 {
 		out.DepreciationMonths = 60
 	}
+	if out.ServerAvgOriginalValueCNY < 0 {
+		out.ServerAvgOriginalValueCNY = 0
+	}
 	if out.NetworkDeviceShareCNY < 0 {
 		out.NetworkDeviceShareCNY = 0
 	}
@@ -111,6 +114,9 @@ func (r *DatasetRepo) SetValueScoreCostParams(_ context.Context, params domain.V
 	defer r.mu.Unlock()
 	if params.DepreciationMonths <= 0 {
 		params.DepreciationMonths = 60
+	}
+	if params.ServerAvgOriginalValueCNY < 0 {
+		params.ServerAvgOriginalValueCNY = 0
 	}
 	if params.NetworkDeviceShareCNY < 0 {
 		params.NetworkDeviceShareCNY = 0

@@ -8,6 +8,7 @@ import {
   deleteCabinetConfig,
   exportServerPackageAnomalies,
   exportHostPackageTemplate,
+  exportValueScoreCostParamsTemplate,
   getCabinetUtilization,
   getValueScoreCabinetBaseline,
   getValueScoreCostParams,
@@ -17,6 +18,7 @@ import {
   importHostPackages,
   importServers,
   importCabinetConfigs,
+  importValueScoreCostParams,
   exportCabinetTemplate,
   listCabinetConfigs,
   listHostPackages,
@@ -61,7 +63,7 @@ export default function ImportPage() {
   const [editingCabinet, setEditingCabinet] = useState<CabinetConfig | null>(null);
   const [cabinetForm, setCabinetForm] = useState({ idc: '', rated_power_kw: 0, monthly_rent: 0 });
   const [cabinetBaseline, setCabinetBaseline] = useState<ValueScoreCabinetBaseline | null>(null);
-  const [costParams, setCostParams] = useState<ValueScoreCostParams>({ depreciation_months: 60, network_device_share_cny: 0, server_renewal_fee_cny: 0 });
+  const [costParams, setCostParams] = useState<ValueScoreCostParams>({ depreciation_months: 60, server_avg_original_value_cny: 0, network_device_share_cny: 0, server_renewal_fee_cny: 0 });
   const [tcoResult, setTcoResult] = useState<ValueScoreTCOResult | null>(null);
   const [tcoLoading, setTcoLoading] = useState(false);
 
@@ -129,7 +131,6 @@ export default function ImportPage() {
       x.release_year,
       x.memory_capacity_gb,
       x.server_value_score,
-      x.server_avg_original_value_cny,
       x.arch_standardized_factor
     ].some((v) => String(v ?? '').toLowerCase().includes(q)));
   }, [packages, packageKeyword]);
@@ -239,7 +240,6 @@ export default function ImportPage() {
                   { title: '发布年份', dataIndex: 'release_year', render: (v: number) => formatInt(v) },
                   { title: '内存容量(GB)', dataIndex: 'memory_capacity_gb', render: (v: number) => formatFloat(v) },
                   { title: '服务器价值分', dataIndex: 'server_value_score', render: (v: number) => formatFloat(v) },
-                  { title: '服务器平均原值(CNY)', dataIndex: 'server_avg_original_value_cny', render: (v: number) => formatFloat(v) },
                   { title: '架构标准化系数', dataIndex: 'arch_standardized_factor', render: (v: number) => formatFloat(v) }
                 ]} />
               </Space>,
@@ -364,7 +364,20 @@ export default function ImportPage() {
                   )}
                 </Card>
 
-                <Card title="3.1.1 成本参数配置" extra={<Button onClick={async () => {
+                <Card title="3.1.1 成本参数配置" extra={<Space><Button onClick={exportValueScoreCostParamsTemplate}>下载导入模板</Button><Upload maxCount={1} accept=".xlsx" showUploadList={false} customRequest={async (options) => {
+                  const file = options.file as File;
+                  try {
+                    const resp = ensureApiOk(await importValueScoreCostParams(file));
+                    setCostParams(resp.data);
+                    const tco = ensureApiOk(await calculateValueScoreTCO());
+                    setTcoResult(tco.data);
+                    message.success('成本参数导入成功并刷新月TCO');
+                    options.onSuccess?.({}, new XMLHttpRequest());
+                  } catch (e) {
+                    message.error(parseApiError(e, '导入失败'));
+                    options.onError?.(new Error('import failed'));
+                  }
+                }}><Button icon={<UploadOutlined />}>导入Excel</Button></Upload><Button onClick={async () => {
                   try {
                     const saved = ensureApiOk(await updateValueScoreCostParams(costParams));
                     setCostParams(saved.data);
@@ -374,12 +387,16 @@ export default function ImportPage() {
                   } catch (e) {
                     message.error(parseApiError(e, '保存失败'));
                   }
-                }}>保存参数</Button>}>
+                }}>保存参数</Button></Space>}>
                   <Space direction="vertical" size="small" style={{ width: '100%', maxWidth: 560 }}>
                     <Space size="small" align="center">
                       <Text style={{ width: 160 }}>折旧月数</Text>
                       <InputNumber min={60} max={60} value={costParams.depreciation_months} disabled />
                       <Text type="secondary">固定60，不可编辑</Text>
+                    </Space>
+                    <Space size="small" align="center">
+                      <Text style={{ width: 160 }}>服务器平均原值(CNY)</Text>
+                      <InputNumber min={0} value={costParams.server_avg_original_value_cny} onChange={(v) => setCostParams({ ...costParams, server_avg_original_value_cny: Number(v || 0) })} />
                     </Space>
                     <Space size="small" align="center">
                       <Text style={{ width: 160 }}>网络设备分摊成本(CNY/月)</Text>
@@ -410,6 +427,7 @@ export default function ImportPage() {
                     { title: '功率(W)', dataIndex: 'power_watts', render: (v: number) => formatFloat(v) },
                     { title: '功率(KW)', dataIndex: 'power_kw', render: (v: number) => formatFloat(v) },
                     { title: '机柜费/月', dataIndex: 'cabinet_cost_monthly', render: (v: number) => formatFloat(v) },
+                    { title: '服务器平均原值(CNY)', dataIndex: 'server_avg_original_value_cny', render: (v: number) => formatFloat(v) },
                     { title: '折旧/月', dataIndex: 'depreciation_monthly', render: (v: number) => formatFloat(v) },
                     { title: '网络设备分摊/月', dataIndex: 'network_device_monthly', render: (v: number) => formatFloat(v) },
                     { title: '网络机柜等分摊/月', dataIndex: 'network_cabinet_monthly', render: (v: number) => formatFloat(v) },
