@@ -97,6 +97,43 @@ func (r *DatasetRepo) ListCabinetConfigs(ctx context.Context) ([]domain.CabinetC
 	return out, rows.Err()
 }
 
+func (r *DatasetRepo) GetValueScoreCostParams(ctx context.Context) (domain.ValueScoreCostParams, error) {
+	var out domain.ValueScoreCostParams
+	err := r.db.QueryRowContext(ctx, `
+		SELECT depreciation_months, network_cabinet_share_cny, other_fixed_cost_cny
+		FROM ops_value_score_cost_params
+		WHERE id=1
+	`).Scan(&out.DepreciationMonths, &out.NetworkCabinetShareCNY, &out.OtherFixedCostCNY)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return domain.ValueScoreCostParams{DepreciationMonths: 60}, nil
+		}
+		return domain.ValueScoreCostParams{}, err
+	}
+	if out.DepreciationMonths <= 0 {
+		out.DepreciationMonths = 60
+	}
+	if out.NetworkCabinetShareCNY < 0 {
+		out.NetworkCabinetShareCNY = 0
+	}
+	if out.OtherFixedCostCNY < 0 {
+		out.OtherFixedCostCNY = 0
+	}
+	return out, nil
+}
+
+func (r *DatasetRepo) SetValueScoreCostParams(ctx context.Context, params domain.ValueScoreCostParams) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO ops_value_score_cost_params (id, depreciation_months, network_cabinet_share_cny, other_fixed_cost_cny)
+		VALUES (1, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE
+			depreciation_months = VALUES(depreciation_months),
+			network_cabinet_share_cny = VALUES(network_cabinet_share_cny),
+			other_fixed_cost_cny = VALUES(other_fixed_cost_cny)
+	`, params.DepreciationMonths, params.NetworkCabinetShareCNY, params.OtherFixedCostCNY)
+	return err
+}
+
 func isDuplicateErr(err error) bool {
 	if err == nil {
 		return false

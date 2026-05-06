@@ -9,6 +9,8 @@ import {
   exportServerPackageAnomalies,
   getCabinetUtilization,
   getValueScoreCabinetBaseline,
+  getValueScoreCostParams,
+  updateValueScoreCostParams,
   calculateValueScoreTCO,
   exportValueScoreTCO,
   importHostPackages,
@@ -28,6 +30,7 @@ import type {
   ImportResult,
   ServerItem,
   ValueScoreCabinetBaseline,
+  ValueScoreCostParams,
   ValueScoreTCOResult
 } from '../types';
 
@@ -57,23 +60,26 @@ export default function ImportPage() {
   const [editingCabinet, setEditingCabinet] = useState<CabinetConfig | null>(null);
   const [cabinetForm, setCabinetForm] = useState({ idc: '', rated_power_kw: 0, monthly_rent: 0 });
   const [cabinetBaseline, setCabinetBaseline] = useState<ValueScoreCabinetBaseline | null>(null);
+  const [costParams, setCostParams] = useState<ValueScoreCostParams>({ depreciation_months: 60, network_cabinet_share_cny: 0, other_fixed_cost_cny: 0 });
   const [tcoResult, setTcoResult] = useState<ValueScoreTCOResult | null>(null);
   const [tcoLoading, setTcoLoading] = useState(false);
 
   async function reloadAll() {
     try {
-      const [s1, s2, s3, s4, s5] = await Promise.all([
+      const [s1, s2, s3, s4, s5, s6] = await Promise.all([
         listServers(),
         listHostPackages(),
         getCabinetUtilization(),
         listCabinetConfigs(),
-        getValueScoreCabinetBaseline()
+        getValueScoreCabinetBaseline(),
+        getValueScoreCostParams()
       ]);
       setServers(ensureApiOk(s1).data.list);
       setPackages(ensureApiOk(s2).data.list);
       setCabinetUtilization(ensureApiOk(s3).data.utilization || 1);
       setCabinetRows(ensureApiOk(s4).data.list || []);
       setCabinetBaseline(ensureApiOk(s5).data);
+      setCostParams(ensureApiOk(s6).data);
       try {
         const tco = ensureApiOk(await calculateValueScoreTCO());
         setTcoResult(tco.data);
@@ -338,7 +344,9 @@ export default function ImportPage() {
                       <Text>机柜利用率（来自机柜配置管理）：{formatFloat(cabinetBaseline.cabinet_utilization)}</Text>
                       <Text>最低额定功率(KW)：{formatFloat(cabinetBaseline.min_rated_power_kw)}</Text>
                       <Text>对应机柜月租(CNY)：{formatFloat(cabinetBaseline.monthly_rent_cny)}</Text>
-                      <Text>折旧月数：固定 60（5*12）</Text>
+                      <Text>折旧月数：{costParams.depreciation_months}</Text>
+                      <Text>网络机柜分摊(CNY/月)：{formatFloat(costParams.network_cabinet_share_cny)}</Text>
+                      <Text>其他固定成本(CNY/月)：{formatFloat(costParams.other_fixed_cost_cny)}</Text>
                       <Text>月TCO口径：机柜费 + 折旧 + 网络机柜等分摊 + 其他固定成本</Text>
                       <Text>机柜成本公式：{cabinetBaseline.formula}</Text>
                       <Text type="secondary">样本机柜数：{cabinetBaseline.source_count}</Text>
@@ -347,6 +355,34 @@ export default function ImportPage() {
                   ) : (
                     <Text type="secondary">暂无基线数据</Text>
                   )}
+                </Card>
+
+                <Card title="3.1.1 成本参数配置" extra={<Button onClick={async () => {
+                  try {
+                    const saved = ensureApiOk(await updateValueScoreCostParams(costParams));
+                    setCostParams(saved.data);
+                    const tco = ensureApiOk(await calculateValueScoreTCO());
+                    setTcoResult(tco.data);
+                    message.success('成本参数已保存并刷新月TCO');
+                  } catch (e) {
+                    message.error(parseApiError(e, '保存失败'));
+                  }
+                }}>保存参数</Button>}>
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    <Space>
+                      <Text style={{ width: 180 }}>折旧月数</Text>
+                      <InputNumber min={1} max={240} value={costParams.depreciation_months} onChange={(v) => setCostParams({ ...costParams, depreciation_months: Number(v || 60) })} />
+                    </Space>
+                    <Space>
+                      <Text style={{ width: 180 }}>网络机柜分摊(CNY/月)</Text>
+                      <InputNumber min={0} value={costParams.network_cabinet_share_cny} onChange={(v) => setCostParams({ ...costParams, network_cabinet_share_cny: Number(v || 0) })} />
+                    </Space>
+                    <Space>
+                      <Text style={{ width: 180 }}>其他固定成本(CNY/月)</Text>
+                      <InputNumber min={0} value={costParams.other_fixed_cost_cny} onChange={(v) => setCostParams({ ...costParams, other_fixed_cost_cny: Number(v || 0) })} />
+                    </Space>
+                    <Text type="secondary">当前口径：机柜费 + 折旧 + 网络机柜等分摊 + 其他固定成本</Text>
+                  </Space>
                 </Card>
 
                 <Card title="服务器月TCO试算" extra={<Space><Button onClick={exportValueScoreTCO}>导出Excel</Button><Button loading={tcoLoading} onClick={async () => {

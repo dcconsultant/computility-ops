@@ -7,6 +7,7 @@ import type {
   CabinetConfig,
   CabinetUtilizationSetting,
   ValueScoreCabinetBaseline,
+  ValueScoreCostParams,
   ValueScoreTCOResult,
   ModelFailureRate,
   FaultAnalysisResult,
@@ -101,6 +102,16 @@ export async function deleteCabinetConfig(id: number) {
 
 export async function getValueScoreCabinetBaseline() {
   const { data } = await http.get<ApiResp<ValueScoreCabinetBaseline>>('/value-score/cabinet-baseline');
+  return data;
+}
+
+export async function getValueScoreCostParams() {
+  const { data } = await http.get<ApiResp<ValueScoreCostParams>>('/value-score/cost-params');
+  return data;
+}
+
+export async function updateValueScoreCostParams(payload: ValueScoreCostParams) {
+  const { data } = await http.put<ApiResp<ValueScoreCostParams>>('/value-score/cost-params', payload);
   return data;
 }
 

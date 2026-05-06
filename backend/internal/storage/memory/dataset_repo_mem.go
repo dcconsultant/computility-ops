@@ -13,6 +13,7 @@ type DatasetRepo struct {
 
 	hostPackages       []domain.HostPackageConfig
 	cabinetUtilization domain.CabinetUtilizationSetting
+	valueScoreCostParams domain.ValueScoreCostParams
 	cabinetConfigs      []domain.CabinetConfig
 	cabinetAutoID       int64
 	specialRules        []domain.SpecialRule
@@ -28,7 +29,8 @@ type DatasetRepo struct {
 
 func NewDatasetRepo() *DatasetRepo {
 	return &DatasetRepo{
-		cabinetUtilization: domain.CabinetUtilizationSetting{Utilization: 1},
+		cabinetUtilization:  domain.CabinetUtilizationSetting{Utilization: 1},
+		valueScoreCostParams: domain.ValueScoreCostParams{DepreciationMonths: 60},
 	}
 }
 
@@ -85,6 +87,38 @@ func (r *DatasetRepo) SetCabinetUtilization(_ context.Context, setting domain.Ca
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.cabinetUtilization = setting
+	return nil
+}
+
+func (r *DatasetRepo) GetValueScoreCostParams(_ context.Context) (domain.ValueScoreCostParams, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := r.valueScoreCostParams
+	if out.DepreciationMonths <= 0 {
+		out.DepreciationMonths = 60
+	}
+	if out.NetworkCabinetShareCNY < 0 {
+		out.NetworkCabinetShareCNY = 0
+	}
+	if out.OtherFixedCostCNY < 0 {
+		out.OtherFixedCostCNY = 0
+	}
+	return out, nil
+}
+
+func (r *DatasetRepo) SetValueScoreCostParams(_ context.Context, params domain.ValueScoreCostParams) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if params.DepreciationMonths <= 0 {
+		params.DepreciationMonths = 60
+	}
+	if params.NetworkCabinetShareCNY < 0 {
+		params.NetworkCabinetShareCNY = 0
+	}
+	if params.OtherFixedCostCNY < 0 {
+		params.OtherFixedCostCNY = 0
+	}
+	r.valueScoreCostParams = params
 	return nil
 }
 

@@ -32,6 +32,15 @@ func (fakeDatasetRepo) SetCabinetUtilization(ctx context.Context, setting domain
 	_ = setting
 	return nil
 }
+func (fakeDatasetRepo) GetValueScoreCostParams(ctx context.Context) (domain.ValueScoreCostParams, error) {
+	_ = ctx
+	return domain.ValueScoreCostParams{DepreciationMonths: 60, NetworkCabinetShareCNY: 0, OtherFixedCostCNY: 0}, nil
+}
+func (fakeDatasetRepo) SetValueScoreCostParams(ctx context.Context, params domain.ValueScoreCostParams) error {
+	_ = ctx
+	_ = params
+	return nil
+}
 func (fakeDatasetRepo) CreateCabinetConfig(ctx context.Context, row domain.CabinetConfig) (domain.CabinetConfig, error) {
 	_ = ctx
 	return row, nil

@@ -75,6 +75,12 @@ export interface ValueScoreCabinetBaseline {
   note?: string;
 }
 
+export interface ValueScoreCostParams {
+  depreciation_months: number;
+  network_cabinet_share_cny: number;
+  other_fixed_cost_cny: number;
+}
+
 export interface ValueScoreTCOItem {
   config_type: string;
   power_watts: number;

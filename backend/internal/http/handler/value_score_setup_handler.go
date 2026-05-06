@@ -28,6 +28,31 @@ func (h *ValueScoreSetupHandler) GetCabinetBaseline(c *gin.Context) {
 	ok(c, v)
 }
 
+func (h *ValueScoreSetupHandler) GetCostParams(c *gin.Context) {
+	c.Set("audit_action", "value_score.cost_params.get")
+	v, err := h.svc.GetCostParams(c.Request.Context())
+	if err != nil {
+		fail(c, 50001, "查询失败")
+		return
+	}
+	ok(c, v)
+}
+
+func (h *ValueScoreSetupHandler) UpdateCostParams(c *gin.Context) {
+	c.Set("audit_action", "value_score.cost_params.update")
+	var req domain.ValueScoreCostParams
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, 40001, "请求参数无效")
+		return
+	}
+	v, err := h.svc.UpdateCostParams(c.Request.Context(), req)
+	if err != nil {
+		fail(c, 40004, err.Error())
+		return
+	}
+	ok(c, v)
+}
+
 func (h *ValueScoreSetupHandler) CalculateMonthlyTCO(c *gin.Context) {
 	c.Set("audit_action", "value_score.tco.calculate")
 	var req domain.ValueScoreTCOCalculateRequest

@@ -60,8 +60,45 @@ func (s *ValueScoreSetupService) GetCabinetBaseline(ctx context.Context) (domain
 	}, nil
 }
 
+func (s *ValueScoreSetupService) GetCostParams(ctx context.Context) (domain.ValueScoreCostParams, error) {
+	params, err := s.repo.GetValueScoreCostParams(ctx)
+	if err != nil {
+		return domain.ValueScoreCostParams{}, err
+	}
+	if params.DepreciationMonths <= 0 {
+		params.DepreciationMonths = 60
+	}
+	if params.NetworkCabinetShareCNY < 0 {
+		params.NetworkCabinetShareCNY = 0
+	}
+	if params.OtherFixedCostCNY < 0 {
+		params.OtherFixedCostCNY = 0
+	}
+	return params, nil
+}
+
+func (s *ValueScoreSetupService) UpdateCostParams(ctx context.Context, params domain.ValueScoreCostParams) (domain.ValueScoreCostParams, error) {
+	if params.DepreciationMonths <= 0 {
+		return domain.ValueScoreCostParams{}, fmt.Errorf("折旧月数必须大于0")
+	}
+	if params.NetworkCabinetShareCNY < 0 {
+		return domain.ValueScoreCostParams{}, fmt.Errorf("网络机柜分摊(CNY) 必须大于等于0")
+	}
+	if params.OtherFixedCostCNY < 0 {
+		return domain.ValueScoreCostParams{}, fmt.Errorf("其他固定成本(CNY) 必须大于等于0")
+	}
+	if err := s.repo.SetValueScoreCostParams(ctx, params); err != nil {
+		return domain.ValueScoreCostParams{}, err
+	}
+	return params, nil
+}
+
 func (s *ValueScoreSetupService) CalculateMonthlyTCO(ctx context.Context, req domain.ValueScoreTCOCalculateRequest) (domain.ValueScoreTCOCalculateResult, error) {
 	baseline, err := s.GetCabinetBaseline(ctx)
+	if err != nil {
+		return domain.ValueScoreTCOCalculateResult{}, err
+	}
+	params, err := s.GetCostParams(ctx)
 	if err != nil {
 		return domain.ValueScoreTCOCalculateResult{}, err
 	}
@@ -93,8 +130,8 @@ func (s *ValueScoreSetupService) CalculateMonthlyTCO(ctx context.Context, req do
 		}
 		cabCost = round4(cabCost)
 		depreciation := round4(p.MonthlyDepreciationCNY)
-		networkShare := round4(p.NetworkCabinetShareCNY)
-		otherFixed := round4(p.OtherFixedCostCNY)
+		networkShare := round4(params.NetworkCabinetShareCNY)
+		otherFixed := round4(params.OtherFixedCostCNY)
 		totalTCO := round4(cabCost + depreciation + networkShare + otherFixed)
 		item := domain.ValueScoreTCOItem{
 			ConfigType:            p.ConfigType,
@@ -117,10 +154,10 @@ func (s *ValueScoreSetupService) CalculateMonthlyTCO(ctx context.Context, req do
 		CabinetUtilization: baseline.CabinetUtilization,
 		MinRatedPowerKW:    baseline.MinRatedPowerKW,
 		MonthlyRentCNY:     baseline.MonthlyRentCNY,
-		DepreciationMonths: 60,
+		DepreciationMonths: params.DepreciationMonths,
 		Formula:            baseline.Formula,
 		Items:              items,
-		Note:               "月TCO口径：机柜费 + 折旧 + 网络机柜等分摊 + 其他固定成本；折旧月数固定60（5*12）",
+		Note:               fmt.Sprintf("月TCO口径：机柜费 + 折旧 + 网络机柜等分摊 + 其他固定成本；折旧月数=%d", params.DepreciationMonths),
 	}
 	if baseline.Status != "ok" && baseline.Note != "" {
 		res.Note = baseline.Note

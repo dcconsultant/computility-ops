@@ -10,3 +10,9 @@ type ValueScoreCabinetBaseline struct {
 	SourceCount        int     `json:"source_count"`
 	Note               string  `json:"note,omitempty"`
 }
+
+type ValueScoreCostParams struct {
+	DepreciationMonths      int     `json:"depreciation_months"`
+	NetworkCabinetShareCNY  float64 `json:"network_cabinet_share_cny"`
+	OtherFixedCostCNY       float64 `json:"other_fixed_cost_cny"`
+}
