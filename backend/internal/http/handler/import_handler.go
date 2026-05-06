@@ -160,7 +160,7 @@ func (h *ImportHandler) ImportHostPackages(c *gin.Context) {
 		return
 	}
 	headers = service.MapHeaders(headers, serviceHostPackageHeaderMap())
-	if err := service.ValidateRequiredHeaders(headers, "config_type", "cpu_logical_cores", "arch_standardized_factor", "data_disk_count", "server_value_score", "monthly_depreciation_cny", "network_cabinet_share_cny", "other_fixed_cost_cny"); err != nil {
+	if err := service.ValidateRequiredHeaders(headers, "config_type", "cpu_logical_cores", "arch_standardized_factor", "data_disk_count", "server_value_score", "server_avg_original_value_cny", "monthly_depreciation_cny", "network_cabinet_share_cny", "other_fixed_cost_cny"); err != nil {
 		fail(c, 40004, err.Error())
 		return
 	}
@@ -180,6 +180,29 @@ func (h *ImportHandler) ListHostPackages(c *gin.Context) {
 		return
 	}
 	ok(c, gin.H{"list": rows, "total": len(rows), "page": 1, "page_size": len(rows)})
+}
+
+func (h *ImportHandler) ExportHostPackagesTemplate(c *gin.Context) {
+	c.Set("audit_action", "host_packages.template.export")
+	xf := excelize.NewFile()
+	sheet := xf.GetSheetName(0)
+	headers := []string{
+		"配置类型", "场景大类", "CPU逻辑核数", "GPU卡数", "数据盘类型", "数据盘数量", "存储容量(TB)",
+		"功率(W)", "发布年份", "内存容量(GB)", "服务器价值分", "服务器平均原值(CNY)", "月折旧(CNY)",
+		"网络机柜分摊(CNY)", "其他固定成本(CNY)", "架构标准化系数",
+	}
+	for i, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		_ = xf.SetCellValue(sheet, cell, h)
+	}
+	buf, err := xf.WriteToBuffer()
+	if err != nil {
+		fail(c, 50001, "导出失败")
+		return
+	}
+	filename := fmt.Sprintf("host-package-template-%s.xlsx", time.Now().Format("20060102"))
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buf.Bytes())
 }
 
 func (h *ImportHandler) ImportSpecialRules(c *gin.Context) {
@@ -653,7 +676,7 @@ func serviceServerHeaderMap() map[string]string {
 	return map[string]string{"sn": "sn", "序列号": "sn", "制造商": "manufacturer", "厂商": "manufacturer", "manufacturer": "manufacturer", "型号": "model", "服务器型号": "model", "model": "model", "详细配置": "detailed_config", "详细配置信息": "detailed_config", "detailedconfig": "detailed_config", "psa": "psa", "机房": "idc", "idc": "idc", "环境": "environment", "env": "environment", "environment": "environment", "配置类型": "config_type", "套餐": "config_type", "configtype": "config_type", "保修结束日期": "warranty_end_date", "保修截止日期": "warranty_end_date", "warrantyenddate": "warranty_end_date", "投产日期": "launch_date", "launchdate": "launch_date"}
 }
 func serviceHostPackageHeaderMap() map[string]string {
-	return map[string]string{"配置类型": "config_type", "套餐": "config_type", "configtype": "config_type", "场景大类": "scene_category", "scenecategory": "scene_category", "cpu逻辑核数": "cpu_logical_cores", "cpulogicalcores": "cpu_logical_cores", "gpu卡数": "gpu_card_count", "卡数": "gpu_card_count", "gpu_card_count": "gpu_card_count", "gpucardcount": "gpu_card_count", "数据盘类型": "data_disk_type", "数据盘种类": "data_disk_type", "datadisktype": "data_disk_type", "磁盘类型": "data_disk_type", "disktype": "data_disk_type", "数据盘数量": "data_disk_count", "datadiskcount": "data_disk_count", "存储容量(tb)": "storage_capacity_tb", "存储容量": "storage_capacity_tb", "storagecapacitytb": "storage_capacity_tb", "功率": "power_watts", "功率(w)": "power_watts", "功率（w）": "power_watts", "power": "power_watts", "powerw": "power_watts", "发布年份": "release_year", "年份": "release_year", "releaseyear": "release_year", "内存容量(gb)": "memory_capacity_gb", "内存容量（gb）": "memory_capacity_gb", "内存容量": "memory_capacity_gb", "memorycapacitygb": "memory_capacity_gb", "内存gb": "memory_capacity_gb", "服务器价值分": "server_value_score", "价值分": "server_value_score", "servervaluescore": "server_value_score", "月折旧(cny)": "monthly_depreciation_cny", "月折旧（cny）": "monthly_depreciation_cny", "月折旧": "monthly_depreciation_cny", "monthlydepreciationcny": "monthly_depreciation_cny", "网络机柜分摊(cny)": "network_cabinet_share_cny", "网络机柜分摊（cny）": "network_cabinet_share_cny", "网络机柜分摊": "network_cabinet_share_cny", "networkcabinetsharecny": "network_cabinet_share_cny", "其他固定成本(cny)": "other_fixed_cost_cny", "其他固定成本（cny）": "other_fixed_cost_cny", "其他固定成本": "other_fixed_cost_cny", "otherfixedcostcny": "other_fixed_cost_cny", "架构标准化系数": "arch_standardized_factor", "archstandardizedfactor": "arch_standardized_factor"}
+	return map[string]string{"配置类型": "config_type", "套餐": "config_type", "configtype": "config_type", "场景大类": "scene_category", "scenecategory": "scene_category", "cpu逻辑核数": "cpu_logical_cores", "cpulogicalcores": "cpu_logical_cores", "gpu卡数": "gpu_card_count", "卡数": "gpu_card_count", "gpu_card_count": "gpu_card_count", "gpucardcount": "gpu_card_count", "数据盘类型": "data_disk_type", "数据盘种类": "data_disk_type", "datadisktype": "data_disk_type", "磁盘类型": "data_disk_type", "disktype": "data_disk_type", "数据盘数量": "data_disk_count", "datadiskcount": "data_disk_count", "存储容量(tb)": "storage_capacity_tb", "存储容量": "storage_capacity_tb", "storagecapacitytb": "storage_capacity_tb", "功率": "power_watts", "功率(w)": "power_watts", "功率（w）": "power_watts", "power": "power_watts", "powerw": "power_watts", "发布年份": "release_year", "年份": "release_year", "releaseyear": "release_year", "内存容量(gb)": "memory_capacity_gb", "内存容量（gb）": "memory_capacity_gb", "内存容量": "memory_capacity_gb", "memorycapacitygb": "memory_capacity_gb", "内存gb": "memory_capacity_gb", "服务器价值分": "server_value_score", "价值分": "server_value_score", "servervaluescore": "server_value_score", "服务器平均原值(cny)": "server_avg_original_value_cny", "服务器平均原值（cny）": "server_avg_original_value_cny", "服务器平均原值": "server_avg_original_value_cny", "serveravgoriginalvaluecny": "server_avg_original_value_cny", "月折旧(cny)": "monthly_depreciation_cny", "月折旧（cny）": "monthly_depreciation_cny", "月折旧": "monthly_depreciation_cny", "monthlydepreciationcny": "monthly_depreciation_cny", "网络机柜分摊(cny)": "network_cabinet_share_cny", "网络机柜分摊（cny）": "network_cabinet_share_cny", "网络机柜分摊": "network_cabinet_share_cny", "networkcabinetsharecny": "network_cabinet_share_cny", "其他固定成本(cny)": "other_fixed_cost_cny", "其他固定成本（cny）": "other_fixed_cost_cny", "其他固定成本": "other_fixed_cost_cny", "otherfixedcostcny": "other_fixed_cost_cny", "架构标准化系数": "arch_standardized_factor", "archstandardizedfactor": "arch_standardized_factor"}
 }
 func serviceSpecialHeaderMap() map[string]string {
 	return map[string]string{"sn": "sn", "序列号": "sn", "制造商": "manufacturer", "厂商": "manufacturer", "manufacturer": "manufacturer", "型号": "model", "model": "model", "psa": "psa", "机房": "idc", "idc": "idc", "套餐": "package_type", "配置类型": "package_type", "保修结束日期": "warranty_end_date", "投产日期": "launch_date", "策略": "policy", "策略（加白/加黑）": "policy", "策略(加白/加黑)": "policy", "标签": "policy", "黑白": "policy", "原因": "reason", "原因（可选）": "reason", "原因(可选)": "reason", "备注": "reason", "reason": "reason"}

@@ -44,6 +44,7 @@ func NewRouter(h Handlers) *gin.Engine {
 
 		v1.POST("/host-packages/import", h.Import.ImportHostPackages)
 		v1.GET("/host-packages", h.Import.ListHostPackages)
+		v1.GET("/host-packages/template/export", h.Import.ExportHostPackagesTemplate)
 
 		v1.GET("/value-score/cabinet-baseline", h.ValueScoreSetup.GetCabinetBaseline)
 		v1.GET("/value-score/cost-params", h.ValueScoreSetup.GetCostParams)

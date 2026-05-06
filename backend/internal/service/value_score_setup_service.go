@@ -69,9 +69,6 @@ func (s *ValueScoreSetupService) GetCostParams(ctx context.Context) (domain.Valu
 	if params.DepreciationMonths <= 0 {
 		params.DepreciationMonths = 60
 	}
-	if params.ServerAvgOriginalValueCNY < 0 {
-		params.ServerAvgOriginalValueCNY = 0
-	}
 	if params.NetworkDeviceShareCNY < 0 {
 		params.NetworkDeviceShareCNY = 0
 	}
@@ -84,9 +81,6 @@ func (s *ValueScoreSetupService) GetCostParams(ctx context.Context) (domain.Valu
 func (s *ValueScoreSetupService) UpdateCostParams(ctx context.Context, params domain.ValueScoreCostParams) (domain.ValueScoreCostParams, error) {
 	// 020301口径：折旧月数固定60，不允许编辑
 	params.DepreciationMonths = 60
-	if params.ServerAvgOriginalValueCNY < 0 {
-		return domain.ValueScoreCostParams{}, fmt.Errorf("服务器平均原值(CNY) 必须大于等于0")
-	}
 	if params.NetworkDeviceShareCNY < 0 {
 		return domain.ValueScoreCostParams{}, fmt.Errorf("网络设备分摊成本(CNY) 必须大于等于0")
 	}
@@ -144,7 +138,7 @@ func (s *ValueScoreSetupService) CalculateMonthlyTCO(ctx context.Context, req do
 			if age >= 5 {
 				depreciation = 0
 			} else {
-				depreciation = params.ServerAvgOriginalValueCNY * 0.95 / float64(params.DepreciationMonths)
+				depreciation = p.ServerAvgOriginalValueCNY * 0.95 / float64(params.DepreciationMonths)
 			}
 		}
 		depreciation = round4(depreciation)

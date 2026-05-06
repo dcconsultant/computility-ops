@@ -62,6 +62,10 @@ export async function listHostPackages() {
   return data;
 }
 
+export function exportHostPackageTemplate() {
+  window.open('/api/v1/host-packages/template/export', '_blank');
+}
+
 export async function getCabinetUtilization() {
   const { data } = await http.get<ApiResp<CabinetUtilizationSetting>>('/cabinet-config/utilization');
   return data;

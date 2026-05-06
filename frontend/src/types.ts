@@ -50,6 +50,7 @@ export interface HostPackageConfig {
   release_year?: number;
   memory_capacity_gb?: number;
   server_value_score?: number;
+  server_avg_original_value_cny?: number;
   arch_standardized_factor: number;
 }
 
@@ -77,7 +78,6 @@ export interface ValueScoreCabinetBaseline {
 
 export interface ValueScoreCostParams {
   depreciation_months: number;
-  server_avg_original_value_cny: number;
   network_device_share_cny: number;
   server_renewal_fee_cny: number;
 }

@@ -173,6 +173,10 @@ var hostPackageHeaderMap = map[string]string{
 	"服务器价值分":                 "server_value_score",
 	"价值分":                    "server_value_score",
 	"servervaluescore":       "server_value_score",
+	"服务器平均原值(cny)":            "server_avg_original_value_cny",
+	"服务器平均原值（cny）":           "server_avg_original_value_cny",
+	"服务器平均原值":                 "server_avg_original_value_cny",
+	"serveravgoriginalvaluecny": "server_avg_original_value_cny",
 	"月折旧(cny)":                "monthly_depreciation_cny",
 	"月折旧（cny）":               "monthly_depreciation_cny",
 	"月折旧":                     "monthly_depreciation_cny",
@@ -235,6 +239,16 @@ func validateHostPackageRow(raw map[string]string) (domain.HostPackageConfig, er
 		serverValueScore, err = strconv.ParseFloat(v, 64)
 		if err != nil {
 			return domain.HostPackageConfig{}, fmt.Errorf("服务器价值分 必须是数字")
+		}
+	}
+	serverAvgOriginalValueCNY := 0.0
+	if v := get("server_avg_original_value_cny"); v != "" {
+		serverAvgOriginalValueCNY, err = strconv.ParseFloat(v, 64)
+		if err != nil {
+			return domain.HostPackageConfig{}, fmt.Errorf("服务器平均原值(CNY) 必须是数字")
+		}
+		if serverAvgOriginalValueCNY < 0 {
+			return domain.HostPackageConfig{}, fmt.Errorf("服务器平均原值(CNY) 必须是大于等于0的数字")
 		}
 	}
 	monthlyDepreciationCNY := 0.0
@@ -330,6 +344,7 @@ func validateHostPackageRow(raw map[string]string) (domain.HostPackageConfig, er
 		ReleaseYear:            releaseYear,
 		MemoryCapacityGB:       memoryCapacityGB,
 		ServerValueScore:       serverValueScore,
+		ServerAvgOriginalValueCNY: serverAvgOriginalValueCNY,
 		MonthlyDepreciationCNY: monthlyDepreciationCNY,
 		NetworkCabinetShareCNY: networkCabinetShareCNY,
 		OtherFixedCostCNY:      otherFixedCostCNY,

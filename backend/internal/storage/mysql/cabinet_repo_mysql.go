@@ -100,10 +100,10 @@ func (r *DatasetRepo) ListCabinetConfigs(ctx context.Context) ([]domain.CabinetC
 func (r *DatasetRepo) GetValueScoreCostParams(ctx context.Context) (domain.ValueScoreCostParams, error) {
 	var out domain.ValueScoreCostParams
 	err := r.db.QueryRowContext(ctx, `
-		SELECT depreciation_months, server_avg_original_value_cny, network_device_share_cny, server_renewal_fee_cny
+		SELECT depreciation_months, network_device_share_cny, server_renewal_fee_cny
 		FROM ops_value_score_cost_params
 		WHERE id=1
-	`).Scan(&out.DepreciationMonths, &out.ServerAvgOriginalValueCNY, &out.NetworkDeviceShareCNY, &out.ServerRenewalFeeCNY)
+	`).Scan(&out.DepreciationMonths, &out.NetworkDeviceShareCNY, &out.ServerRenewalFeeCNY)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return domain.ValueScoreCostParams{DepreciationMonths: 60}, nil
@@ -112,9 +112,6 @@ func (r *DatasetRepo) GetValueScoreCostParams(ctx context.Context) (domain.Value
 	}
 	if out.DepreciationMonths <= 0 {
 		out.DepreciationMonths = 60
-	}
-	if out.ServerAvgOriginalValueCNY < 0 {
-		out.ServerAvgOriginalValueCNY = 0
 	}
 	if out.NetworkDeviceShareCNY < 0 {
 		out.NetworkDeviceShareCNY = 0
@@ -127,14 +124,13 @@ func (r *DatasetRepo) GetValueScoreCostParams(ctx context.Context) (domain.Value
 
 func (r *DatasetRepo) SetValueScoreCostParams(ctx context.Context, params domain.ValueScoreCostParams) error {
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO ops_value_score_cost_params (id, depreciation_months, server_avg_original_value_cny, network_device_share_cny, server_renewal_fee_cny)
-		VALUES (1, ?, ?, ?, ?)
+		INSERT INTO ops_value_score_cost_params (id, depreciation_months, network_device_share_cny, server_renewal_fee_cny)
+		VALUES (1, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE
 			depreciation_months = VALUES(depreciation_months),
-			server_avg_original_value_cny = VALUES(server_avg_original_value_cny),
 			network_device_share_cny = VALUES(network_device_share_cny),
 			server_renewal_fee_cny = VALUES(server_renewal_fee_cny)
-	`, params.DepreciationMonths, params.ServerAvgOriginalValueCNY, params.NetworkDeviceShareCNY, params.ServerRenewalFeeCNY)
+	`, params.DepreciationMonths, params.NetworkDeviceShareCNY, params.ServerRenewalFeeCNY)
 	return err
 }
 
