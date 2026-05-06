@@ -12,7 +12,8 @@ type ValueScoreCabinetBaseline struct {
 }
 
 type ValueScoreCostParams struct {
-	DepreciationMonths      int     `json:"depreciation_months"`
-	NetworkCabinetShareCNY  float64 `json:"network_cabinet_share_cny"`
-	OtherFixedCostCNY       float64 `json:"other_fixed_cost_cny"`
+	DepreciationMonths       int     `json:"depreciation_months"`
+	ServerAvgOriginalValueCNY float64 `json:"server_avg_original_value_cny"`
+	NetworkDeviceShareCNY    float64 `json:"network_device_share_cny"`
+	ServerRenewalFeeCNY      float64 `json:"server_renewal_fee_cny"`
 }

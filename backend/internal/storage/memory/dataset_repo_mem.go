@@ -30,7 +30,7 @@ type DatasetRepo struct {
 func NewDatasetRepo() *DatasetRepo {
 	return &DatasetRepo{
 		cabinetUtilization:  domain.CabinetUtilizationSetting{Utilization: 1},
-		valueScoreCostParams: domain.ValueScoreCostParams{DepreciationMonths: 60},
+		valueScoreCostParams: domain.ValueScoreCostParams{DepreciationMonths: 60, ServerAvgOriginalValueCNY: 0, NetworkDeviceShareCNY: 0, ServerRenewalFeeCNY: 0},
 	}
 }
 
@@ -97,11 +97,14 @@ func (r *DatasetRepo) GetValueScoreCostParams(_ context.Context) (domain.ValueSc
 	if out.DepreciationMonths <= 0 {
 		out.DepreciationMonths = 60
 	}
-	if out.NetworkCabinetShareCNY < 0 {
-		out.NetworkCabinetShareCNY = 0
+	if out.ServerAvgOriginalValueCNY < 0 {
+		out.ServerAvgOriginalValueCNY = 0
 	}
-	if out.OtherFixedCostCNY < 0 {
-		out.OtherFixedCostCNY = 0
+	if out.NetworkDeviceShareCNY < 0 {
+		out.NetworkDeviceShareCNY = 0
+	}
+	if out.ServerRenewalFeeCNY < 0 {
+		out.ServerRenewalFeeCNY = 0
 	}
 	return out, nil
 }
@@ -112,11 +115,14 @@ func (r *DatasetRepo) SetValueScoreCostParams(_ context.Context, params domain.V
 	if params.DepreciationMonths <= 0 {
 		params.DepreciationMonths = 60
 	}
-	if params.NetworkCabinetShareCNY < 0 {
-		params.NetworkCabinetShareCNY = 0
+	if params.ServerAvgOriginalValueCNY < 0 {
+		params.ServerAvgOriginalValueCNY = 0
 	}
-	if params.OtherFixedCostCNY < 0 {
-		params.OtherFixedCostCNY = 0
+	if params.NetworkDeviceShareCNY < 0 {
+		params.NetworkDeviceShareCNY = 0
+	}
+	if params.ServerRenewalFeeCNY < 0 {
+		params.ServerRenewalFeeCNY = 0
 	}
 	r.valueScoreCostParams = params
 	return nil

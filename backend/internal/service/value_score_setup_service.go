@@ -6,6 +6,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"computility-ops/backend/internal/domain"
 	"computility-ops/backend/internal/repository"
@@ -68,24 +69,29 @@ func (s *ValueScoreSetupService) GetCostParams(ctx context.Context) (domain.Valu
 	if params.DepreciationMonths <= 0 {
 		params.DepreciationMonths = 60
 	}
-	if params.NetworkCabinetShareCNY < 0 {
-		params.NetworkCabinetShareCNY = 0
+	if params.ServerAvgOriginalValueCNY < 0 {
+		params.ServerAvgOriginalValueCNY = 0
 	}
-	if params.OtherFixedCostCNY < 0 {
-		params.OtherFixedCostCNY = 0
+	if params.NetworkDeviceShareCNY < 0 {
+		params.NetworkDeviceShareCNY = 0
+	}
+	if params.ServerRenewalFeeCNY < 0 {
+		params.ServerRenewalFeeCNY = 0
 	}
 	return params, nil
 }
 
 func (s *ValueScoreSetupService) UpdateCostParams(ctx context.Context, params domain.ValueScoreCostParams) (domain.ValueScoreCostParams, error) {
-	if params.DepreciationMonths <= 0 {
-		return domain.ValueScoreCostParams{}, fmt.Errorf("折旧月数必须大于0")
+	// 020301口径：折旧月数固定60，不允许编辑
+	params.DepreciationMonths = 60
+	if params.ServerAvgOriginalValueCNY < 0 {
+		return domain.ValueScoreCostParams{}, fmt.Errorf("服务器平均原值(CNY) 必须大于等于0")
 	}
-	if params.NetworkCabinetShareCNY < 0 {
-		return domain.ValueScoreCostParams{}, fmt.Errorf("网络机柜分摊(CNY) 必须大于等于0")
+	if params.NetworkDeviceShareCNY < 0 {
+		return domain.ValueScoreCostParams{}, fmt.Errorf("网络设备分摊成本(CNY) 必须大于等于0")
 	}
-	if params.OtherFixedCostCNY < 0 {
-		return domain.ValueScoreCostParams{}, fmt.Errorf("其他固定成本(CNY) 必须大于等于0")
+	if params.ServerRenewalFeeCNY < 0 {
+		return domain.ValueScoreCostParams{}, fmt.Errorf("服务器续保费(CNY) 必须大于等于0")
 	}
 	if err := s.repo.SetValueScoreCostParams(ctx, params); err != nil {
 		return domain.ValueScoreCostParams{}, err
@@ -129,17 +135,33 @@ func (s *ValueScoreSetupService) CalculateMonthlyTCO(ctx context.Context, req do
 			cabCost = baseline.MonthlyRentCNY * powerKW / (baseline.MinRatedPowerKW * baseline.CabinetUtilization)
 		}
 		cabCost = round4(cabCost)
-		depreciation := round4(p.MonthlyDepreciationCNY)
-		networkShare := round4(params.NetworkCabinetShareCNY)
-		otherFixed := round4(params.OtherFixedCostCNY)
-		totalTCO := round4(cabCost + depreciation + networkShare + otherFixed)
+		depreciation := 0.0
+		if params.DepreciationMonths > 0 {
+			age := 0
+			if p.ReleaseYear > 0 {
+				age = getCurrentYear() - p.ReleaseYear
+			}
+			if age >= 5 {
+				depreciation = 0
+			} else {
+				depreciation = params.ServerAvgOriginalValueCNY * 0.95 / float64(params.DepreciationMonths)
+			}
+		}
+		depreciation = round4(depreciation)
+		networkCabinetShare := round4(cabCost * 0.2)
+		networkDevice := round4(params.NetworkDeviceShareCNY)
+		serverRenewal := round4(params.ServerRenewalFeeCNY)
+		otherFixed := round4(networkDevice + serverRenewal)
+		totalTCO := round4(cabCost + depreciation + networkDevice + networkCabinetShare + serverRenewal)
 		item := domain.ValueScoreTCOItem{
 			ConfigType:            p.ConfigType,
 			PowerWatts:            round4(powerW),
 			PowerKW:               powerKW,
 			CabinetCostMonthly:    cabCost,
 			DepreciationMonthly:   depreciation,
-			NetworkCabinetMonthly: networkShare,
+			NetworkDeviceMonthly:  networkDevice,
+			NetworkCabinetMonthly: networkCabinetShare,
+			ServerRenewalMonthly:  serverRenewal,
 			OtherFixedCostMonthly: otherFixed,
 			TotalTCOMonthly:       totalTCO,
 		}
@@ -157,7 +179,7 @@ func (s *ValueScoreSetupService) CalculateMonthlyTCO(ctx context.Context, req do
 		DepreciationMonths: params.DepreciationMonths,
 		Formula:            baseline.Formula,
 		Items:              items,
-		Note:               fmt.Sprintf("月TCO口径：机柜费 + 折旧 + 网络机柜等分摊 + 其他固定成本；折旧月数=%d", params.DepreciationMonths),
+		Note:               fmt.Sprintf("月TCO口径：机柜费 + 折旧 + 网络设备分摊成本 + 网络机柜等分摊 + 服务器续保费；折旧月数固定=%d", params.DepreciationMonths),
 	}
 	if baseline.Status != "ok" && baseline.Note != "" {
 		res.Note = baseline.Note
@@ -167,4 +189,8 @@ func (s *ValueScoreSetupService) CalculateMonthlyTCO(ctx context.Context, req do
 
 func round4(v float64) float64 {
 	return math.Round(v*10000) / 10000
+}
+
+func getCurrentYear() int {
+	return time.Now().Year()
 }

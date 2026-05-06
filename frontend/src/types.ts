@@ -77,8 +77,9 @@ export interface ValueScoreCabinetBaseline {
 
 export interface ValueScoreCostParams {
   depreciation_months: number;
-  network_cabinet_share_cny: number;
-  other_fixed_cost_cny: number;
+  server_avg_original_value_cny: number;
+  network_device_share_cny: number;
+  server_renewal_fee_cny: number;
 }
 
 export interface ValueScoreTCOItem {
@@ -87,7 +88,9 @@ export interface ValueScoreTCOItem {
   power_kw: number;
   cabinet_cost_monthly: number;
   depreciation_monthly: number;
+  network_device_monthly: number;
   network_cabinet_monthly: number;
+  server_renewal_monthly: number;
   other_fixed_cost_monthly: number;
   total_tco_monthly: number;
 }

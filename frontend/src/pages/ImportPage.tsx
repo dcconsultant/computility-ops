@@ -60,7 +60,7 @@ export default function ImportPage() {
   const [editingCabinet, setEditingCabinet] = useState<CabinetConfig | null>(null);
   const [cabinetForm, setCabinetForm] = useState({ idc: '', rated_power_kw: 0, monthly_rent: 0 });
   const [cabinetBaseline, setCabinetBaseline] = useState<ValueScoreCabinetBaseline | null>(null);
-  const [costParams, setCostParams] = useState<ValueScoreCostParams>({ depreciation_months: 60, network_cabinet_share_cny: 0, other_fixed_cost_cny: 0 });
+  const [costParams, setCostParams] = useState<ValueScoreCostParams>({ depreciation_months: 60, server_avg_original_value_cny: 0, network_device_share_cny: 0, server_renewal_fee_cny: 0 });
   const [tcoResult, setTcoResult] = useState<ValueScoreTCOResult | null>(null);
   const [tcoLoading, setTcoLoading] = useState(false);
 
@@ -344,9 +344,10 @@ export default function ImportPage() {
                       <Text>机柜利用率（来自机柜配置管理）：{formatFloat(cabinetBaseline.cabinet_utilization)}</Text>
                       <Text>最低额定功率(KW)：{formatFloat(cabinetBaseline.min_rated_power_kw)}</Text>
                       <Text>对应机柜月租(CNY)：{formatFloat(cabinetBaseline.monthly_rent_cny)}</Text>
-                      <Text>折旧月数：{costParams.depreciation_months}</Text>
-                      <Text>网络机柜分摊(CNY/月)：{formatFloat(costParams.network_cabinet_share_cny)}</Text>
-                      <Text>其他固定成本(CNY/月)：{formatFloat(costParams.other_fixed_cost_cny)}</Text>
+                      <Text>折旧月数：固定 {costParams.depreciation_months}</Text>
+                      <Text>服务器平均原值(CNY)：{formatFloat(costParams.server_avg_original_value_cny)}</Text>
+                      <Text>网络设备分摊成本(CNY/月)：{formatFloat(costParams.network_device_share_cny)}</Text>
+                      <Text>服务器续保费(CNY/月)：{formatFloat(costParams.server_renewal_fee_cny)}</Text>
                       <Text>月TCO口径：机柜费 + 折旧 + 网络机柜等分摊 + 其他固定成本</Text>
                       <Text>机柜成本公式：{cabinetBaseline.formula}</Text>
                       <Text type="secondary">样本机柜数：{cabinetBaseline.source_count}</Text>
@@ -371,15 +372,20 @@ export default function ImportPage() {
                   <Space direction="vertical" style={{ width: '100%' }}>
                     <Space>
                       <Text style={{ width: 180 }}>折旧月数</Text>
-                      <InputNumber min={1} max={240} value={costParams.depreciation_months} onChange={(v) => setCostParams({ ...costParams, depreciation_months: Number(v || 60) })} />
+                      <InputNumber min={60} max={60} value={costParams.depreciation_months} disabled />
+                      <Text type="secondary">固定60，不可编辑</Text>
                     </Space>
                     <Space>
-                      <Text style={{ width: 180 }}>网络机柜分摊(CNY/月)</Text>
-                      <InputNumber min={0} value={costParams.network_cabinet_share_cny} onChange={(v) => setCostParams({ ...costParams, network_cabinet_share_cny: Number(v || 0) })} />
+                      <Text style={{ width: 180 }}>服务器平均原值(CNY)</Text>
+                      <InputNumber min={0} value={costParams.server_avg_original_value_cny} onChange={(v) => setCostParams({ ...costParams, server_avg_original_value_cny: Number(v || 0) })} />
                     </Space>
                     <Space>
-                      <Text style={{ width: 180 }}>其他固定成本(CNY/月)</Text>
-                      <InputNumber min={0} value={costParams.other_fixed_cost_cny} onChange={(v) => setCostParams({ ...costParams, other_fixed_cost_cny: Number(v || 0) })} />
+                      <Text style={{ width: 180 }}>网络设备分摊成本(CNY/月)</Text>
+                      <InputNumber min={0} value={costParams.network_device_share_cny} onChange={(v) => setCostParams({ ...costParams, network_device_share_cny: Number(v || 0) })} />
+                    </Space>
+                    <Space>
+                      <Text style={{ width: 180 }}>服务器续保费(CNY/月)</Text>
+                      <InputNumber min={0} value={costParams.server_renewal_fee_cny} onChange={(v) => setCostParams({ ...costParams, server_renewal_fee_cny: Number(v || 0) })} />
                     </Space>
                     <Text type="secondary">当前口径：机柜费 + 折旧 + 网络机柜等分摊 + 其他固定成本</Text>
                   </Space>
@@ -403,7 +409,9 @@ export default function ImportPage() {
                     { title: '功率(KW)', dataIndex: 'power_kw', render: (v: number) => formatFloat(v) },
                     { title: '机柜费/月', dataIndex: 'cabinet_cost_monthly', render: (v: number) => formatFloat(v) },
                     { title: '折旧/月', dataIndex: 'depreciation_monthly', render: (v: number) => formatFloat(v) },
-                    { title: '网络机柜分摊/月', dataIndex: 'network_cabinet_monthly', render: (v: number) => formatFloat(v) },
+                    { title: '网络设备分摊/月', dataIndex: 'network_device_monthly', render: (v: number) => formatFloat(v) },
+                    { title: '网络机柜等分摊/月', dataIndex: 'network_cabinet_monthly', render: (v: number) => formatFloat(v) },
+                    { title: '服务器续保费/月', dataIndex: 'server_renewal_monthly', render: (v: number) => formatFloat(v) },
                     { title: '其他固定成本/月', dataIndex: 'other_fixed_cost_monthly', render: (v: number) => formatFloat(v) },
                     { title: '月TCO', dataIndex: 'total_tco_monthly', render: (v: number) => formatFloat(v) }
                   ]} />

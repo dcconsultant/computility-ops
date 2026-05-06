@@ -92,7 +92,7 @@ func (h *ValueScoreSetupHandler) ExportMonthlyTCO(c *gin.Context) {
 	_ = xf.SetCellValue(sheet, "A6", "公式")
 	_ = xf.SetCellValue(sheet, "B6", res.Formula)
 
-	headers := []string{"配置类型", "功率(W)", "功率(KW)", "机柜费/月", "折旧/月", "网络机柜分摊/月", "其他固定成本/月", "月TCO"}
+	headers := []string{"配置类型", "功率(W)", "功率(KW)", "机柜费/月", "折旧/月", "网络设备分摊/月", "网络机柜等分摊/月", "服务器续保费/月", "其他固定成本/月", "月TCO"}
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 8)
 		_ = xf.SetCellValue(sheet, cell, h)
@@ -104,9 +104,11 @@ func (h *ValueScoreSetupHandler) ExportMonthlyTCO(c *gin.Context) {
 		_ = xf.SetCellValue(sheet, fmt.Sprintf("C%d", row), item.PowerKW)
 		_ = xf.SetCellValue(sheet, fmt.Sprintf("D%d", row), item.CabinetCostMonthly)
 		_ = xf.SetCellValue(sheet, fmt.Sprintf("E%d", row), item.DepreciationMonthly)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("F%d", row), item.NetworkCabinetMonthly)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("G%d", row), item.OtherFixedCostMonthly)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("H%d", row), item.TotalTCOMonthly)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("F%d", row), item.NetworkDeviceMonthly)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("G%d", row), item.NetworkCabinetMonthly)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("H%d", row), item.ServerRenewalMonthly)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("I%d", row), item.OtherFixedCostMonthly)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("J%d", row), item.TotalTCOMonthly)
 	}
 
 	if res.Note != "" {
