@@ -383,7 +383,7 @@ export default function ImportPage() {
                   </Col>
 
                   <Col xs={24} lg={12}>
-                    <Card title="3.1.1 成本参数配置" extra={<Space><Button onClick={exportValueScoreCostParamsTemplate}>下载导入模板</Button><Upload maxCount={1} accept=".xlsx" showUploadList={false} customRequest={async (options) => {
+                    <Card title="3.1.1 全局参数配置" extra={<Space><Button onClick={exportValueScoreCostParamsTemplate}>下载导入模板</Button><Upload maxCount={1} accept=".xlsx" showUploadList={false} customRequest={async (options) => {
                       const file = options.file as File;
                       try {
                         const resp = ensureApiOk(await importValueScoreCostParams(file));
@@ -469,6 +469,7 @@ export default function ImportPage() {
                   <Space direction="vertical" style={{ width: '100%' }}>
                     <Text type="secondary">导入主键：配置类型；字段：不可用核数、不可用内存容量(GB)、性能跑分。</Text>
                     {performancePreview ? <Text>预检：新增 {performancePreview.new_count || 0}，更新 {performancePreview.updated_count || 0}，失败 {performancePreview.failed || 0}</Text> : null}
+                    {performancePreview?.errors?.length ? <Text type="danger">失败原因：{performancePreview.errors.slice(0, 5).map((e: any) => `第${e.row}行 ${e.reason}`).join('；')}</Text> : null}
                     {performanceResult ? <Text>告警数：{performanceResult.alert_count}</Text> : null}
                   </Space>
                 </Card>

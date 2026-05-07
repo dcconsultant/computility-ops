@@ -301,7 +301,28 @@ func (h *ValueScoreSetupHandler) readPerformanceRows(c *gin.Context) ([]string, 
 		fail(c, 40003, "读取工作表失败或无数据")
 		return nil, nil, false
 	}
-	return rows[0], rows[1:], true
+	headers := service.MapHeaders(rows[0], performanceHeaderMap())
+	if err := service.ValidateRequiredHeaders(headers, "config_type", "unavailable_cores", "unavailable_memory_gb", "performance_score"); err != nil {
+		fail(c, 40004, err.Error())
+		return nil, nil, false
+	}
+	return headers, rows[1:], true
+}
+
+func performanceHeaderMap() map[string]string {
+	return map[string]string{
+		"配置类型": "config_type",
+		"套餐": "config_type",
+		"config_type": "config_type",
+		"不可用核数": "unavailable_cores",
+		"不可用cpu核数": "unavailable_cores",
+		"unavailable_cores": "unavailable_cores",
+		"不可用内存容量(gb)": "unavailable_memory_gb",
+		"不可用内存容量（gb）": "unavailable_memory_gb",
+		"unavailable_memory_gb": "unavailable_memory_gb",
+		"性能跑分": "performance_score",
+		"performance_score": "performance_score",
+	}
 }
 
 func (h *ValueScoreSetupHandler) ListPerformanceParams(c *gin.Context) {
