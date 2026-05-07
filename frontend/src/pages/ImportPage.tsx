@@ -155,14 +155,21 @@ export default function ImportPage() {
     const tcoItems = (tcoResult?.items || []) as any[];
     const tcoMap = new Map<string, any>();
     for (const t of tcoItems) tcoMap.set(t.config_type, t);
-    const pkgMap = new Map<string, any>();
-    for (const p of (packages || [])) pkgMap.set(p.config_type, p);
-    return perfItems.map((p) => ({
-      ...p,
-      ...(tcoMap.get(p.config_type) || {}),
-      value_score_v1: Number(pkgMap.get(p.config_type)?.server_value_score || 0)
-    }));
-  }, [performanceResult, tcoResult, packages]);
+    return perfItems.map((p) => {
+      const t = tcoMap.get(p.config_type) || {};
+      const availableCores = Number(p.available_cores || 0);
+      const totalTCO = Number(t.total_tco_monthly || 0);
+      const overallRatio = Number(p.overall_performance_ratio || 0);
+      const singleCoreMonthlyTCO = availableCores > 0 ? (totalTCO / availableCores) : 0;
+      const standardCoreMonthlyTCO = singleCoreMonthlyTCO * overallRatio;
+      const valueScoreV1 = standardCoreMonthlyTCO / 30;
+      return {
+        ...p,
+        ...t,
+        value_score_v1: Number.isFinite(valueScoreV1) ? valueScoreV1 : 0
+      };
+    });
+  }, [performanceResult, tcoResult]);
 
   function makeUploadProps(kind: 'servers' | 'packages'): UploadProps {
     const importer = {
