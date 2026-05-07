@@ -9,6 +9,8 @@ import type {
   ValueScoreCabinetBaseline,
   ValueScoreCostParams,
   ValueScoreOriginalValue,
+  ValueScorePerformanceCalcResult,
+  ValueScorePerformanceParam,
   ValueScoreTCOResult,
   ModelFailureRate,
   FaultAnalysisResult,
@@ -140,6 +142,34 @@ export async function importValueScoreCostParams(file: File) {
 
 export function exportValueScoreOriginalValueTemplate() {
   window.open('/api/v1/value-score/original-values/template/export', '_blank');
+}
+
+export function exportValueScorePerformanceParamsTemplate() {
+  window.open('/api/v1/value-score/performance-params/template/export', '_blank');
+}
+
+export async function listValueScorePerformanceParams() {
+  const { data } = await http.get<ApiResp<{ list: ValueScorePerformanceParam[] }>>('/value-score/performance-params');
+  return data;
+}
+
+export async function previewValueScorePerformanceParams(file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await http.post<ApiResp<any>>('/value-score/performance-params/preview', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  return data;
+}
+
+export async function importValueScorePerformanceParams(file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await http.post<ApiResp<any>>('/value-score/performance-params/import', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  return data;
+}
+
+export async function calculateValueScorePerformance() {
+  const { data } = await http.post<ApiResp<ValueScorePerformanceCalcResult>>('/value-score/performance/calculate', {});
+  return data;
 }
 
 export async function importValueScoreOriginalValues(file: File) {

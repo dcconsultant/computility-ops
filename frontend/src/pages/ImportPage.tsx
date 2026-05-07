@@ -10,17 +10,22 @@ import {
   exportHostPackageTemplate,
   exportValueScoreCostParamsTemplate,
   exportValueScoreOriginalValueTemplate,
+  exportValueScorePerformanceParamsTemplate,
   getCabinetUtilization,
   getValueScoreCabinetBaseline,
   getValueScoreCostParams,
   updateValueScoreCostParams,
   calculateValueScoreTCO,
+  calculateValueScorePerformance,
   exportValueScoreTCO,
   importHostPackages,
   importServers,
   importCabinetConfigs,
   importValueScoreCostParams,
   importValueScoreOriginalValues,
+  importValueScorePerformanceParams,
+  previewValueScorePerformanceParams,
+  listValueScorePerformanceParams,
   exportCabinetTemplate,
   listCabinetConfigs,
   listHostPackages,
@@ -36,6 +41,7 @@ import type {
   ServerItem,
   ValueScoreCabinetBaseline,
   ValueScoreCostParams,
+  ValueScorePerformanceCalcItem,
   ValueScoreTCOResult
 } from '../types';
 
@@ -66,25 +72,32 @@ export default function ImportPage() {
   const [cabinetForm, setCabinetForm] = useState({ idc: '', rated_power_kw: 0, monthly_rent: 0 });
   const [cabinetBaseline, setCabinetBaseline] = useState<ValueScoreCabinetBaseline | null>(null);
   const [costParams, setCostParams] = useState<ValueScoreCostParams>({ depreciation_months: 60, network_device_share_cny: 0, server_renewal_fee_cny: 0 });
+  const [performancePreview, setPerformancePreview] = useState<any>(null);
+  const [performanceResult, setPerformanceResult] = useState<{ items: ValueScorePerformanceCalcItem[]; alert_count: number; note?: string } | null>(null);
   const [tcoResult, setTcoResult] = useState<ValueScoreTCOResult | null>(null);
   const [tcoLoading, setTcoLoading] = useState(false);
+  const [performanceLoading, setPerformanceLoading] = useState(false);
 
   async function reloadAll() {
     try {
-      const [s1, s2, s3, s4, s5, s6] = await Promise.all([
+      const [s1, s2, s3, s4, s5, s6, s7, s8] = await Promise.all([
         listServers(),
         listHostPackages(),
         getCabinetUtilization(),
         listCabinetConfigs(),
         getValueScoreCabinetBaseline(),
-        getValueScoreCostParams()
+        getValueScoreCostParams(),
+        listValueScorePerformanceParams(),
+        calculateValueScorePerformance()
       ]);
-      setServers(ensureApiOk(s1).data.list);
-      setPackages(ensureApiOk(s2).data.list);
-      setCabinetUtilization(ensureApiOk(s3).data.utilization || 1);
-      setCabinetRows(ensureApiOk(s4).data.list || []);
-      setCabinetBaseline(ensureApiOk(s5).data);
-      setCostParams(ensureApiOk(s6).data);
+      setServers((ensureApiOk(s1) as any).data.list);
+      setPackages((ensureApiOk(s2) as any).data.list);
+      setCabinetUtilization((ensureApiOk(s3) as any).data.utilization || 1);
+      setCabinetRows((ensureApiOk(s4) as any).data.list || []);
+      setCabinetBaseline((ensureApiOk(s5) as any).data);
+      setCostParams((ensureApiOk(s6) as any).data);
+      setPerformancePreview((ensureApiOk(s7) as any).data);
+      setPerformanceResult((ensureApiOk(s8) as any).data);
       try {
         const tco = ensureApiOk(await calculateValueScoreTCO());
         setTcoResult(tco.data);
@@ -428,6 +441,66 @@ export default function ImportPage() {
                   }
                 }}><Button icon={<UploadOutlined />}>导入Excel</Button></Upload></Space>}>
                   <Text type="secondary">模板仅包含“配置类型、原值(CNY)”两列；用于按套餐维护原值。</Text>
+                </Card>
+
+                <Card title="3.2 服务器性能参数配置" extra={<Space><Button onClick={exportValueScorePerformanceParamsTemplate}>下载导入模板</Button><Upload maxCount={1} accept=".xlsx" showUploadList={false} customRequest={async (options) => {
+                  const file = options.file as File;
+                  try {
+                    const preview = ensureApiOk(await previewValueScorePerformanceParams(file));
+                    setPerformancePreview((preview as any).data);
+                    ensureApiOk(await importValueScorePerformanceParams(file));
+                    const perf = ensureApiOk(await calculateValueScorePerformance());
+                    setPerformanceResult((perf as any).data);
+                    message.success('性能参数导入成功');
+                    options.onSuccess?.({}, new XMLHttpRequest());
+                  } catch (e) {
+                    message.error(parseApiError(e, '导入失败'));
+                    options.onError?.(new Error('import failed'));
+                  }
+                }}><Button icon={<UploadOutlined />}>预检并导入Excel</Button></Upload><Button onClick={async () => {
+                  try {
+                    const perf = ensureApiOk(await calculateValueScorePerformance());
+                    setPerformanceResult((perf as any).data);
+                    message.success('性能折算已刷新');
+                  } catch (e) {
+                    message.error(parseApiError(e, '刷新失败'));
+                  }
+                }}>刷新折算</Button></Space>}>
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    <Text type="secondary">导入主键：配置类型；字段：不可用核数、不可用内存容量(GB)、性能跑分。</Text>
+                    {performancePreview ? <Text>预检：新增 {performancePreview.new_count || 0}，更新 {performancePreview.updated_count || 0}，失败 {performancePreview.failed || 0}</Text> : null}
+                    {performanceResult ? <Text>告警数：{performanceResult.alert_count}</Text> : null}
+                  </Space>
+                </Card>
+
+                <Card title="3.2 性能折算结果" extra={<Space><Button onClick={exportValueScorePerformanceParamsTemplate}>下载模板</Button><Button loading={performanceLoading} onClick={async () => {
+                  setPerformanceLoading(true);
+                  try {
+                    const perf = ensureApiOk(await calculateValueScorePerformance());
+                    setPerformanceResult((perf as any).data);
+                    message.success('性能折算已刷新');
+                  } catch (e) {
+                    message.error(parseApiError(e, '刷新失败'));
+                  } finally {
+                    setPerformanceLoading(false);
+                  }
+                }}>刷新</Button></Space>}>
+                  <Table rowKey="config_type" dataSource={performanceResult?.items || []} pagination={withTotalPagination(10)} columns={[
+                    { title: '配置类型', dataIndex: 'config_type' },
+                    { title: 'CPU逻辑核数', dataIndex: 'cpu_logical_cores', render: (v: number) => formatInt(v) },
+                    { title: '内存容量(GB)', dataIndex: 'memory_capacity_gb', render: (v: number) => formatFloat(v) },
+                    { title: '不可用核数', dataIndex: 'unavailable_cores', render: (v: number) => formatInt(v) },
+                    { title: '不可用内存(GB)', dataIndex: 'unavailable_memory_gb', render: (v: number) => formatFloat(v) },
+                    { title: '性能跑分', dataIndex: 'performance_score', render: (v: number) => formatFloat(v) },
+                    { title: '可用核数', dataIndex: 'available_cores', render: (v: number) => formatInt(v) },
+                    { title: '可用内存(GB)', dataIndex: 'available_memory_gb', render: (v: number) => formatFloat(v) },
+                    { title: '标准跑分', dataIndex: 'standard_score', render: (v: number) => formatFloat(v) },
+                    { title: 'CPU性能折算系数', dataIndex: 'cpu_performance_factor', render: (v: number) => formatFloat(v) },
+                    { title: '内存配比', dataIndex: 'memory_ratio', render: (v: number) => formatFloat(v) },
+                    { title: '内存配比系数', dataIndex: 'memory_ratio_factor', render: (v: number) => formatFloat(v) },
+                    { title: '整体性能折算比', dataIndex: 'overall_performance_ratio', render: (v: number) => formatFloat(v) }
+                  ]} />
+                  {performanceResult?.note ? <Text type="secondary">{performanceResult.note}</Text> : null}
                 </Card>
 
                 <Card title="服务器月TCO试算" extra={<Space><Button onClick={exportValueScoreTCO}>导出Excel</Button><Button loading={tcoLoading} onClick={async () => {

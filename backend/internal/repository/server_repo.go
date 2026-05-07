@@ -24,6 +24,8 @@ type DatasetRepo interface {
 	SetValueScoreCostParams(ctx context.Context, params domain.ValueScoreCostParams) error
 	ReplaceValueScoreOriginalValues(ctx context.Context, rows []domain.ValueScoreOriginalValue) error
 	ListValueScoreOriginalValues(ctx context.Context) ([]domain.ValueScoreOriginalValue, error)
+	ReplaceValueScorePerformanceParams(ctx context.Context, rows []domain.ValueScorePerformanceParam) error
+	ListValueScorePerformanceParams(ctx context.Context) ([]domain.ValueScorePerformanceParam, error)
 	CreateCabinetConfig(ctx context.Context, row domain.CabinetConfig) (domain.CabinetConfig, error)
 	UpdateCabinetConfig(ctx context.Context, row domain.CabinetConfig) (domain.CabinetConfig, error)
 	DeleteCabinetConfig(ctx context.Context, id int64) error

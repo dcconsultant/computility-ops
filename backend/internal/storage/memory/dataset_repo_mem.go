@@ -15,6 +15,7 @@ type DatasetRepo struct {
 	cabinetUtilization domain.CabinetUtilizationSetting
 	valueScoreCostParams domain.ValueScoreCostParams
 	valueScoreOriginalValues []domain.ValueScoreOriginalValue
+	valueScorePerformanceParams []domain.ValueScorePerformanceParam
 	cabinetConfigs      []domain.CabinetConfig
 	cabinetAutoID       int64
 	specialRules        []domain.SpecialRule
@@ -32,6 +33,7 @@ func NewDatasetRepo() *DatasetRepo {
 	return &DatasetRepo{
 		cabinetUtilization:  domain.CabinetUtilizationSetting{Utilization: 1},
 		valueScoreCostParams: domain.ValueScoreCostParams{DepreciationMonths: 60, NetworkDeviceShareCNY: 0, ServerRenewalFeeCNY: 0},
+		valueScorePerformanceParams: []domain.ValueScorePerformanceParam{},
 	}
 }
 
@@ -134,6 +136,19 @@ func (r *DatasetRepo) ListValueScoreOriginalValues(_ context.Context) ([]domain.
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return append([]domain.ValueScoreOriginalValue(nil), r.valueScoreOriginalValues...), nil
+}
+
+func (r *DatasetRepo) ReplaceValueScorePerformanceParams(_ context.Context, rows []domain.ValueScorePerformanceParam) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.valueScorePerformanceParams = append([]domain.ValueScorePerformanceParam(nil), rows...)
+	return nil
+}
+
+func (r *DatasetRepo) ListValueScorePerformanceParams(_ context.Context) ([]domain.ValueScorePerformanceParam, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return append([]domain.ValueScorePerformanceParam(nil), r.valueScorePerformanceParams...), nil
 }
 
 func (r *DatasetRepo) CreateCabinetConfig(_ context.Context, row domain.CabinetConfig) (domain.CabinetConfig, error) {

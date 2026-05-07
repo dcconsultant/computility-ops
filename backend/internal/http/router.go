@@ -54,6 +54,11 @@ func NewRouter(h Handlers) *gin.Engine {
 		v1.GET("/value-score/original-values", h.ValueScoreSetup.ListOriginalValues)
 		v1.POST("/value-score/original-values/import", h.ValueScoreSetup.ImportOriginalValues)
 		v1.GET("/value-score/original-values/template/export", h.ValueScoreSetup.ExportOriginalValuesTemplate)
+		v1.GET("/value-score/performance-params", h.ValueScoreSetup.ListPerformanceParams)
+		v1.POST("/value-score/performance-params/import", h.ValueScoreSetup.ImportPerformanceParams)
+		v1.POST("/value-score/performance-params/preview", h.ValueScoreSetup.PreviewPerformanceParams)
+		v1.GET("/value-score/performance-params/template/export", h.ValueScoreSetup.ExportPerformanceParamsTemplate)
+		v1.POST("/value-score/performance/calculate", h.ValueScoreSetup.CalculatePerformance)
 		v1.POST("/value-score/tco/calculate", h.ValueScoreSetup.CalculateMonthlyTCO)
 		v1.GET("/value-score/tco/export", h.ValueScoreSetup.ExportMonthlyTCO)
 

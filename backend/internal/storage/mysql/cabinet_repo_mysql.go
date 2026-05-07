@@ -180,6 +180,52 @@ func (r *DatasetRepo) ListValueScoreOriginalValues(ctx context.Context) ([]domai
 	return out, rows.Err()
 }
 
+func (r *DatasetRepo) ReplaceValueScorePerformanceParams(ctx context.Context, rows []domain.ValueScorePerformanceParam) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ops_value_score_performance_params`); err != nil {
+		return err
+	}
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO ops_value_score_performance_params (config_type, unavailable_cores, unavailable_memory_gb, performance_score)
+		VALUES (?, ?, ?, ?)
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, x := range rows {
+		if _, err := stmt.ExecContext(ctx, x.ConfigType, x.UnavailableCores, x.UnavailableMemoryGB, x.PerformanceScore); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *DatasetRepo) ListValueScorePerformanceParams(ctx context.Context) ([]domain.ValueScorePerformanceParam, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT config_type, unavailable_cores, unavailable_memory_gb, performance_score
+		FROM ops_value_score_performance_params
+		ORDER BY config_type ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]domain.ValueScorePerformanceParam, 0)
+	for rows.Next() {
+		var x domain.ValueScorePerformanceParam
+		if err := rows.Scan(&x.ConfigType, &x.UnavailableCores, &x.UnavailableMemoryGB, &x.PerformanceScore); err != nil {
+			return nil, err
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
+}
+
 func isDuplicateErr(err error) bool {
 	if err == nil {
 		return false

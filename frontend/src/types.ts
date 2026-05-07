@@ -86,6 +86,44 @@ export interface ValueScoreOriginalValue {
   server_original_cny: number;
 }
 
+export interface ValueScorePerformanceParam {
+  config_type: string;
+  unavailable_cores: number;
+  unavailable_memory_gb: number;
+  performance_score: number;
+}
+
+export interface ValueScorePerformanceAlert {
+  config_type: string;
+  error_code: string;
+  field: string;
+  current_value: string;
+  suggestion: string;
+}
+
+export interface ValueScorePerformanceCalcItem {
+  config_type: string;
+  cpu_logical_cores: number;
+  memory_capacity_gb: number;
+  unavailable_cores: number;
+  unavailable_memory_gb: number;
+  performance_score: number;
+  available_cores: number;
+  available_memory_gb: number;
+  standard_score: number;
+  cpu_performance_factor: number;
+  memory_ratio: number;
+  memory_ratio_factor: number;
+  overall_performance_ratio: number;
+  alerts?: ValueScorePerformanceAlert[];
+}
+
+export interface ValueScorePerformanceCalcResult {
+  items: ValueScorePerformanceCalcItem[];
+  alert_count: number;
+  note?: string;
+}
+
 export interface ValueScoreTCOItem {
   config_type: string;
   power_watts: number;

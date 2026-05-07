@@ -273,6 +273,110 @@ func (h *ValueScoreSetupHandler) ExportCostParamsTemplate(c *gin.Context) {
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buf.Bytes())
 }
 
+func (h *ValueScoreSetupHandler) readPerformanceRows(c *gin.Context) ([]string, [][]string, bool) {
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		fail(c, 40001, "请上传文件")
+		return nil, nil, false
+	}
+	file, err := fileHeader.Open()
+	if err != nil {
+		fail(c, 40003, "文件读取失败，请重试")
+		return nil, nil, false
+	}
+	defer file.Close()
+	xf, err := excelize.OpenReader(file)
+	if err != nil {
+		fail(c, 40003, "文件格式无效，请确认是标准 .xlsx")
+		return nil, nil, false
+	}
+	defer func() { _ = xf.Close() }()
+	sheets := xf.GetSheetList()
+	if len(sheets) == 0 {
+		fail(c, 40003, "Excel 中没有可用工作表")
+		return nil, nil, false
+	}
+	rows, err := xf.GetRows(sheets[0])
+	if err != nil || len(rows) == 0 {
+		fail(c, 40003, "读取工作表失败或无数据")
+		return nil, nil, false
+	}
+	return rows[0], rows[1:], true
+}
+
+func (h *ValueScoreSetupHandler) ListPerformanceParams(c *gin.Context) {
+	c.Set("audit_action", "value_score.performance_params.list")
+	rows, err := h.svc.ListPerformanceParams(c.Request.Context())
+	if err != nil {
+		fail(c, 50001, "查询失败")
+		return
+	}
+	ok(c, gin.H{"list": rows})
+}
+
+func (h *ValueScoreSetupHandler) ImportPerformanceParams(c *gin.Context) {
+	c.Set("audit_action", "value_score.performance_params.import")
+	headers, rows, okRead := h.readPerformanceRows(c)
+	if !okRead {
+		return
+	}
+	mapped := mapRows(headers, rows)
+	res, err := h.svc.ImportPerformanceParams(c.Request.Context(), mapped)
+	if err != nil {
+		fail(c, 50001, "导入失败")
+		return
+	}
+	ok(c, res)
+}
+
+func (h *ValueScoreSetupHandler) PreviewPerformanceParams(c *gin.Context) {
+	c.Set("audit_action", "value_score.performance_params.preview")
+	headers, rows, okRead := h.readPerformanceRows(c)
+	if !okRead {
+		return
+	}
+	mapped := mapRows(headers, rows)
+	res, err := h.svc.PreviewPerformanceParams(c.Request.Context(), mapped)
+	if err != nil {
+		fail(c, 50001, "预检失败")
+		return
+	}
+	ok(c, res)
+}
+
+func (h *ValueScoreSetupHandler) ExportPerformanceParamsTemplate(c *gin.Context) {
+	c.Set("audit_action", "value_score.performance_params.template.export")
+	xf := excelize.NewFile()
+	sheet := xf.GetSheetName(0)
+	headers := []string{"配置类型", "不可用核数", "不可用内存容量(GB)", "性能跑分"}
+	for i, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		_ = xf.SetCellValue(sheet, cell, h)
+	}
+	_ = xf.SetCellValue(sheet, "A2", "compute-a")
+	_ = xf.SetCellValue(sheet, "B2", 0)
+	_ = xf.SetCellValue(sheet, "C2", 0)
+	_ = xf.SetCellValue(sheet, "D2", 2277)
+	buf, err := xf.WriteToBuffer()
+	if err != nil {
+		fail(c, 50001, "导出失败")
+		return
+	}
+	filename := fmt.Sprintf("value-score-performance-template-%s.xlsx", time.Now().Format("20060102"))
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buf.Bytes())
+}
+
+func (h *ValueScoreSetupHandler) CalculatePerformance(c *gin.Context) {
+	c.Set("audit_action", "value_score.performance.calculate")
+	v, err := h.svc.CalculatePerformance(c.Request.Context())
+	if err != nil {
+		fail(c, 50001, "计算失败")
+		return
+	}
+	ok(c, v)
+}
+
 func (h *ValueScoreSetupHandler) ExportMonthlyTCO(c *gin.Context) {
 	c.Set("audit_action", "value_score.tco.export")
 	res, err := h.svc.CalculateMonthlyTCO(c.Request.Context(), domain.ValueScoreTCOCalculateRequest{})
