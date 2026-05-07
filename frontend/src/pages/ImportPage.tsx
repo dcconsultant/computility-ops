@@ -155,8 +155,14 @@ export default function ImportPage() {
     const tcoItems = (tcoResult?.items || []) as any[];
     const tcoMap = new Map<string, any>();
     for (const t of tcoItems) tcoMap.set(t.config_type, t);
-    return perfItems.map((p) => ({ ...p, ...(tcoMap.get(p.config_type) || {}) }));
-  }, [performanceResult, tcoResult]);
+    const pkgMap = new Map<string, any>();
+    for (const p of (packages || [])) pkgMap.set(p.config_type, p);
+    return perfItems.map((p) => ({
+      ...p,
+      ...(tcoMap.get(p.config_type) || {}),
+      value_score_v1: Number(pkgMap.get(p.config_type)?.server_value_score || 0)
+    }));
+  }, [performanceResult, tcoResult, packages]);
 
   function makeUploadProps(kind: 'servers' | 'packages'): UploadProps {
     const importer = {
@@ -495,7 +501,8 @@ export default function ImportPage() {
                     { title: '网络机柜等分摊/月', dataIndex: 'network_cabinet_monthly', render: (v: number) => formatFloat(v) },
                     { title: '服务器续保费/月', dataIndex: 'server_renewal_monthly', render: (v: number) => formatFloat(v) },
                     { title: '其他固定成本/月', dataIndex: 'other_fixed_cost_monthly', render: (v: number) => formatFloat(v) },
-                    { title: '月TCO', dataIndex: 'total_tco_monthly', render: (v: number) => formatFloat(v) }
+                    { title: '月TCO', dataIndex: 'total_tco_monthly', render: (v: number) => formatFloat(v) },
+                    { title: '价值分v1', dataIndex: 'value_score_v1', render: (v: number) => formatFloat(v) }
                   ]} />
                 </Card>
               </Space>
