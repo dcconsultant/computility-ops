@@ -160,7 +160,7 @@ func (h *ImportHandler) ImportHostPackages(c *gin.Context) {
 		return
 	}
 	headers = service.MapHeaders(headers, serviceHostPackageHeaderMap())
-	if err := service.ValidateRequiredHeaders(headers, "config_type", "cpu_logical_cores", "arch_standardized_factor", "data_disk_count", "server_value_score", "monthly_depreciation_cny", "network_cabinet_share_cny", "other_fixed_cost_cny"); err != nil {
+	if err := service.ValidateRequiredHeaders(headers, "config_type", "cpu_logical_cores", "arch_standardized_factor", "data_disk_count", "server_value_score"); err != nil {
 		fail(c, 40004, err.Error())
 		return
 	}
@@ -188,8 +188,7 @@ func (h *ImportHandler) ExportHostPackagesTemplate(c *gin.Context) {
 	sheet := xf.GetSheetName(0)
 	headers := []string{
 		"配置类型", "场景大类", "CPU逻辑核数", "GPU卡数", "数据盘类型", "数据盘数量", "存储容量(TB)",
-		"功率(W)", "发布年份", "内存容量(GB)", "服务器价值分", "月折旧(CNY)",
-		"网络机柜分摊(CNY)", "其他固定成本(CNY)", "架构标准化系数",
+		"功率(W)", "发布年份", "内存容量(GB)", "服务器价值分", "架构标准化系数",
 	}
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
