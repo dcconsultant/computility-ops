@@ -8,7 +8,6 @@ import {
   deleteCabinetConfig,
   exportServerPackageAnomalies,
   exportHostPackageTemplate,
-  exportValueScoreCostParamsTemplate,
   exportValueScorePerformanceParamsTemplate,
   getCabinetUtilization,
   getValueScoreCabinetBaseline,
@@ -20,7 +19,6 @@ import {
   importHostPackages,
   importServers,
   importCabinetConfigs,
-  importValueScoreCostParams,
   importValueScoreUnifiedParams,
   previewValueScorePerformanceParams,
   listValueScorePerformanceParams,
@@ -51,7 +49,7 @@ const titles: Record<DataKey, string> = {
   servers: '服务器管理',
   packages: '主机套餐配置',
   cabinet: '机柜配置管理',
-  value_score_setup: '价值评分配置底座',
+  value_score_setup: '价值分管理',
   assets: '资产分析'
 };
 
@@ -371,14 +369,14 @@ export default function ImportPage() {
           },
           {
             key: 'value_score_setup',
-            label: '价值评分配置底座',
+            label: '价值分管理',
             children: (
               <Space direction="vertical" size="middle" style={{ width: '100%' }}>
                 {valueConfigVisible ? <>
                 <Row gutter={[16, 16]}>
                   <Col xs={24} lg={12}>
                     <Card
-                      title="价值评分参数基线（只读）"
+                      title="全局参数"
                       extra={<Button onClick={reloadAll}>刷新</Button>}
                     >
                       {cabinetBaseline ? (
@@ -402,20 +400,22 @@ export default function ImportPage() {
                   </Col>
 
                   <Col xs={24} lg={12}>
-                    <Card title="全局参数配置" extra={<Space><Button onClick={exportValueScoreCostParamsTemplate}>下载导入模板</Button><Upload maxCount={1} accept=".xlsx" showUploadList={false} customRequest={async (options) => {
+                    <Card title="全局参数配置" extra={<Space><Button onClick={exportValueScorePerformanceParamsTemplate}>下载模板</Button><Upload maxCount={1} accept=".xlsx" showUploadList={false} customRequest={async (options) => {
                       const file = options.file as File;
                       try {
-                        const resp = ensureApiOk(await importValueScoreCostParams(file));
-                        setCostParams(resp.data);
-                        const tco = ensureApiOk(await calculateValueScoreTCO());
-                        setTcoResult(tco.data);
-                        message.success('成本参数导入成功并刷新月TCO');
+                        const preview = ensureApiOk(await previewValueScorePerformanceParams(file));
+                        setPerformancePreview((preview as any).data);
+                        ensureApiOk(await importValueScoreUnifiedParams(file));
+                        const [perf, tco] = await Promise.all([calculateValueScorePerformance(), calculateValueScoreTCO()]);
+                        setPerformanceResult((ensureApiOk(perf) as any).data);
+                        setTcoResult((ensureApiOk(tco) as any).data);
+                        message.success('配置型参数导入成功并刷新结果');
                         options.onSuccess?.({}, new XMLHttpRequest());
                       } catch (e) {
                         message.error(parseApiError(e, '导入失败'));
                         options.onError?.(new Error('import failed'));
                       }
-                    }}><Button icon={<UploadOutlined />}>导入Excel</Button></Upload><Button onClick={async () => {
+                    }}><Button icon={<UploadOutlined />}>预检并导入Excel</Button></Upload><Button onClick={async () => {
                       try {
                         const saved = ensureApiOk(await updateValueScoreCostParams(costParams));
                         setCostParams(saved.data);
@@ -441,33 +441,14 @@ export default function ImportPage() {
                           <InputNumber min={0} value={costParams.server_renewal_fee_cny} onChange={(v) => setCostParams({ ...costParams, server_renewal_fee_cny: Number(v || 0) })} />
                         </Space>
                         <Text type="secondary">当前口径：机柜费 + 折旧 + 网络设备分摊成本 + 网络机柜等分摊 + 服务器续保费</Text>
+                        <Text type="secondary">单文件导入：主键配置类型。后端一次解析、一次事务落库（原值+性能参数原子提交）。</Text>
+                        {performancePreview ? <Text>预检：新增 {performancePreview.new_count || 0}，更新 {performancePreview.updated_count || 0}，失败 {performancePreview.failed || 0}</Text> : null}
+                        {performancePreview?.errors?.length ? <Text type="danger">失败原因：{performancePreview.errors.slice(0, 5).map((e: any) => `第${e.row}行 ${e.reason}`).join('；')}</Text> : null}
                       </Space>
                     </Card>
                   </Col>
                 </Row>
 
-                <Card title="配置型参数导入" extra={<Space><Button onClick={exportValueScorePerformanceParamsTemplate}>下载模板</Button><Upload maxCount={1} accept=".xlsx" showUploadList={false} customRequest={async (options) => {
-                  const file = options.file as File;
-                  try {
-                    const preview = ensureApiOk(await previewValueScorePerformanceParams(file));
-                    setPerformancePreview((preview as any).data);
-                    ensureApiOk(await importValueScoreUnifiedParams(file));
-                    const [perf, tco] = await Promise.all([calculateValueScorePerformance(), calculateValueScoreTCO()]);
-                    setPerformanceResult((ensureApiOk(perf) as any).data);
-                    setTcoResult((ensureApiOk(tco) as any).data);
-                    message.success('配置型参数导入成功并刷新结果');
-                    options.onSuccess?.({}, new XMLHttpRequest());
-                  } catch (e) {
-                    message.error(parseApiError(e, '导入失败'));
-                    options.onError?.(new Error('import failed'));
-                  }
-                }}><Button icon={<UploadOutlined />}>预检并导入Excel</Button></Upload></Space>}>
-                  <Space direction="vertical" style={{ width: '100%' }} size="small">
-                    <Text type="secondary">单文件导入：主键配置类型。后端一次解析、一次事务落库（原值+性能参数原子提交）。</Text>
-                    {performancePreview ? <Text>预检：新增 {performancePreview.new_count || 0}，更新 {performancePreview.updated_count || 0}，失败 {performancePreview.failed || 0}</Text> : null}
-                    {performancePreview?.errors?.length ? <Text type="danger">失败原因：{performancePreview.errors.slice(0, 5).map((e: any) => `第${e.row}行 ${e.reason}`).join('；')}</Text> : null}
-                  </Space>
-                </Card>
                 </> : null}
 
                 <Card title="价值分析" extra={<Space><Button onClick={() => setValueConfigVisible((v) => !v)}>参数配置</Button><Button onClick={exportValueScoreTCO}>导出Excel</Button><Button loading={performanceLoading || tcoLoading} onClick={async () => {
