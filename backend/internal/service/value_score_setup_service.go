@@ -155,6 +155,41 @@ func (s *ValueScoreSetupService) ImportPerformanceParams(ctx context.Context, ro
 	return res, nil
 }
 
+func (s *ValueScoreSetupService) ImportUnifiedConfigParams(ctx context.Context, rows []map[string]string) (ValueScorePerformanceImportResult, error) {
+	res, perfParsed, err := s.preparePerformanceParamsWithRows(ctx, rows)
+	if err != nil {
+		return res, err
+	}
+	if len(perfParsed) == 0 {
+		return res, nil
+	}
+	rawByConfig := make(map[string]map[string]string, len(rows))
+	for _, raw := range rows {
+		cfg := strings.TrimSpace(raw["config_type"])
+		if cfg == "" {
+			continue
+		}
+		rawByConfig[cfg] = raw
+	}
+	originals := make([]domain.ValueScoreOriginalValue, 0, len(perfParsed))
+	for _, item := range perfParsed {
+		raw := rawByConfig[item.ConfigType]
+		v := strings.TrimSpace(raw["server_original_cny"])
+		if v == "" {
+			return res, fmt.Errorf("配置类型 %s 缺少原值(CNY)", item.ConfigType)
+		}
+		num, e := strconv.ParseFloat(v, 64)
+		if e != nil || num < 0 {
+			return res, fmt.Errorf("配置类型 %s 的原值(CNY)必须是大于等于0的数字", item.ConfigType)
+		}
+		originals = append(originals, domain.ValueScoreOriginalValue{ConfigType: item.ConfigType, ServerOriginalCNY: num})
+	}
+	if err := s.repo.ReplaceValueScoreConfigParams(ctx, originals, perfParsed); err != nil {
+		return res, err
+	}
+	return res, nil
+}
+
 func (s *ValueScoreSetupService) preparePerformanceParamsWithRows(ctx context.Context, rows []map[string]string) (ValueScorePerformanceImportResult, []domain.ValueScorePerformanceParam, error) {
 	existingRows, err := s.repo.ListValueScorePerformanceParams(ctx)
 	if err != nil {

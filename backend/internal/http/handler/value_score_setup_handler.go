@@ -302,7 +302,7 @@ func (h *ValueScoreSetupHandler) readPerformanceRows(c *gin.Context) ([]string, 
 		return nil, nil, false
 	}
 	headers := service.MapHeaders(rows[0], performanceHeaderMap())
-	if err := service.ValidateRequiredHeaders(headers, "config_type", "unavailable_cores", "unavailable_memory_gb", "performance_score"); err != nil {
+	if err := service.ValidateRequiredHeaders(headers, "config_type", "unavailable_cores", "unavailable_memory_gb", "performance_score", "server_original_cny"); err != nil {
 		fail(c, 40004, err.Error())
 		return nil, nil, false
 	}
@@ -322,6 +322,10 @@ func performanceHeaderMap() map[string]string {
 		"unavailable_memory_gb": "unavailable_memory_gb",
 		"性能跑分": "performance_score",
 		"performance_score": "performance_score",
+		"原值(cny)": "server_original_cny",
+		"原值（cny）": "server_original_cny",
+		"原值": "server_original_cny",
+		"server_original_cny": "server_original_cny",
 	}
 }
 
@@ -342,9 +346,9 @@ func (h *ValueScoreSetupHandler) ImportPerformanceParams(c *gin.Context) {
 		return
 	}
 	mapped := mapRows(headers, rows)
-	res, err := h.svc.ImportPerformanceParams(c.Request.Context(), mapped)
+	res, err := h.svc.ImportUnifiedConfigParams(c.Request.Context(), mapped)
 	if err != nil {
-		fail(c, 50001, "导入失败")
+		fail(c, 50001, err.Error())
 		return
 	}
 	ok(c, res)
@@ -369,15 +373,16 @@ func (h *ValueScoreSetupHandler) ExportPerformanceParamsTemplate(c *gin.Context)
 	c.Set("audit_action", "value_score.performance_params.template.export")
 	xf := excelize.NewFile()
 	sheet := xf.GetSheetName(0)
-	headers := []string{"配置类型", "不可用核数", "不可用内存容量(GB)", "性能跑分"}
+	headers := []string{"配置类型", "原值(CNY)", "不可用核数", "不可用内存容量(GB)", "性能跑分"}
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		_ = xf.SetCellValue(sheet, cell, h)
 	}
 	_ = xf.SetCellValue(sheet, "A2", "compute-a")
-	_ = xf.SetCellValue(sheet, "B2", 0)
+	_ = xf.SetCellValue(sheet, "B2", 100000)
 	_ = xf.SetCellValue(sheet, "C2", 0)
-	_ = xf.SetCellValue(sheet, "D2", 2277)
+	_ = xf.SetCellValue(sheet, "D2", 0)
+	_ = xf.SetCellValue(sheet, "E2", 2277)
 	buf, err := xf.WriteToBuffer()
 	if err != nil {
 		fail(c, 50001, "导出失败")

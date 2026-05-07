@@ -151,6 +151,14 @@ func (r *DatasetRepo) ListValueScorePerformanceParams(_ context.Context) ([]doma
 	return append([]domain.ValueScorePerformanceParam(nil), r.valueScorePerformanceParams...), nil
 }
 
+func (r *DatasetRepo) ReplaceValueScoreConfigParams(_ context.Context, originals []domain.ValueScoreOriginalValue, performance []domain.ValueScorePerformanceParam) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.valueScoreOriginalValues = append([]domain.ValueScoreOriginalValue(nil), originals...)
+	r.valueScorePerformanceParams = append([]domain.ValueScorePerformanceParam(nil), performance...)
+	return nil
+}
+
 func (r *DatasetRepo) CreateCabinetConfig(_ context.Context, row domain.CabinetConfig) (domain.CabinetConfig, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -59,6 +59,12 @@ func (fakeDatasetRepo) ListValueScorePerformanceParams(ctx context.Context) ([]d
 	_ = ctx
 	return nil, nil
 }
+func (fakeDatasetRepo) ReplaceValueScoreConfigParams(ctx context.Context, originals []domain.ValueScoreOriginalValue, performance []domain.ValueScorePerformanceParam) error {
+	_ = ctx
+	_ = originals
+	_ = performance
+	return nil
+}
 func (fakeDatasetRepo) CreateCabinetConfig(ctx context.Context, row domain.CabinetConfig) (domain.CabinetConfig, error) {
 	_ = ctx
 	return row, nil

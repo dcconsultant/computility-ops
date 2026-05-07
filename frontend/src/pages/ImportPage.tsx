@@ -21,8 +21,7 @@ import {
   importServers,
   importCabinetConfigs,
   importValueScoreCostParams,
-  importValueScoreOriginalValues,
-  importValueScorePerformanceParams,
+  importValueScoreUnifiedParams,
   previewValueScorePerformanceParams,
   listValueScorePerformanceParams,
   exportCabinetTemplate,
@@ -439,8 +438,7 @@ export default function ImportPage() {
                   try {
                     const preview = ensureApiOk(await previewValueScorePerformanceParams(file));
                     setPerformancePreview((preview as any).data);
-                    ensureApiOk(await importValueScorePerformanceParams(file));
-                    ensureApiOk(await importValueScoreOriginalValues(file));
+                    ensureApiOk(await importValueScoreUnifiedParams(file));
                     const [perf, tco] = await Promise.all([calculateValueScorePerformance(), calculateValueScoreTCO()]);
                     setPerformanceResult((ensureApiOk(perf) as any).data);
                     setTcoResult((ensureApiOk(tco) as any).data);
@@ -452,7 +450,7 @@ export default function ImportPage() {
                   }
                 }}><Button icon={<UploadOutlined />}>预检并导入Excel</Button></Upload></Space>}>
                   <Space direction="vertical" style={{ width: '100%' }} size="small">
-                    <Text type="secondary">单文件导入：主键配置类型。需同时包含原值(CNY)与性能参数（不可用核数、不可用内存容量(GB)、性能跑分）。</Text>
+                    <Text type="secondary">单文件导入：主键配置类型。后端一次解析、一次事务落库（原值+性能参数原子提交）。</Text>
                     {performancePreview ? <Text>预检：新增 {performancePreview.new_count || 0}，更新 {performancePreview.updated_count || 0}，失败 {performancePreview.failed || 0}</Text> : null}
                     {performancePreview?.errors?.length ? <Text type="danger">失败原因：{performancePreview.errors.slice(0, 5).map((e: any) => `第${e.row}行 ${e.reason}`).join('；')}</Text> : null}
                   </Space>

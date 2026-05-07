@@ -160,7 +160,7 @@ export async function previewValueScorePerformanceParams(file: File) {
   return data;
 }
 
-export async function importValueScorePerformanceParams(file: File) {
+export async function importValueScoreUnifiedParams(file: File) {
   const form = new FormData();
   form.append('file', file);
   const { data } = await http.post<ApiResp<any>>('/value-score/performance-params/import', form, { headers: { 'Content-Type': 'multipart/form-data' } });

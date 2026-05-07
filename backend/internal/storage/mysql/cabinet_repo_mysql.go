@@ -205,6 +205,50 @@ func (r *DatasetRepo) ReplaceValueScorePerformanceParams(ctx context.Context, ro
 	return tx.Commit()
 }
 
+func (r *DatasetRepo) ReplaceValueScoreConfigParams(ctx context.Context, originals []domain.ValueScoreOriginalValue, performance []domain.ValueScorePerformanceParam) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ops_value_score_original_values`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ops_value_score_performance_params`); err != nil {
+		return err
+	}
+
+	origStmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO ops_value_score_original_values (config_type, server_original_cny)
+		VALUES (?, ?)
+	`)
+	if err != nil {
+		return err
+	}
+	defer origStmt.Close()
+	for _, x := range originals {
+		if _, err := origStmt.ExecContext(ctx, x.ConfigType, x.ServerOriginalCNY); err != nil {
+			return err
+		}
+	}
+
+	perfStmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO ops_value_score_performance_params (config_type, unavailable_cores, unavailable_memory_gb, performance_score)
+		VALUES (?, ?, ?, ?)
+	`)
+	if err != nil {
+		return err
+	}
+	defer perfStmt.Close()
+	for _, x := range performance {
+		if _, err := perfStmt.ExecContext(ctx, x.ConfigType, x.UnavailableCores, x.UnavailableMemoryGB, x.PerformanceScore); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 func (r *DatasetRepo) ListValueScorePerformanceParams(ctx context.Context) ([]domain.ValueScorePerformanceParam, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT config_type, unavailable_cores, unavailable_memory_gb, performance_score
