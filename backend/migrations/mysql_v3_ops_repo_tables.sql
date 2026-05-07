@@ -30,7 +30,6 @@ CREATE TABLE IF NOT EXISTS ops_host_packages (
   power_watts              DECIMAL(18,4) NOT NULL DEFAULT 0,
   release_year             INT           NOT NULL DEFAULT 0,
   memory_capacity_gb       DECIMAL(18,4) NOT NULL DEFAULT 0,
-  server_value_score        DECIMAL(18,4) NOT NULL DEFAULT 0,
   arch_standardized_factor  DECIMAL(18,4) NOT NULL DEFAULT 1,
   created_at                TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),

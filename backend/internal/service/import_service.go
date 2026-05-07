@@ -170,9 +170,6 @@ var hostPackageHeaderMap = map[string]string{
 	"内存容量":                   "memory_capacity_gb",
 	"memorycapacitygb":        "memory_capacity_gb",
 	"内存gb":                    "memory_capacity_gb",
-	"服务器价值分":                 "server_value_score",
-	"价值分":                    "server_value_score",
-	"servervaluescore":       "server_value_score",
 	"架构标准化系数":                "arch_standardized_factor",
 	"archstandardizedfactor": "arch_standardized_factor",
 }
@@ -216,13 +213,6 @@ func validateHostPackageRow(raw map[string]string) (domain.HostPackageConfig, er
 		coef, err = strconv.ParseFloat(v, 64)
 		if err != nil {
 			return domain.HostPackageConfig{}, fmt.Errorf("架构标准化系数 必须是数字")
-		}
-	}
-	serverValueScore := 0.0
-	if v := get("server_value_score"); v != "" {
-		serverValueScore, err = strconv.ParseFloat(v, 64)
-		if err != nil {
-			return domain.HostPackageConfig{}, fmt.Errorf("服务器价值分 必须是数字")
 		}
 	}
 	powerWatts := 0.0
@@ -287,7 +277,6 @@ func validateHostPackageRow(raw map[string]string) (domain.HostPackageConfig, er
 		PowerWatts:             powerWatts,
 		ReleaseYear:            releaseYear,
 		MemoryCapacityGB:       memoryCapacityGB,
-		ServerValueScore:       serverValueScore,
 		ArchStandardizedFactor: coef,
 	}, nil
 }

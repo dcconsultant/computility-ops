@@ -75,6 +75,7 @@ export default function ImportPage() {
   const [tcoResult, setTcoResult] = useState<ValueScoreTCOResult | null>(null);
   const [tcoLoading, setTcoLoading] = useState(false);
   const [performanceLoading, setPerformanceLoading] = useState(false);
+  const [valueConfigVisible, setValueConfigVisible] = useState(false);
 
   async function reloadAll() {
     try {
@@ -143,7 +144,6 @@ export default function ImportPage() {
       x.power_watts,
       x.release_year,
       x.memory_capacity_gb,
-      x.server_value_score,
       x.arch_standardized_factor
     ].some((v) => String(v ?? '').toLowerCase().includes(q)));
   }, [packages, packageKeyword]);
@@ -273,11 +273,10 @@ export default function ImportPage() {
                   { title: '功率(W)', dataIndex: 'power_watts', render: (v: number) => formatFloat(v) },
                   { title: '发布年份', dataIndex: 'release_year', render: (v: number) => formatInt(v) },
                   { title: '内存容量(GB)', dataIndex: 'memory_capacity_gb', render: (v: number) => formatFloat(v) },
-                  { title: '服务器价值分', dataIndex: 'server_value_score', render: (v: number) => formatFloat(v) },
                   { title: '架构标准化系数', dataIndex: 'arch_standardized_factor', render: (v: number) => formatFloat(v) }
                 ]} />
               </Space>,
-              '服务器管理表通过配置类型关联此表；需维护服务器价值分（PSA非数字时基准）、GPU卡数（GPU汇总统计依赖），以及功率/发布年份/内存容量用于后续评估。',
+              '服务器管理表通过配置类型关联此表；需维护GPU卡数（GPU汇总统计依赖），以及功率/发布年份/内存容量用于后续评估。',
               <Space>
                 <Button onClick={exportHostPackageTemplate}>下载导入模板</Button>
                 <Upload {...makeUploadProps('packages')}><Button icon={<UploadOutlined />} loading={uploading === 'packages'}>上传并导入</Button></Upload>
@@ -375,6 +374,7 @@ export default function ImportPage() {
             label: '价值评分配置底座',
             children: (
               <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                {valueConfigVisible ? <>
                 <Row gutter={[16, 16]}>
                   <Col xs={24} lg={12}>
                     <Card
@@ -468,8 +468,9 @@ export default function ImportPage() {
                     {performancePreview?.errors?.length ? <Text type="danger">失败原因：{performancePreview.errors.slice(0, 5).map((e: any) => `第${e.row}行 ${e.reason}`).join('；')}</Text> : null}
                   </Space>
                 </Card>
+                </> : null}
 
-                <Card title="性能折算 + 月TCO试算" extra={<Space><Button onClick={exportValueScoreTCO}>导出Excel</Button><Button loading={performanceLoading || tcoLoading} onClick={async () => {
+                <Card title="价值分析" extra={<Space><Button onClick={() => setValueConfigVisible((v) => !v)}>参数配置</Button><Button onClick={exportValueScoreTCO}>导出Excel</Button><Button loading={performanceLoading || tcoLoading} onClick={async () => {
                   setPerformanceLoading(true);
                   setTcoLoading(true);
                   try {

@@ -65,7 +65,6 @@ func (s *Service) ListHostPackages(ctx context.Context) ([]assetdomain.HostPacka
 			DataDiskType:           row.DataDiskType,
 			DataDiskCount:          row.DataDiskCount,
 			StorageCapacityTB:      row.StorageCapacityTB,
-			ServerValueScore:       row.ServerValueScore,
 			ArchStandardizedFactor: row.ArchStandardizedFactor,
 		})
 	}

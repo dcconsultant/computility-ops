@@ -89,8 +89,8 @@ func (r *DatasetRepo) ReplaceHostPackages(ctx context.Context, rows []domain.Hos
 			config_type, scene_category, cpu_logical_cores, gpu_card_count,
 			data_disk_type, data_disk_count, storage_capacity_tb,
 			power_watts, release_year, memory_capacity_gb,
-			server_value_score, arch_standardized_factor
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			arch_standardized_factor
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -108,7 +108,6 @@ func (r *DatasetRepo) ReplaceHostPackages(ctx context.Context, rows []domain.Hos
 			x.PowerWatts,
 			x.ReleaseYear,
 			x.MemoryCapacityGB,
-			x.ServerValueScore,
 			x.ArchStandardizedFactor,
 		); err != nil {
 			return fmt.Errorf("insert host package %s failed: %w", x.ConfigType, err)
@@ -122,7 +121,6 @@ func (r *DatasetRepo) ListHostPackages(ctx context.Context) ([]domain.HostPackag
 		SELECT config_type, COALESCE(scene_category,''), cpu_logical_cores, gpu_card_count,
 			COALESCE(data_disk_type,''), data_disk_count, storage_capacity_tb,
 			power_watts, release_year, memory_capacity_gb,
-			server_value_score,
 			arch_standardized_factor
 		FROM ops_host_packages
 		ORDER BY created_at DESC
@@ -145,7 +143,6 @@ func (r *DatasetRepo) ListHostPackages(ctx context.Context) ([]domain.HostPackag
 			&x.PowerWatts,
 			&x.ReleaseYear,
 			&x.MemoryCapacityGB,
-			&x.ServerValueScore,
 			&x.ArchStandardizedFactor,
 		); err != nil {
 			return nil, err

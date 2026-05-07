@@ -275,8 +275,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			continue
 		}
 
-		baseValue := pkg.ServerValueScore
-		baseScore := baseValue * coef
+		baseScore := coef
 		item := domain.RenewalItem{
 			SN:                     srv.SN,
 			Bucket:                 bucket,

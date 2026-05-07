@@ -49,7 +49,6 @@ export interface HostPackageConfig {
   power_watts?: number;
   release_year?: number;
   memory_capacity_gb?: number;
-  server_value_score?: number;
   arch_standardized_factor: number;
 }
 
