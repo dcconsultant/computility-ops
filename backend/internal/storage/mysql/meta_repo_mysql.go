@@ -112,7 +112,7 @@ func (r *MetaRepo) DeleteModel(ctx context.Context, modelID string) error {
 }
 
 func (r *MetaRepo) ListFields(ctx context.Context, modelID string) ([]domain.MetaField, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT id, model_id, field_code, field_name, category, value_type, required_flag, unique_flag, filterable_flag, sortable_flag, visible_flag, default_value, validation_rule, sort_no, created_at, updated_at FROM md_model_field WHERE model_id=? ORDER BY sort_no ASC`, modelID)
+	rows, err := r.db.QueryContext(ctx, `SELECT id, model_id, field_code, field_name, category, value_type, required_flag, unique_flag, filterable_flag, sortable_flag, visible_flag, default_value, validation_rule, enum_options_json, sort_no, created_at, updated_at FROM md_model_field WHERE model_id=? ORDER BY sort_no ASC`, modelID)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +121,8 @@ func (r *MetaRepo) ListFields(ctx context.Context, modelID string) ([]domain.Met
 	for rows.Next() {
 		var f domain.MetaField
 		var req, uniq, fil, sor, vis int
-		if err := rows.Scan(&f.ID, &f.ModelID, &f.FieldCode, &f.FieldName, &f.Category, &f.ValueType, &req, &uniq, &fil, &sor, &vis, &f.DefaultValue, &f.ValidationRule, &f.SortNo, &f.CreatedAt, &f.UpdatedAt); err != nil {
+		var enumJSON string
+		if err := rows.Scan(&f.ID, &f.ModelID, &f.FieldCode, &f.FieldName, &f.Category, &f.ValueType, &req, &uniq, &fil, &sor, &vis, &f.DefaultValue, &f.ValidationRule, &enumJSON, &f.SortNo, &f.CreatedAt, &f.UpdatedAt); err != nil {
 			return nil, err
 		}
 		f.Required = req == 1
@@ -129,19 +130,23 @@ func (r *MetaRepo) ListFields(ctx context.Context, modelID string) ([]domain.Met
 		f.Filterable = fil == 1
 		f.Sortable = sor == 1
 		f.Visible = vis == 1
+		if strings.TrimSpace(enumJSON) != "" {
+			_ = json.Unmarshal([]byte(enumJSON), &f.EnumOptions)
+		}
 		out = append(out, f)
 	}
 	return out, rows.Err()
 }
 func (r *MetaRepo) CreateField(ctx context.Context, field domain.MetaField) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO md_model_field (id, model_id, field_code, field_name, category, value_type, required_flag, unique_flag, filterable_flag, sortable_flag, visible_flag, default_value, validation_rule, sort_no, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		field.ID, field.ModelID, field.FieldCode, field.FieldName, field.Category, field.ValueType, boolToInt(field.Required), boolToInt(field.Unique), boolToInt(field.Filterable), boolToInt(field.Sortable), boolToInt(field.Visible), field.DefaultValue, field.ValidationRule, field.SortNo, field.CreatedAt, field.UpdatedAt)
+	_, err := r.db.ExecContext(ctx, `INSERT INTO md_model_field (id, model_id, field_code, field_name, category, value_type, required_flag, unique_flag, filterable_flag, sortable_flag, visible_flag, default_value, validation_rule, enum_options_json, sort_no, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		field.ID, field.ModelID, field.FieldCode, field.FieldName, field.Category, field.ValueType, boolToInt(field.Required), boolToInt(field.Unique), boolToInt(field.Filterable), boolToInt(field.Sortable), boolToInt(field.Visible), field.DefaultValue, field.ValidationRule, mustJSON(field.EnumOptions), field.SortNo, field.CreatedAt, field.UpdatedAt)
 	return err
 }
 func (r *MetaRepo) GetField(ctx context.Context, modelID, fieldID string) (domain.MetaField, error) {
 	var f domain.MetaField
 	var req, uniq, fil, sor, vis int
-	err := r.db.QueryRowContext(ctx, `SELECT id, model_id, field_code, field_name, category, value_type, required_flag, unique_flag, filterable_flag, sortable_flag, visible_flag, default_value, validation_rule, sort_no, created_at, updated_at FROM md_model_field WHERE model_id=? AND id=?`, modelID, fieldID).Scan(&f.ID, &f.ModelID, &f.FieldCode, &f.FieldName, &f.Category, &f.ValueType, &req, &uniq, &fil, &sor, &vis, &f.DefaultValue, &f.ValidationRule, &f.SortNo, &f.CreatedAt, &f.UpdatedAt)
+	var enumJSON string
+	err := r.db.QueryRowContext(ctx, `SELECT id, model_id, field_code, field_name, category, value_type, required_flag, unique_flag, filterable_flag, sortable_flag, visible_flag, default_value, validation_rule, enum_options_json, sort_no, created_at, updated_at FROM md_model_field WHERE model_id=? AND id=?`, modelID, fieldID).Scan(&f.ID, &f.ModelID, &f.FieldCode, &f.FieldName, &f.Category, &f.ValueType, &req, &uniq, &fil, &sor, &vis, &f.DefaultValue, &f.ValidationRule, &enumJSON, &f.SortNo, &f.CreatedAt, &f.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return domain.MetaField{}, fmt.Errorf("field %s not found", fieldID)
@@ -153,12 +158,16 @@ func (r *MetaRepo) GetField(ctx context.Context, modelID, fieldID string) (domai
 	f.Filterable = fil == 1
 	f.Sortable = sor == 1
 	f.Visible = vis == 1
+	if strings.TrimSpace(enumJSON) != "" {
+		_ = json.Unmarshal([]byte(enumJSON), &f.EnumOptions)
+	}
 	return f, nil
 }
 func (r *MetaRepo) GetFieldByCode(ctx context.Context, modelID, fieldCode string) (domain.MetaField, error) {
 	var f domain.MetaField
 	var req, uniq, fil, sor, vis int
-	err := r.db.QueryRowContext(ctx, `SELECT id, model_id, field_code, field_name, category, value_type, required_flag, unique_flag, filterable_flag, sortable_flag, visible_flag, default_value, validation_rule, sort_no, created_at, updated_at FROM md_model_field WHERE model_id=? AND field_code=?`, modelID, fieldCode).Scan(&f.ID, &f.ModelID, &f.FieldCode, &f.FieldName, &f.Category, &f.ValueType, &req, &uniq, &fil, &sor, &vis, &f.DefaultValue, &f.ValidationRule, &f.SortNo, &f.CreatedAt, &f.UpdatedAt)
+	var enumJSON string
+	err := r.db.QueryRowContext(ctx, `SELECT id, model_id, field_code, field_name, category, value_type, required_flag, unique_flag, filterable_flag, sortable_flag, visible_flag, default_value, validation_rule, enum_options_json, sort_no, created_at, updated_at FROM md_model_field WHERE model_id=? AND field_code=?`, modelID, fieldCode).Scan(&f.ID, &f.ModelID, &f.FieldCode, &f.FieldName, &f.Category, &f.ValueType, &req, &uniq, &fil, &sor, &vis, &f.DefaultValue, &f.ValidationRule, &enumJSON, &f.SortNo, &f.CreatedAt, &f.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return domain.MetaField{}, fmt.Errorf("field_code %s not found", fieldCode)
@@ -170,11 +179,14 @@ func (r *MetaRepo) GetFieldByCode(ctx context.Context, modelID, fieldCode string
 	f.Filterable = fil == 1
 	f.Sortable = sor == 1
 	f.Visible = vis == 1
+	if strings.TrimSpace(enumJSON) != "" {
+		_ = json.Unmarshal([]byte(enumJSON), &f.EnumOptions)
+	}
 	return f, nil
 }
 func (r *MetaRepo) UpdateField(ctx context.Context, field domain.MetaField) error {
-	res, err := r.db.ExecContext(ctx, `UPDATE md_model_field SET field_name=?, category=?, value_type=?, required_flag=?, unique_flag=?, filterable_flag=?, sortable_flag=?, visible_flag=?, default_value=?, validation_rule=?, updated_at=? WHERE model_id=? AND id=?`,
-		field.FieldName, field.Category, field.ValueType, boolToInt(field.Required), boolToInt(field.Unique), boolToInt(field.Filterable), boolToInt(field.Sortable), boolToInt(field.Visible), field.DefaultValue, field.ValidationRule, field.UpdatedAt, field.ModelID, field.ID)
+	res, err := r.db.ExecContext(ctx, `UPDATE md_model_field SET field_name=?, category=?, value_type=?, required_flag=?, unique_flag=?, filterable_flag=?, sortable_flag=?, visible_flag=?, default_value=?, validation_rule=?, enum_options_json=?, updated_at=? WHERE model_id=? AND id=?`,
+		field.FieldName, field.Category, field.ValueType, boolToInt(field.Required), boolToInt(field.Unique), boolToInt(field.Filterable), boolToInt(field.Sortable), boolToInt(field.Visible), field.DefaultValue, field.ValidationRule, mustJSON(field.EnumOptions), field.UpdatedAt, field.ModelID, field.ID)
 	if err != nil {
 		return err
 	}
@@ -335,4 +347,9 @@ func (r *MetaRepo) GetVersion(ctx context.Context, modelID string, versionNo int
 		return domain.MetaModelVersion{}, err
 	}
 	return v, nil
+}
+
+func mustJSON(v any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
 }

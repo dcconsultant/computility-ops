@@ -442,6 +442,12 @@ export interface MetaModel {
   updated_at: string;
 }
 
+export interface MetaEnumOption {
+  value: string;
+  label: string;
+  disabled?: boolean;
+}
+
 export interface MetaField {
   id: string;
   model_id: string;
@@ -456,6 +462,7 @@ export interface MetaField {
   visible: boolean;
   default_value?: string;
   validation_rule?: string;
+  enum_options?: MetaEnumOption[];
   sort_no: number;
   created_at: string;
   updated_at: string;

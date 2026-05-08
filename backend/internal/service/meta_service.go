@@ -135,6 +135,7 @@ type CreateFieldInput struct {
 	Visible        bool
 	DefaultValue   string
 	ValidationRule string
+	EnumOptions    []domain.MetaEnumOption
 }
 
 type UpdateFieldInput struct {
@@ -148,6 +149,7 @@ type UpdateFieldInput struct {
 	Visible        bool
 	DefaultValue   string
 	ValidationRule string
+	EnumOptions    []domain.MetaEnumOption
 }
 
 func (s *MetaService) CreateField(ctx context.Context, modelID string, in CreateFieldInput) (domain.MetaField, error) {
@@ -166,12 +168,16 @@ func (s *MetaService) CreateField(ctx context.Context, modelID string, in Create
 	if strings.TrimSpace(in.ValueType) == "" {
 		return domain.MetaField{}, fmt.Errorf("value_type is required")
 	}
+	enumOptions, err := validateEnumOptions(strings.TrimSpace(in.ValueType), in.EnumOptions)
+	if err != nil {
+		return domain.MetaField{}, err
+	}
 	if _, err := s.repo.GetFieldByCode(ctx, modelID, code); err == nil {
 		return domain.MetaField{}, fmt.Errorf("field_code already exists in model")
 	}
 	fields, _ := s.repo.ListFields(ctx, modelID)
 	now := time.Now()
-	field := domain.MetaField{ID: fmt.Sprintf("%d", now.UnixNano()), ModelID: modelID, FieldCode: code, FieldName: name, Category: strings.TrimSpace(in.Category), ValueType: strings.TrimSpace(in.ValueType), Required: in.Required, Unique: in.Unique, Filterable: in.Filterable, Sortable: in.Sortable, Visible: in.Visible, DefaultValue: strings.TrimSpace(in.DefaultValue), ValidationRule: strings.TrimSpace(in.ValidationRule), SortNo: len(fields) + 1, CreatedAt: now, UpdatedAt: now}
+	field := domain.MetaField{ID: fmt.Sprintf("%d", now.UnixNano()), ModelID: modelID, FieldCode: code, FieldName: name, Category: strings.TrimSpace(in.Category), ValueType: strings.TrimSpace(in.ValueType), Required: in.Required, Unique: in.Unique, Filterable: in.Filterable, Sortable: in.Sortable, Visible: in.Visible, DefaultValue: strings.TrimSpace(in.DefaultValue), ValidationRule: strings.TrimSpace(in.ValidationRule), EnumOptions: enumOptions, SortNo: len(fields) + 1, CreatedAt: now, UpdatedAt: now}
 	if err := s.repo.CreateField(ctx, field); err != nil {
 		return domain.MetaField{}, err
 	}
@@ -190,6 +196,10 @@ func (s *MetaService) UpdateField(ctx context.Context, modelID, fieldID string, 
 	if strings.TrimSpace(in.ValueType) == "" {
 		return domain.MetaField{}, fmt.Errorf("value_type is required")
 	}
+	enumOptions, err := validateEnumOptions(strings.TrimSpace(in.ValueType), in.EnumOptions)
+	if err != nil {
+		return domain.MetaField{}, err
+	}
 	f.FieldName = name
 	f.Category = strings.TrimSpace(in.Category)
 	f.ValueType = strings.TrimSpace(in.ValueType)
@@ -200,6 +210,7 @@ func (s *MetaService) UpdateField(ctx context.Context, modelID, fieldID string, 
 	f.Visible = in.Visible
 	f.DefaultValue = strings.TrimSpace(in.DefaultValue)
 	f.ValidationRule = strings.TrimSpace(in.ValidationRule)
+	f.EnumOptions = enumOptions
 	f.UpdatedAt = time.Now()
 	if err := s.repo.UpdateField(ctx, f); err != nil {
 		return domain.MetaField{}, err
@@ -499,4 +510,31 @@ func (s *MetaService) validateNoCycle(ctx context.Context, modelID string) error
 		}
 	}
 	return nil
+}
+
+func validateEnumOptions(valueType string, options []domain.MetaEnumOption) ([]domain.MetaEnumOption, error) {
+	if valueType != "enum" {
+		return nil, nil
+	}
+	if len(options) == 0 {
+		return nil, fmt.Errorf("enum_options is required when value_type=enum")
+	}
+	seen := map[string]struct{}{}
+	out := make([]domain.MetaEnumOption, 0, len(options))
+	for _, opt := range options {
+		v := strings.TrimSpace(opt.Value)
+		l := strings.TrimSpace(opt.Label)
+		if v == "" || l == "" {
+			return nil, fmt.Errorf("enum option value/label is required")
+		}
+		if len(v) > 64 || len(l) > 128 {
+			return nil, fmt.Errorf("enum option length exceeds limit")
+		}
+		if _, ok := seen[v]; ok {
+			return nil, fmt.Errorf("enum option value duplicated: %s", v)
+		}
+		seen[v] = struct{}{}
+		out = append(out, domain.MetaEnumOption{Value: v, Label: l, Disabled: opt.Disabled})
+	}
+	return out, nil
 }

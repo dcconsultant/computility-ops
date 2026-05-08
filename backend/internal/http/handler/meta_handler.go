@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"computility-ops/backend/internal/domain"
 	"computility-ops/backend/internal/service"
 	"github.com/gin-gonic/gin"
 )
@@ -109,6 +110,7 @@ func (h *MetaHandler) CreateField(c *gin.Context) {
 		FieldCode: req.FieldCode, FieldName: req.FieldName, Category: req.Category, ValueType: req.ValueType,
 		Required: req.Required, Unique: req.Unique, Filterable: req.Filterable, Sortable: req.Sortable, Visible: req.Visible,
 		DefaultValue: req.DefaultValue, ValidationRule: req.ValidationRule,
+		EnumOptions: toDomainEnumOptions(req.EnumOptions),
 	})
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
@@ -132,6 +134,7 @@ func (h *MetaHandler) UpdateField(c *gin.Context) {
 		FieldName: req.FieldName, Category: req.Category, ValueType: req.ValueType,
 		Required: req.Required, Unique: req.Unique, Filterable: req.Filterable, Sortable: req.Sortable, Visible: req.Visible,
 		DefaultValue: req.DefaultValue, ValidationRule: req.ValidationRule,
+		EnumOptions: toDomainEnumOptions(req.EnumOptions),
 	})
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
@@ -313,4 +316,12 @@ func (h *MetaHandler) RollbackModel(c *gin.Context) {
 		return
 	}
 	ok(c, m)
+}
+
+func toDomainEnumOptions(in []MetaEnumOptionReq) []domain.MetaEnumOption {
+	out := make([]domain.MetaEnumOption, 0, len(in))
+	for _, v := range in {
+		out = append(out, domain.MetaEnumOption{Value: v.Value, Label: v.Label, Disabled: v.Disabled})
+	}
+	return out
 }

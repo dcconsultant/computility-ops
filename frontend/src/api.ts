@@ -36,7 +36,8 @@ import type {
   MetaModel,
   MetaReference,
   MetaModelVersion,
-  MetaModelSnapshot
+  MetaModelSnapshot,
+  MetaEnumOption
 } from './types';
 
 const http = axios.create({ baseURL: '/api/v1' });
@@ -449,6 +450,7 @@ export interface MetaFieldPayload {
   visible?: boolean;
   default_value?: string;
   validation_rule?: string;
+  enum_options?: MetaEnumOption[];
 }
 
 export interface MetaFieldUpdatePayload extends Omit<MetaFieldPayload, 'field_code'> {}

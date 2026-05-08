@@ -74,31 +74,39 @@ type UpdateMetaModelReq struct {
 	Description string `json:"description"`
 }
 
+type MetaEnumOptionReq struct {
+	Value    string `json:"value"`
+	Label    string `json:"label"`
+	Disabled bool   `json:"disabled"`
+}
+
 type CreateMetaFieldReq struct {
-	FieldCode      string `json:"field_code" binding:"required"`
-	FieldName      string `json:"field_name" binding:"required"`
-	Category       string `json:"category"`
-	ValueType      string `json:"value_type" binding:"required"`
-	Required       bool   `json:"required"`
-	Unique         bool   `json:"unique"`
-	Filterable     bool   `json:"filterable"`
-	Sortable       bool   `json:"sortable"`
-	Visible        bool   `json:"visible"`
-	DefaultValue   string `json:"default_value"`
-	ValidationRule string `json:"validation_rule"`
+	FieldCode      string              `json:"field_code" binding:"required"`
+	FieldName      string              `json:"field_name" binding:"required"`
+	Category       string              `json:"category"`
+	ValueType      string              `json:"value_type" binding:"required"`
+	Required       bool                `json:"required"`
+	Unique         bool                `json:"unique"`
+	Filterable     bool                `json:"filterable"`
+	Sortable       bool                `json:"sortable"`
+	Visible        bool                `json:"visible"`
+	DefaultValue   string              `json:"default_value"`
+	ValidationRule string              `json:"validation_rule"`
+	EnumOptions    []MetaEnumOptionReq `json:"enum_options"`
 }
 
 type UpdateMetaFieldReq struct {
-	FieldName      string `json:"field_name" binding:"required"`
-	Category       string `json:"category"`
-	ValueType      string `json:"value_type" binding:"required"`
-	Required       bool   `json:"required"`
-	Unique         bool   `json:"unique"`
-	Filterable     bool   `json:"filterable"`
-	Sortable       bool   `json:"sortable"`
-	Visible        bool   `json:"visible"`
-	DefaultValue   string `json:"default_value"`
-	ValidationRule string `json:"validation_rule"`
+	FieldName      string              `json:"field_name" binding:"required"`
+	Category       string              `json:"category"`
+	ValueType      string              `json:"value_type" binding:"required"`
+	Required       bool                `json:"required"`
+	Unique         bool                `json:"unique"`
+	Filterable     bool                `json:"filterable"`
+	Sortable       bool                `json:"sortable"`
+	Visible        bool                `json:"visible"`
+	DefaultValue   string              `json:"default_value"`
+	ValidationRule string              `json:"validation_rule"`
+	EnumOptions    []MetaEnumOptionReq `json:"enum_options"`
 }
 
 type ReorderMetaFieldsReq struct {

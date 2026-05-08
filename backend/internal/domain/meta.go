@@ -21,23 +21,30 @@ type MetaModel struct {
 	UpdatedAt      time.Time       `json:"updated_at"`
 }
 
+type MetaEnumOption struct {
+	Value    string `json:"value"`
+	Label    string `json:"label"`
+	Disabled bool   `json:"disabled,omitempty"`
+}
+
 type MetaField struct {
-	ID             string    `json:"id"`
-	ModelID        string    `json:"model_id"`
-	FieldCode      string    `json:"field_code"`
-	FieldName      string    `json:"field_name"`
-	Category       string    `json:"category,omitempty"`
-	ValueType      string    `json:"value_type"`
-	Required       bool      `json:"required"`
-	Unique         bool      `json:"unique"`
-	Filterable     bool      `json:"filterable"`
-	Sortable       bool      `json:"sortable"`
-	Visible        bool      `json:"visible"`
-	DefaultValue   string    `json:"default_value,omitempty"`
-	ValidationRule string    `json:"validation_rule,omitempty"`
-	SortNo         int       `json:"sort_no"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID             string           `json:"id"`
+	ModelID        string           `json:"model_id"`
+	FieldCode      string           `json:"field_code"`
+	FieldName      string           `json:"field_name"`
+	Category       string           `json:"category,omitempty"`
+	ValueType      string           `json:"value_type"`
+	Required       bool             `json:"required"`
+	Unique         bool             `json:"unique"`
+	Filterable     bool             `json:"filterable"`
+	Sortable       bool             `json:"sortable"`
+	Visible        bool             `json:"visible"`
+	DefaultValue   string           `json:"default_value,omitempty"`
+	ValidationRule string           `json:"validation_rule,omitempty"`
+	EnumOptions    []MetaEnumOption `json:"enum_options,omitempty"`
+	SortNo         int              `json:"sort_no"`
+	CreatedAt      time.Time        `json:"created_at"`
+	UpdatedAt      time.Time        `json:"updated_at"`
 }
 
 type MetaReference struct {

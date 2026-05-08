@@ -17,6 +17,7 @@ import {
   message,
   Popconfirm,
   Switch,
+  Divider,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -70,6 +71,7 @@ export default function MetaModelPage() {
   const [modelForm] = Form.useForm();
   const [editModelForm] = Form.useForm();
   const [fieldForm] = Form.useForm();
+  const fieldValueType = Form.useWatch('value_type', fieldForm);
   const [refForm] = Form.useForm();
 
   useEffect(() => {
@@ -532,7 +534,7 @@ export default function MetaModelPage() {
         </Form>
       </Modal>
 
-      <Modal title={editingField ? '编辑属性' : '新增属性'} open={fieldOpen} onCancel={() => setFieldOpen(false)} onOk={onSubmitField} width={680}>
+      <Modal title={editingField ? '编辑属性' : '新增属性'} open={fieldOpen} onCancel={() => setFieldOpen(false)} onOk={onSubmitField} width={760}>
         <Form layout="vertical" form={fieldForm}>
           <Row gutter={12}>
             <Col span={12}>
@@ -560,7 +562,56 @@ export default function MetaModelPage() {
             </Col>
           </Row>
           <Form.Item name="validation_rule" label="校验规则"><Input /></Form.Item>
-          <Space wrap>
+
+          {fieldValueType === 'enum' ? (
+            <>
+              <Divider style={{ margin: '8px 0' }} />
+              <Typography.Text strong>枚举项（value + label）</Typography.Text>
+              <Form.List
+                name="enum_options"
+                rules={[
+                  {
+                    validator: async (_, value) => {
+                      if (!value || value.length === 0) {
+                        throw new Error('value_type=enum 时必须至少配置1个枚举项');
+                      }
+                    }
+                  }
+                ]}
+              >
+                {(items, { add, remove }, { errors }) => (
+                  <Space direction="vertical" style={{ width: '100%', marginTop: 8 }}>
+                    {items.map((item) => (
+                      <Row key={item.key} gutter={8} align="middle">
+                        <Col span={9}>
+                          <Form.Item name={[item.name, 'value']} rules={[{ required: true, message: '必填' }]}>
+                            <Input placeholder="value（存储值）" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={9}>
+                          <Form.Item name={[item.name, 'label']} rules={[{ required: true, message: '必填' }]}>
+                            <Input placeholder="label（展示名）" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={4}>
+                          <Form.Item name={[item.name, 'disabled']} valuePropName="checked" initialValue={false}>
+                            <Switch checkedChildren="禁用" unCheckedChildren="启用" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={2}>
+                          <Button danger onClick={() => remove(item.name)}>删</Button>
+                        </Col>
+                      </Row>
+                    ))}
+                    <Button onClick={() => add({ value: '', label: '', disabled: false })}>+ 新增枚举项</Button>
+                    <Form.ErrorList errors={errors} />
+                  </Space>
+                )}
+              </Form.List>
+            </>
+          ) : null}
+
+          <Space wrap style={{ marginTop: 8 }}>
             <Form.Item name="required" valuePropName="checked" label="必填"><Switch /></Form.Item>
             <Form.Item name="unique" valuePropName="checked" label="唯一"><Switch /></Form.Item>
             <Form.Item name="filterable" valuePropName="checked" label="可筛选"><Switch /></Form.Item>
