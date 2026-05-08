@@ -360,6 +360,15 @@ func (s *MetaService) PublishModel(ctx context.Context, modelID string, in Publi
 	if err != nil {
 		return domain.MetaModelVersion{}, err
 	}
+	for _, ref := range refs {
+		targetField, err := s.repo.GetField(ctx, strings.TrimSpace(ref.TargetModelID), strings.TrimSpace(ref.TargetFieldID))
+		if err != nil {
+			return domain.MetaModelVersion{}, fmt.Errorf("reference target field invalid: %w", err)
+		}
+		if !targetField.Unique {
+			return domain.MetaModelVersion{}, fmt.Errorf("reference target field %s must be unique", targetField.FieldCode)
+		}
+	}
 	snapshot := domain.MetaModelSnapshot{Model: m, Fields: fields, References: refs}
 	b, err := json.Marshal(snapshot)
 	if err != nil {
@@ -486,7 +495,7 @@ func (s *MetaService) validateNoCycle(ctx context.Context, modelID string) error
 	}
 	if vis[modelID] == 0 {
 		if dfs(modelID) {
-			return fmt.Errorf("cycle reference detected")
+			return fmt.Errorf("cycle reference detected around model %s", modelID)
 		}
 	}
 	return nil

@@ -6,6 +6,8 @@ import {
   Form,
   Input,
   Modal,
+  Descriptions,
+  Alert,
   Row,
   Select,
   Space,
@@ -34,10 +36,11 @@ import {
   updateMetaReference,
   publishMetaModel,
   listMetaModelVersions,
-  rollbackMetaModel
+  rollbackMetaModel,
+  getMetaModelVersion
 } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
-import type { MetaField, MetaModel, MetaReference, MetaModelVersion } from '../types';
+import type { MetaField, MetaModel, MetaReference, MetaModelVersion, MetaModelSnapshot } from '../types';
 
 const VALUE_TYPES = ['string', 'int', 'decimal', 'bool', 'date', 'datetime', 'enum', 'json'];
 
@@ -58,6 +61,11 @@ export default function MetaModelPage() {
 
   const [editingField, setEditingField] = useState<MetaField | null>(null);
   const [editingRef, setEditingRef] = useState<MetaReference | null>(null);
+
+  const [versionDetailOpen, setVersionDetailOpen] = useState(false);
+  const [versionDetail, setVersionDetail] = useState<{version: MetaModelVersion; snapshot: MetaModelSnapshot} | null>(null);
+  const [versionDiffText, setVersionDiffText] = useState('');
+
 
   const [modelForm] = Form.useForm();
   const [editModelForm] = Form.useForm();
@@ -300,6 +308,37 @@ export default function MetaModelPage() {
     }
   }
 
+
+
+  async function onViewVersion(versionNo: number) {
+    if (!selectedModel) return;
+    try {
+      const current = ensureApiOk(await getMetaModelVersion(selectedModel.id, versionNo));
+      let diff = '';
+      if (versionNo > 1) {
+        try {
+          const prev = ensureApiOk(await getMetaModelVersion(selectedModel.id, versionNo - 1));
+          const c = current.data.snapshot;
+          const p = prev.data.snapshot;
+          const fieldAdded = c.fields.filter((f) => !p.fields.some((x) => x.id === f.id)).length;
+          const fieldRemoved = p.fields.filter((f) => !c.fields.some((x) => x.id === f.id)).length;
+          const refAdded = c.references.filter((r) => !p.references.some((x) => x.id === r.id)).length;
+          const refRemoved = p.references.filter((r) => !c.references.some((x) => x.id === r.id)).length;
+          diff = `相比 v${versionNo - 1}：字段 +${fieldAdded} / -${fieldRemoved}，关联 +${refAdded} / -${refRemoved}`;
+        } catch {
+          diff = '未能获取上一版本，暂不显示差异';
+        }
+      } else {
+        diff = '首个版本，无上一版本可比较';
+      }
+      setVersionDetail(current.data);
+      setVersionDiffText(diff);
+      setVersionDetailOpen(true);
+    } catch (e) {
+      message.error(parseApiError(e, '加载版本详情失败'));
+    }
+  }
+
   const modelColumns: ColumnsType<MetaModel> = [
     { title: '模型编码', dataIndex: 'model_code', key: 'model_code' },
     { title: '模型名称', dataIndex: 'model_name', key: 'model_name' },
@@ -442,7 +481,7 @@ export default function MetaModelPage() {
                   width: 120,
                   render: (_:unknown, row: MetaModelVersion) => (
                     <Popconfirm title={`确认回滚到 v${row.version_no} ?`} onConfirm={() => onRollbackModel(row.version_no)}>
-                      <Button size="small">回滚</Button>
+                      <Space><Button size="small" onClick={() => onViewVersion(row.version_no)}>查看</Button><Button size="small">回滚</Button></Space>
                     </Popconfirm>
                   )
                 }
@@ -544,6 +583,42 @@ export default function MetaModelPage() {
           </Form.Item>
         </Form>
       </Modal>
+
+
+      <Modal title="版本详情" open={versionDetailOpen} footer={null} onCancel={() => setVersionDetailOpen(false)} width={900}>
+        {versionDetail ? (
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Descriptions bordered size="small" column={2}>
+              <Descriptions.Item label="版本号">v{versionDetail.version.version_no}</Descriptions.Item>
+              <Descriptions.Item label="发布时间">{versionDetail.version.published_at}</Descriptions.Item>
+              <Descriptions.Item label="发布人">{versionDetail.version.published_by || '-'}</Descriptions.Item>
+              <Descriptions.Item label="变更说明">{versionDetail.version.change_summary || '-'}</Descriptions.Item>
+            </Descriptions>
+            <Alert type="info" message={versionDiffText} showIcon />
+            <Row gutter={16}>
+              <Col span={12}>
+                <Card size="small" title={`字段快照 (${versionDetail.snapshot.fields.length})`}>
+                  <Space direction="vertical" size={4}>
+                    {versionDetail.snapshot.fields.map((f) => (
+                      <Typography.Text key={f.id}>{f.field_code} / {f.field_name} / {f.value_type}</Typography.Text>
+                    ))}
+                  </Space>
+                </Card>
+              </Col>
+              <Col span={12}>
+                <Card size="small" title={`关联快照 (${versionDetail.snapshot.references.length})`}>
+                  <Space direction="vertical" size={4}>
+                    {versionDetail.snapshot.references.map((r) => (
+                      <Typography.Text key={r.id}>{r.source_field_id}{' -> '}{r.target_model_id}.{r.target_field_id}</Typography.Text>
+                    ))}
+                  </Space>
+                </Card>
+              </Col>
+            </Row>
+          </Space>
+        ) : null}
+      </Modal>
+
     </Space>
   );
 }
