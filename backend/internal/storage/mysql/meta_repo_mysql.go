@@ -121,7 +121,7 @@ func (r *MetaRepo) ListFields(ctx context.Context, modelID string) ([]domain.Met
 	for rows.Next() {
 		var f domain.MetaField
 		var req, uniq, fil, sor, vis int
-		var enumJSON string
+		var enumJSON sql.NullString
 		if err := rows.Scan(&f.ID, &f.ModelID, &f.FieldCode, &f.FieldName, &f.Category, &f.ValueType, &req, &uniq, &fil, &sor, &vis, &f.DefaultValue, &f.ValidationRule, &enumJSON, &f.SortNo, &f.CreatedAt, &f.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -130,8 +130,8 @@ func (r *MetaRepo) ListFields(ctx context.Context, modelID string) ([]domain.Met
 		f.Filterable = fil == 1
 		f.Sortable = sor == 1
 		f.Visible = vis == 1
-		if strings.TrimSpace(enumJSON) != "" {
-			_ = json.Unmarshal([]byte(enumJSON), &f.EnumOptions)
+		if enumJSON.Valid && strings.TrimSpace(enumJSON.String) != "" {
+			_ = json.Unmarshal([]byte(enumJSON.String), &f.EnumOptions)
 		}
 		out = append(out, f)
 	}
@@ -145,7 +145,7 @@ func (r *MetaRepo) CreateField(ctx context.Context, field domain.MetaField) erro
 func (r *MetaRepo) GetField(ctx context.Context, modelID, fieldID string) (domain.MetaField, error) {
 	var f domain.MetaField
 	var req, uniq, fil, sor, vis int
-	var enumJSON string
+	var enumJSON sql.NullString
 	err := r.db.QueryRowContext(ctx, `SELECT id, model_id, field_code, field_name, category, value_type, required_flag, unique_flag, filterable_flag, sortable_flag, visible_flag, default_value, validation_rule, enum_options_json, sort_no, created_at, updated_at FROM md_model_field WHERE model_id=? AND id=?`, modelID, fieldID).Scan(&f.ID, &f.ModelID, &f.FieldCode, &f.FieldName, &f.Category, &f.ValueType, &req, &uniq, &fil, &sor, &vis, &f.DefaultValue, &f.ValidationRule, &enumJSON, &f.SortNo, &f.CreatedAt, &f.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -158,15 +158,15 @@ func (r *MetaRepo) GetField(ctx context.Context, modelID, fieldID string) (domai
 	f.Filterable = fil == 1
 	f.Sortable = sor == 1
 	f.Visible = vis == 1
-	if strings.TrimSpace(enumJSON) != "" {
-		_ = json.Unmarshal([]byte(enumJSON), &f.EnumOptions)
+	if enumJSON.Valid && strings.TrimSpace(enumJSON.String) != "" {
+		_ = json.Unmarshal([]byte(enumJSON.String), &f.EnumOptions)
 	}
 	return f, nil
 }
 func (r *MetaRepo) GetFieldByCode(ctx context.Context, modelID, fieldCode string) (domain.MetaField, error) {
 	var f domain.MetaField
 	var req, uniq, fil, sor, vis int
-	var enumJSON string
+	var enumJSON sql.NullString
 	err := r.db.QueryRowContext(ctx, `SELECT id, model_id, field_code, field_name, category, value_type, required_flag, unique_flag, filterable_flag, sortable_flag, visible_flag, default_value, validation_rule, enum_options_json, sort_no, created_at, updated_at FROM md_model_field WHERE model_id=? AND field_code=?`, modelID, fieldCode).Scan(&f.ID, &f.ModelID, &f.FieldCode, &f.FieldName, &f.Category, &f.ValueType, &req, &uniq, &fil, &sor, &vis, &f.DefaultValue, &f.ValidationRule, &enumJSON, &f.SortNo, &f.CreatedAt, &f.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -179,8 +179,8 @@ func (r *MetaRepo) GetFieldByCode(ctx context.Context, modelID, fieldCode string
 	f.Filterable = fil == 1
 	f.Sortable = sor == 1
 	f.Visible = vis == 1
-	if strings.TrimSpace(enumJSON) != "" {
-		_ = json.Unmarshal([]byte(enumJSON), &f.EnumOptions)
+	if enumJSON.Valid && strings.TrimSpace(enumJSON.String) != "" {
+		_ = json.Unmarshal([]byte(enumJSON.String), &f.EnumOptions)
 	}
 	return f, nil
 }
