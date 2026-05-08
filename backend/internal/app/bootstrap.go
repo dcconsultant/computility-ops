@@ -26,7 +26,7 @@ import (
 )
 
 func Build(cfg config.Config) (*gin.Engine, error) {
-	serverRepo, datasetRepo, renewalRepo, contractRepo, driver, err := buildRepos(cfg)
+	serverRepo, datasetRepo, renewalRepo, contractRepo, metaRepo, driver, err := buildRepos(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -36,6 +36,7 @@ func Build(cfg config.Config) (*gin.Engine, error) {
 	valueScoreSetupSvc := service.NewValueScoreSetupService(datasetRepo, serverRepo)
 	renewalSvc := service.NewRenewalService(serverRepo, datasetRepo, renewalRepo)
 	contractSvc := service.NewContractService(contractRepo)
+	metaSvc := service.NewMetaService(metaRepo)
 
 	rules, err := rpinfra.LoadScoringRules(os.Getenv("REPLACEMENT_RULES_FILE"))
 	if err != nil {
@@ -47,31 +48,32 @@ func Build(cfg config.Config) (*gin.Engine, error) {
 	renewalReadSvc := renewalapp.NewService(renewalRepo)
 
 	h := httpapi.Handlers{
-		Import:               handler.NewImportHandler(importSvc),
-		Renewal:              handler.NewRenewalHandler(renewalSvc),
-		Contract:             handler.NewContractHandler(contractSvc),
-		Cabinet:              handler.NewCabinetHandler(cabinetSvc),
-		System:               handler.NewSystemHandler(),
-		ValueScoreSetup:      handler.NewValueScoreSetupHandler(valueScoreSetupSvc),
-		StorageDriver:        driver,
-		ReplacementPlanning:  rpapi.NewHandler(replacementSvc),
-		ReconfigPlanning:     rcapi.NewHandler(reconfigSvc),
-		SelfRepair:           srapi.NewHandler(selfRepairSvc),
-		RenewalRead:          renewalapi.NewLegacyQueryAdapter(renewalReadSvc),
+		Import:              handler.NewImportHandler(importSvc),
+		Renewal:             handler.NewRenewalHandler(renewalSvc),
+		Contract:            handler.NewContractHandler(contractSvc),
+		Cabinet:             handler.NewCabinetHandler(cabinetSvc),
+		System:              handler.NewSystemHandler(),
+		ValueScoreSetup:     handler.NewValueScoreSetupHandler(valueScoreSetupSvc),
+		MetaData:            handler.NewMetaHandler(metaSvc),
+		StorageDriver:       driver,
+		ReplacementPlanning: rpapi.NewHandler(replacementSvc),
+		ReconfigPlanning:    rcapi.NewHandler(reconfigSvc),
+		SelfRepair:          srapi.NewHandler(selfRepairSvc),
+		RenewalRead:         renewalapi.NewLegacyQueryAdapter(renewalReadSvc),
 	}
 	return httpapi.NewRouter(h), nil
 }
 
-func buildRepos(cfg config.Config) (repository.ServerRepo, repository.DatasetRepo, repository.RenewalPlanRepo, repository.ContractRepo, string, error) {
+func buildRepos(cfg config.Config) (repository.ServerRepo, repository.DatasetRepo, repository.RenewalPlanRepo, repository.ContractRepo, repository.MetaRepo, string, error) {
 	switch cfg.StorageDriver {
 	case "memory", "":
-		return mem.NewServerRepo(), mem.NewDatasetRepo(), mem.NewRenewalRepo(), mem.NewContractRepo(), "memory", nil
+		return mem.NewServerRepo(), mem.NewDatasetRepo(), mem.NewRenewalRepo(), mem.NewContractRepo(), mem.NewMetaRepo(), "memory", nil
 	case "mysql":
 		if cfg.MySQLDSN == "" {
-			return nil, nil, nil, nil, "", fmt.Errorf("MYSQL_DSN is required when STORAGE_DRIVER=mysql")
+			return nil, nil, nil, nil, nil, "", fmt.Errorf("MYSQL_DSN is required when STORAGE_DRIVER=mysql")
 		}
-		return mysql.NewServerRepo(cfg.MySQLDSN), mysql.NewDatasetRepo(cfg.MySQLDSN), mysql.NewRenewalRepo(cfg.MySQLDSN), mysql.NewContractRepo(cfg.MySQLDSN), "mysql", nil
+		return mysql.NewServerRepo(cfg.MySQLDSN), mysql.NewDatasetRepo(cfg.MySQLDSN), mysql.NewRenewalRepo(cfg.MySQLDSN), mysql.NewContractRepo(cfg.MySQLDSN), mysql.NewMetaRepo(cfg.MySQLDSN), "mysql", nil
 	default:
-		return nil, nil, nil, nil, "", fmt.Errorf("unsupported STORAGE_DRIVER: %s", cfg.StorageDriver)
+		return nil, nil, nil, nil, nil, "", fmt.Errorf("unsupported STORAGE_DRIVER: %s", cfg.StorageDriver)
 	}
 }

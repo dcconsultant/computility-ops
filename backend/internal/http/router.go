@@ -11,13 +11,14 @@ import (
 )
 
 type Handlers struct {
-	Import        *handler.ImportHandler
-	Renewal       *handler.RenewalHandler
-	Contract      *handler.ContractHandler
-	Cabinet       *handler.CabinetHandler
-	System        *handler.SystemHandler
-	ValueScoreSetup *handler.ValueScoreSetupHandler
-	StorageDriver string
+	Import              *handler.ImportHandler
+	Renewal             *handler.RenewalHandler
+	Contract            *handler.ContractHandler
+	Cabinet             *handler.CabinetHandler
+	System              *handler.SystemHandler
+	ValueScoreSetup     *handler.ValueScoreSetupHandler
+	MetaData            *handler.MetaHandler
+	StorageDriver       string
 	ReplacementPlanning *rpapi.Handler
 	ReconfigPlanning    *rcapi.Handler
 	SelfRepair          *srapi.Handler
@@ -114,6 +115,23 @@ func NewRouter(h Handlers) *gin.Engine {
 
 		v1.GET("/ops/decisions/replacement", h.ReplacementPlanning.ListSuggestions)
 		v1.GET("/ops/decisions/reconfig", h.ReconfigPlanning.ListSuggestions)
+		v1.POST("/meta/models", h.MetaData.CreateModel)
+		v1.GET("/meta/models", h.MetaData.ListModels)
+		v1.GET("/meta/models/:model_id", h.MetaData.GetModel)
+		v1.PUT("/meta/models/:model_id", h.MetaData.UpdateModel)
+		v1.POST("/meta/models/:model_id/archive", h.MetaData.ArchiveModel)
+		v1.DELETE("/meta/models/:model_id", h.MetaData.DeleteModel)
+
+		v1.POST("/meta/models/:model_id/fields", h.MetaData.CreateField)
+		v1.PUT("/meta/models/:model_id/fields/:field_id", h.MetaData.UpdateField)
+		v1.DELETE("/meta/models/:model_id/fields/:field_id", h.MetaData.DeleteField)
+		v1.PUT("/meta/models/:model_id/fields/reorder", h.MetaData.ReorderFields)
+
+		v1.POST("/meta/models/:model_id/references", h.MetaData.CreateReference)
+		v1.PUT("/meta/models/:model_id/references/:ref_id", h.MetaData.UpdateReference)
+		v1.DELETE("/meta/models/:model_id/references/:ref_id", h.MetaData.DeleteReference)
+		v1.GET("/meta/models/:model_id/references", h.MetaData.ListReferences)
+
 		v1.GET("/ops/decisions/self-repair", h.SelfRepair.ListSuggestions)
 	}
 	return r

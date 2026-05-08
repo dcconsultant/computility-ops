@@ -62,3 +62,55 @@ type UpdateContractReq struct {
 	BusinessContact string  `json:"business_contact" binding:"required"`
 	TechContact     string  `json:"tech_contact" binding:"required"`
 }
+
+type CreateMetaModelReq struct {
+	ModelCode   string `json:"model_code" binding:"required"`
+	ModelName   string `json:"model_name" binding:"required"`
+	Description string `json:"description"`
+}
+
+type UpdateMetaModelReq struct {
+	ModelName   string `json:"model_name" binding:"required"`
+	Description string `json:"description"`
+}
+
+type CreateMetaFieldReq struct {
+	FieldCode      string `json:"field_code" binding:"required"`
+	FieldName      string `json:"field_name" binding:"required"`
+	Category       string `json:"category"`
+	ValueType      string `json:"value_type" binding:"required"`
+	Required       bool   `json:"required"`
+	Unique         bool   `json:"unique"`
+	Filterable     bool   `json:"filterable"`
+	Sortable       bool   `json:"sortable"`
+	Visible        bool   `json:"visible"`
+	DefaultValue   string `json:"default_value"`
+	ValidationRule string `json:"validation_rule"`
+}
+
+type UpdateMetaFieldReq struct {
+	FieldName      string `json:"field_name" binding:"required"`
+	Category       string `json:"category"`
+	ValueType      string `json:"value_type" binding:"required"`
+	Required       bool   `json:"required"`
+	Unique         bool   `json:"unique"`
+	Filterable     bool   `json:"filterable"`
+	Sortable       bool   `json:"sortable"`
+	Visible        bool   `json:"visible"`
+	DefaultValue   string `json:"default_value"`
+	ValidationRule string `json:"validation_rule"`
+}
+
+type ReorderMetaFieldsReq struct {
+	FieldIDs []string `json:"field_ids" binding:"required,min=1"`
+}
+
+type CreateMetaReferenceReq struct {
+	SourceFieldID  string   `json:"source_field_id" binding:"required"`
+	TargetModelID  string   `json:"target_model_id" binding:"required"`
+	TargetFieldID  string   `json:"target_field_id" binding:"required"`
+	DisplayFields  []string `json:"display_fields"`
+	OnDeleteAction string   `json:"on_delete_action"`
+}
+
+type UpdateMetaReferenceReq = CreateMetaReferenceReq
