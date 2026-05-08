@@ -427,3 +427,48 @@ export interface Contract {
   created_at?: string;
   updated_at?: string;
 }
+
+
+export type MetaModelStatus = 'draft' | 'published' | 'archived';
+
+export interface MetaModel {
+  id: string;
+  model_code: string;
+  model_name: string;
+  description?: string;
+  status: MetaModelStatus;
+  current_version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MetaField {
+  id: string;
+  model_id: string;
+  field_code: string;
+  field_name: string;
+  category?: string;
+  value_type: string;
+  required: boolean;
+  unique: boolean;
+  filterable: boolean;
+  sortable: boolean;
+  visible: boolean;
+  default_value?: string;
+  validation_rule?: string;
+  sort_no: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MetaReference {
+  id: string;
+  model_id: string;
+  source_field_id: string;
+  target_model_id: string;
+  target_field_id: string;
+  display_fields: string[];
+  on_delete_action: string;
+  created_at: string;
+  updated_at: string;
+}

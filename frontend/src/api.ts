@@ -31,7 +31,10 @@ import type {
   StorageTopServerRate,
   ImportErrorInsight,
   Contract,
-  ContractAttachment
+  ContractAttachment,
+  MetaField,
+  MetaModel,
+  MetaReference
 } from './types';
 
 const http = axios.create({ baseURL: '/api/v1' });
@@ -417,5 +420,111 @@ export async function testMySQLConnection(payload: MySQLTestPayload) {
 
 export async function listImportErrors(limit = 20) {
   const { data } = await http.get<ApiResp<ListData<ImportErrorInsight>>>(`/system/import-errors?limit=${limit}`);
+  return data;
+}
+
+
+export interface MetaModelPayload {
+  model_code: string;
+  model_name: string;
+  description?: string;
+}
+
+export interface MetaModelUpdatePayload {
+  model_name: string;
+  description?: string;
+}
+
+export interface MetaFieldPayload {
+  field_code: string;
+  field_name: string;
+  category?: string;
+  value_type: string;
+  required?: boolean;
+  unique?: boolean;
+  filterable?: boolean;
+  sortable?: boolean;
+  visible?: boolean;
+  default_value?: string;
+  validation_rule?: string;
+}
+
+export interface MetaFieldUpdatePayload extends Omit<MetaFieldPayload, 'field_code'> {}
+
+export interface MetaReferencePayload {
+  source_field_id: string;
+  target_model_id: string;
+  target_field_id: string;
+  display_fields?: string[];
+  on_delete_action?: string;
+}
+
+export async function listMetaModels(status?: string) {
+  const { data } = await http.get<ApiResp<ListData<MetaModel>>>('/meta/models', { params: status ? { status } : undefined });
+  return data;
+}
+
+export async function createMetaModel(payload: MetaModelPayload) {
+  const { data } = await http.post<ApiResp<MetaModel>>('/meta/models', payload);
+  return data;
+}
+
+export async function getMetaModel(modelId: string) {
+  const { data } = await http.get<ApiResp<{ model: MetaModel; fields: MetaField[] }>>(`/meta/models/${modelId}`);
+  return data;
+}
+
+export async function updateMetaModel(modelId: string, payload: MetaModelUpdatePayload) {
+  const { data } = await http.put<ApiResp<MetaModel>>(`/meta/models/${modelId}`, payload);
+  return data;
+}
+
+export async function archiveMetaModel(modelId: string) {
+  const { data } = await http.post<ApiResp<MetaModel>>(`/meta/models/${modelId}/archive`, {});
+  return data;
+}
+
+export async function deleteMetaModel(modelId: string) {
+  const { data } = await http.delete<ApiResp<{ deleted: boolean; model_id: string }>>(`/meta/models/${modelId}`);
+  return data;
+}
+
+export async function createMetaField(modelId: string, payload: MetaFieldPayload) {
+  const { data } = await http.post<ApiResp<MetaField>>(`/meta/models/${modelId}/fields`, payload);
+  return data;
+}
+
+export async function updateMetaField(modelId: string, fieldId: string, payload: MetaFieldUpdatePayload) {
+  const { data } = await http.put<ApiResp<MetaField>>(`/meta/models/${modelId}/fields/${fieldId}`, payload);
+  return data;
+}
+
+export async function deleteMetaField(modelId: string, fieldId: string) {
+  const { data } = await http.delete<ApiResp<{ deleted: boolean; field_id: string }>>(`/meta/models/${modelId}/fields/${fieldId}`);
+  return data;
+}
+
+export async function reorderMetaFields(modelId: string, fieldIds: string[]) {
+  const { data } = await http.put<ApiResp<MetaField[]>>(`/meta/models/${modelId}/fields/reorder`, { field_ids: fieldIds });
+  return data;
+}
+
+export async function listMetaReferences(modelId: string) {
+  const { data } = await http.get<ApiResp<ListData<MetaReference>>>(`/meta/models/${modelId}/references`);
+  return data;
+}
+
+export async function createMetaReference(modelId: string, payload: MetaReferencePayload) {
+  const { data } = await http.post<ApiResp<MetaReference>>(`/meta/models/${modelId}/references`, payload);
+  return data;
+}
+
+export async function updateMetaReference(modelId: string, refId: string, payload: MetaReferencePayload) {
+  const { data } = await http.put<ApiResp<MetaReference>>(`/meta/models/${modelId}/references/${refId}`, payload);
+  return data;
+}
+
+export async function deleteMetaReference(modelId: string, refId: string) {
+  const { data } = await http.delete<ApiResp<{ deleted: boolean; ref_id: string }>>(`/meta/models/${modelId}/references/${refId}`);
   return data;
 }

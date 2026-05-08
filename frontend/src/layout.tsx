@@ -23,7 +23,9 @@ export default function AppLayout() {
     ? '/plan'
     : location.pathname.startsWith('/failure/')
       ? '/failure'
-      : location.pathname;
+      : location.pathname.startsWith('/meta-models')
+        ? '/meta-models'
+        : location.pathname;
   const isFailureDashboard = location.pathname === '/failure/dashboard';
 
   useEffect(() => {
@@ -73,7 +75,8 @@ export default function AppLayout() {
             { key: '/import', label: <Link to="/import">配置管理</Link> },
             { key: '/contracts', label: <Link to="/contracts">合同管理</Link> },
             { key: '/plan', label: <Link to="/plan">续保管理</Link> },
-            { key: '/failure', label: <Link to="/failure">故障率分析</Link> }
+            { key: '/failure', label: <Link to="/failure">故障率分析</Link> },
+            { key: '/meta-models', label: <Link to="/meta-models">元数据管理</Link> }
           ]}
           style={{ flex: 1, minWidth: 0 }}
         />

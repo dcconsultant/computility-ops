@@ -8,6 +8,7 @@ const PlanPage = lazy(() => import('./pages/PlanPage'));
 const PlanDetailPage = lazy(() => import('./pages/PlanDetailPage'));
 const FailureAnalysisPage = lazy(() => import('./pages/FailureAnalysisPage'));
 const FailureDashboardPage = lazy(() => import('./pages/FailureDashboardPage'));
+const MetaModelPage = lazy(() => import('./pages/MetaModelPage'));
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
           <Route path="/plan/:planId" element={<PlanDetailPage />} />
           <Route path="/failure" element={<FailureAnalysisPage />} />
           <Route path="/failure/dashboard" element={<FailureDashboardPage />} />
+          <Route path="/meta-models" element={<MetaModelPage />} />
           <Route path="/result" element={<Navigate to="/plan" replace />} />
           <Route path="/result/:planId" element={<PlanDetailPage />} />
         </Route>
