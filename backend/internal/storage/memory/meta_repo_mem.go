@@ -18,6 +18,7 @@ type MetaRepo struct {
 	fields      map[string]map[string]domain.MetaField
 	fieldByCode map[string]map[string]string
 	references  map[string]map[string]domain.MetaReference
+	versions    map[string]map[int]domain.MetaModelVersion
 }
 
 func NewMetaRepo() *MetaRepo {
@@ -27,6 +28,7 @@ func NewMetaRepo() *MetaRepo {
 		fields:      map[string]map[string]domain.MetaField{},
 		fieldByCode: map[string]map[string]string{},
 		references:  map[string]map[string]domain.MetaReference{},
+		versions:    map[string]map[int]domain.MetaModelVersion{},
 	}
 }
 
@@ -249,3 +251,47 @@ func (r *MetaRepo) DeleteReference(_ context.Context, modelID, refID string) err
 	return nil
 }
 func (r *MetaRepo) CountRecords(_ context.Context, _ string) (int64, error) { return 0, nil }
+
+func (r *MetaRepo) CreateVersion(_ context.Context, version domain.MetaModelVersion) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.models[version.ModelID]; !ok {
+		return fmt.Errorf("model %s not found", version.ModelID)
+	}
+	if r.versions[version.ModelID] == nil {
+		r.versions[version.ModelID] = map[int]domain.MetaModelVersion{}
+	}
+	if _, exists := r.versions[version.ModelID][version.VersionNo]; exists {
+		return fmt.Errorf("version %d already exists", version.VersionNo)
+	}
+	r.versions[version.ModelID][version.VersionNo] = version
+	return nil
+}
+
+func (r *MetaRepo) ListVersions(_ context.Context, modelID string) ([]domain.MetaModelVersion, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if _, ok := r.models[modelID]; !ok {
+		return nil, fmt.Errorf("model %s not found", modelID)
+	}
+	vm := r.versions[modelID]
+	out := make([]domain.MetaModelVersion, 0, len(vm))
+	for _, v := range vm {
+		out = append(out, v)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].VersionNo > out[j].VersionNo })
+	return out, nil
+}
+
+func (r *MetaRepo) GetVersion(_ context.Context, modelID string, versionNo int) (domain.MetaModelVersion, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if _, ok := r.models[modelID]; !ok {
+		return domain.MetaModelVersion{}, fmt.Errorf("model %s not found", modelID)
+	}
+	v, ok := r.versions[modelID][versionNo]
+	if !ok {
+		return domain.MetaModelVersion{}, fmt.Errorf("version %d not found", versionNo)
+	}
+	return v, nil
+}

@@ -114,3 +114,12 @@ type CreateMetaReferenceReq struct {
 }
 
 type UpdateMetaReferenceReq = CreateMetaReferenceReq
+
+type PublishMetaModelReq struct {
+	ChangeSummary string `json:"change_summary"`
+	PublishedBy   string `json:"published_by"`
+}
+
+type RollbackMetaModelReq struct {
+	Version int `json:"version" binding:"required,min=1"`
+}

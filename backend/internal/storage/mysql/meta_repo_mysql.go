@@ -298,3 +298,41 @@ func boolToInt(v bool) int {
 	}
 	return 0
 }
+
+func (r *MetaRepo) CreateVersion(ctx context.Context, version domain.MetaModelVersion) error {
+	_, err := r.db.ExecContext(ctx, `INSERT INTO md_model_version (id, model_id, version_no, snapshot_json, published_at, published_by, change_summary) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		version.ID, version.ModelID, version.VersionNo, version.SnapshotJSON, version.PublishedAt, version.PublishedBy, version.ChangeSummary)
+	return err
+}
+
+func (r *MetaRepo) ListVersions(ctx context.Context, modelID string) ([]domain.MetaModelVersion, error) {
+	if _, err := r.GetModel(ctx, modelID); err != nil {
+		return nil, err
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT id, model_id, version_no, snapshot_json, published_at, published_by, change_summary FROM md_model_version WHERE model_id=? ORDER BY version_no DESC`, modelID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]domain.MetaModelVersion, 0)
+	for rows.Next() {
+		var v domain.MetaModelVersion
+		if err := rows.Scan(&v.ID, &v.ModelID, &v.VersionNo, &v.SnapshotJSON, &v.PublishedAt, &v.PublishedBy, &v.ChangeSummary); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+func (r *MetaRepo) GetVersion(ctx context.Context, modelID string, versionNo int) (domain.MetaModelVersion, error) {
+	var v domain.MetaModelVersion
+	err := r.db.QueryRowContext(ctx, `SELECT id, model_id, version_no, snapshot_json, published_at, published_by, change_summary FROM md_model_version WHERE model_id=? AND version_no=?`, modelID, versionNo).Scan(&v.ID, &v.ModelID, &v.VersionNo, &v.SnapshotJSON, &v.PublishedAt, &v.PublishedBy, &v.ChangeSummary)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return domain.MetaModelVersion{}, fmt.Errorf("version %d not found", versionNo)
+		}
+		return domain.MetaModelVersion{}, err
+	}
+	return v, nil
+}

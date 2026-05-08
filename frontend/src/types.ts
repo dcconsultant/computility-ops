@@ -472,3 +472,20 @@ export interface MetaReference {
   created_at: string;
   updated_at: string;
 }
+
+
+export interface MetaModelVersion {
+  id: string;
+  model_id: string;
+  version_no: number;
+  snapshot_json: string;
+  published_at: string;
+  published_by?: string;
+  change_summary?: string;
+}
+
+export interface MetaModelSnapshot {
+  model: MetaModel;
+  fields: MetaField[];
+  references: MetaReference[];
+}

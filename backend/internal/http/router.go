@@ -132,6 +132,11 @@ func NewRouter(h Handlers) *gin.Engine {
 		v1.DELETE("/meta/models/:model_id/references/:ref_id", h.MetaData.DeleteReference)
 		v1.GET("/meta/models/:model_id/references", h.MetaData.ListReferences)
 
+		v1.POST("/meta/models/:model_id/publish", h.MetaData.PublishModel)
+		v1.GET("/meta/models/:model_id/versions", h.MetaData.ListVersions)
+		v1.GET("/meta/models/:model_id/versions/:version", h.MetaData.GetVersion)
+		v1.POST("/meta/models/:model_id/rollback", h.MetaData.RollbackModel)
+
 		v1.GET("/ops/decisions/self-repair", h.SelfRepair.ListSuggestions)
 	}
 	return r

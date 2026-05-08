@@ -34,7 +34,9 @@ import type {
   ContractAttachment,
   MetaField,
   MetaModel,
-  MetaReference
+  MetaReference,
+  MetaModelVersion,
+  MetaModelSnapshot
 } from './types';
 
 const http = axios.create({ baseURL: '/api/v1' });
@@ -526,5 +528,26 @@ export async function updateMetaReference(modelId: string, refId: string, payloa
 
 export async function deleteMetaReference(modelId: string, refId: string) {
   const { data } = await http.delete<ApiResp<{ deleted: boolean; ref_id: string }>>(`/meta/models/${modelId}/references/${refId}`);
+  return data;
+}
+
+
+export async function publishMetaModel(modelId: string, payload?: { change_summary?: string; published_by?: string }) {
+  const { data } = await http.post<ApiResp<MetaModelVersion>>(`/meta/models/${modelId}/publish`, payload || {});
+  return data;
+}
+
+export async function listMetaModelVersions(modelId: string) {
+  const { data } = await http.get<ApiResp<ListData<MetaModelVersion>>>(`/meta/models/${modelId}/versions`);
+  return data;
+}
+
+export async function getMetaModelVersion(modelId: string, version: number) {
+  const { data } = await http.get<ApiResp<{ version: MetaModelVersion; snapshot: MetaModelSnapshot }>>(`/meta/models/${modelId}/versions/${version}`);
+  return data;
+}
+
+export async function rollbackMetaModel(modelId: string, version: number) {
+  const { data } = await http.post<ApiResp<MetaModel>>(`/meta/models/${modelId}/rollback`, { version });
   return data;
 }

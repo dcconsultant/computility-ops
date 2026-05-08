@@ -29,6 +29,10 @@ type MetaRepo interface {
 	DeleteReference(ctx context.Context, modelID, refID string) error
 
 	CountRecords(ctx context.Context, modelID string) (int64, error)
+
+	CreateVersion(ctx context.Context, version domain.MetaModelVersion) error
+	ListVersions(ctx context.Context, modelID string) ([]domain.MetaModelVersion, error)
+	GetVersion(ctx context.Context, modelID string, versionNo int) (domain.MetaModelVersion, error)
 }
 
 type FieldOrderItem struct {

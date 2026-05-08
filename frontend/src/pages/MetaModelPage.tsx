@@ -31,10 +31,13 @@ import {
   reorderMetaFields,
   updateMetaField,
   updateMetaModel,
-  updateMetaReference
+  updateMetaReference,
+  publishMetaModel,
+  listMetaModelVersions,
+  rollbackMetaModel
 } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
-import type { MetaField, MetaModel, MetaReference } from '../types';
+import type { MetaField, MetaModel, MetaReference, MetaModelVersion } from '../types';
 
 const VALUE_TYPES = ['string', 'int', 'decimal', 'bool', 'date', 'datetime', 'enum', 'json'];
 
@@ -45,6 +48,7 @@ export default function MetaModelPage() {
   const [selectedModel, setSelectedModel] = useState<MetaModel | null>(null);
   const [fields, setFields] = useState<MetaField[]>([]);
   const [refs, setRefs] = useState<MetaReference[]>([]);
+  const [versions, setVersions] = useState<MetaModelVersion[]>([]);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
   const [createModelOpen, setCreateModelOpen] = useState(false);
@@ -98,6 +102,8 @@ export default function MetaModelPage() {
       setFields((detail.data.fields || []).slice().sort((a, b) => a.sort_no - b.sort_no));
       const r = ensureApiOk(await listMetaReferences(modelId));
       setRefs(r.data.list || []);
+      const vs = ensureApiOk(await listMetaModelVersions(modelId));
+      setVersions(vs.data.list || []);
     } catch (e) {
       message.error(parseApiError(e, '加载模型详情失败'));
     } finally {
@@ -268,6 +274,32 @@ export default function MetaModelPage() {
     }
   }
 
+
+
+  async function onPublishModel() {
+    if (!selectedModel) return;
+    try {
+      ensureApiOk(await publishMetaModel(selectedModel.id, { change_summary: '前端发布操作' }));
+      message.success('模型发布成功');
+      await loadModels();
+      await loadModelDetail(selectedModel.id);
+    } catch (e) {
+      message.error(parseApiError(e, '发布模型失败'));
+    }
+  }
+
+  async function onRollbackModel(versionNo: number) {
+    if (!selectedModel) return;
+    try {
+      ensureApiOk(await rollbackMetaModel(selectedModel.id, versionNo));
+      message.success(`已回滚到版本 v${versionNo}`);
+      await loadModels();
+      await loadModelDetail(selectedModel.id);
+    } catch (e) {
+      message.error(parseApiError(e, '回滚失败'));
+    }
+  }
+
   const modelColumns: ColumnsType<MetaModel> = [
     { title: '模型编码', dataIndex: 'model_code', key: 'model_code' },
     { title: '模型名称', dataIndex: 'model_name', key: 'model_name' },
@@ -373,6 +405,7 @@ export default function MetaModelPage() {
                   editModelForm.setFieldsValue({ model_name: selectedModel.model_name, description: selectedModel.description });
                   setEditModelOpen(true);
                 }}>编辑模型</Button>
+                <Button type="primary" onClick={onPublishModel}>发布</Button>
                 <Button onClick={onArchiveModel}>归档</Button>
                 <Popconfirm title="仅草稿且无记录模型可删除，确认删除？" onConfirm={onDeleteModel}>
                   <Button danger>删除模型</Button>
@@ -387,6 +420,34 @@ export default function MetaModelPage() {
                 <Typography.Text>描述：{selectedModel.description || '-'}</Typography.Text>
               </Space>
             )}
+          </Card>
+
+
+
+          <Card
+            style={{ marginTop: 16 }}
+            title="版本管理"
+          >
+            <Table
+              rowKey="id"
+              size="small"
+              pagination={false}
+              dataSource={versions}
+              columns={[
+                { title: '版本号', dataIndex: 'version_no', render: (v:number) => `v${v}` },
+                { title: '发布时间', dataIndex: 'published_at' },
+                { title: '变更说明', dataIndex: 'change_summary', render: (v:string) => v || '-' },
+                {
+                  title: '操作',
+                  width: 120,
+                  render: (_:unknown, row: MetaModelVersion) => (
+                    <Popconfirm title={`确认回滚到 v${row.version_no} ?`} onConfirm={() => onRollbackModel(row.version_no)}>
+                      <Button size="small">回滚</Button>
+                    </Popconfirm>
+                  )
+                }
+              ]}
+            />
           </Card>
 
           <Card

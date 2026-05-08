@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
@@ -332,4 +333,161 @@ func sanitizeStringSlice(in []string) []string {
 		out = append(out, v)
 	}
 	return out
+}
+
+type PublishModelInput struct {
+	ChangeSummary string
+	PublishedBy   string
+}
+
+func (s *MetaService) PublishModel(ctx context.Context, modelID string, in PublishModelInput) (domain.MetaModelVersion, error) {
+	modelID = strings.TrimSpace(modelID)
+	m, err := s.repo.GetModel(ctx, modelID)
+	if err != nil {
+		return domain.MetaModelVersion{}, err
+	}
+	fields, err := s.repo.ListFields(ctx, modelID)
+	if err != nil {
+		return domain.MetaModelVersion{}, err
+	}
+	if len(fields) == 0 {
+		return domain.MetaModelVersion{}, fmt.Errorf("cannot publish model without fields")
+	}
+	if err := s.validateNoCycle(ctx, modelID); err != nil {
+		return domain.MetaModelVersion{}, err
+	}
+	refs, err := s.repo.ListReferences(ctx, modelID)
+	if err != nil {
+		return domain.MetaModelVersion{}, err
+	}
+	snapshot := domain.MetaModelSnapshot{Model: m, Fields: fields, References: refs}
+	b, err := json.Marshal(snapshot)
+	if err != nil {
+		return domain.MetaModelVersion{}, err
+	}
+	next := m.CurrentVersion + 1
+	now := time.Now()
+	v := domain.MetaModelVersion{
+		ID:            fmt.Sprintf("%d", now.UnixNano()),
+		ModelID:       modelID,
+		VersionNo:     next,
+		SnapshotJSON:  string(b),
+		PublishedAt:   now,
+		PublishedBy:   strings.TrimSpace(in.PublishedBy),
+		ChangeSummary: strings.TrimSpace(in.ChangeSummary),
+	}
+	if err := s.repo.CreateVersion(ctx, v); err != nil {
+		return domain.MetaModelVersion{}, err
+	}
+	m.CurrentVersion = next
+	m.Status = domain.MetaModelStatusPublished
+	m.UpdatedAt = now
+	if err := s.repo.UpdateModel(ctx, m); err != nil {
+		return domain.MetaModelVersion{}, err
+	}
+	return v, nil
+}
+
+func (s *MetaService) ListVersions(ctx context.Context, modelID string) ([]domain.MetaModelVersion, error) {
+	return s.repo.ListVersions(ctx, strings.TrimSpace(modelID))
+}
+
+func (s *MetaService) GetVersion(ctx context.Context, modelID string, versionNo int) (domain.MetaModelVersion, domain.MetaModelSnapshot, error) {
+	v, err := s.repo.GetVersion(ctx, strings.TrimSpace(modelID), versionNo)
+	if err != nil {
+		return domain.MetaModelVersion{}, domain.MetaModelSnapshot{}, err
+	}
+	var snap domain.MetaModelSnapshot
+	if err := json.Unmarshal([]byte(v.SnapshotJSON), &snap); err != nil {
+		return domain.MetaModelVersion{}, domain.MetaModelSnapshot{}, err
+	}
+	return v, snap, nil
+}
+
+func (s *MetaService) RollbackModel(ctx context.Context, modelID string, versionNo int) (domain.MetaModel, error) {
+	modelID = strings.TrimSpace(modelID)
+	m, err := s.repo.GetModel(ctx, modelID)
+	if err != nil {
+		return domain.MetaModel{}, err
+	}
+	v, err := s.repo.GetVersion(ctx, modelID, versionNo)
+	if err != nil {
+		return domain.MetaModel{}, err
+	}
+	var snap domain.MetaModelSnapshot
+	if err := json.Unmarshal([]byte(v.SnapshotJSON), &snap); err != nil {
+		return domain.MetaModel{}, err
+	}
+	currentFields, err := s.repo.ListFields(ctx, modelID)
+	if err != nil {
+		return domain.MetaModel{}, err
+	}
+	for _, f := range currentFields {
+		if err := s.repo.DeleteField(ctx, modelID, f.ID); err != nil {
+			return domain.MetaModel{}, err
+		}
+	}
+	currentRefs, err := s.repo.ListReferences(ctx, modelID)
+	if err == nil {
+		for _, r := range currentRefs {
+			_ = s.repo.DeleteReference(ctx, modelID, r.ID)
+		}
+	}
+	for _, f := range snap.Fields {
+		f.ModelID = modelID
+		if err := s.repo.CreateField(ctx, f); err != nil {
+			return domain.MetaModel{}, err
+		}
+	}
+	for _, r := range snap.References {
+		r.ModelID = modelID
+		if err := s.repo.CreateReference(ctx, r); err != nil {
+			return domain.MetaModel{}, err
+		}
+	}
+	m.CurrentVersion = versionNo
+	m.Status = domain.MetaModelStatusPublished
+	m.UpdatedAt = time.Now()
+	if err := s.repo.UpdateModel(ctx, m); err != nil {
+		return domain.MetaModel{}, err
+	}
+	return m, nil
+}
+
+func (s *MetaService) validateNoCycle(ctx context.Context, modelID string) error {
+	models, err := s.repo.ListModels(ctx, "")
+	if err != nil {
+		return err
+	}
+	graph := map[string][]string{}
+	for _, m := range models {
+		refs, err := s.repo.ListReferences(ctx, m.ID)
+		if err != nil {
+			return err
+		}
+		for _, r := range refs {
+			graph[m.ID] = append(graph[m.ID], r.TargetModelID)
+		}
+	}
+	vis := map[string]int{}
+	var dfs func(string) bool
+	dfs = func(n string) bool {
+		vis[n] = 1
+		for _, nxt := range graph[n] {
+			if vis[nxt] == 1 {
+				return true
+			}
+			if vis[nxt] == 0 && dfs(nxt) {
+				return true
+			}
+		}
+		vis[n] = 2
+		return false
+	}
+	if vis[modelID] == 0 {
+		if dfs(modelID) {
+			return fmt.Errorf("cycle reference detected")
+		}
+	}
+	return nil
 }

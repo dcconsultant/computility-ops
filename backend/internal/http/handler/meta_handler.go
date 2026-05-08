@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"strings"
 
 	"computility-ops/backend/internal/service"
@@ -244,4 +245,72 @@ func (h *MetaHandler) ListReferences(c *gin.Context) {
 		return
 	}
 	ok(c, gin.H{"list": refs, "total": len(refs), "page": 1, "page_size": len(refs)})
+}
+
+func (h *MetaHandler) PublishModel(c *gin.Context) {
+	c.Set("audit_action", "meta.models.publish")
+	var req PublishMetaModelReq
+	_ = c.ShouldBindJSON(&req)
+	v, err := h.service.PublishModel(c.Request.Context(), c.Param("model_id"), service.PublishModelInput{ChangeSummary: req.ChangeSummary, PublishedBy: req.PublishedBy})
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			fail(c, 40401, err.Error())
+			return
+		}
+		fail(c, 40001, err.Error())
+		return
+	}
+	ok(c, v)
+}
+
+func (h *MetaHandler) ListVersions(c *gin.Context) {
+	c.Set("audit_action", "meta.models.versions.list")
+	list, err := h.service.ListVersions(c.Request.Context(), c.Param("model_id"))
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			fail(c, 40401, err.Error())
+			return
+		}
+		fail(c, 50001, err.Error())
+		return
+	}
+	ok(c, gin.H{"list": list, "total": len(list), "page": 1, "page_size": len(list)})
+}
+
+func (h *MetaHandler) GetVersion(c *gin.Context) {
+	c.Set("audit_action", "meta.models.versions.get")
+	vno := 0
+	if _, err := fmt.Sscanf(c.Param("version"), "%d", &vno); err != nil || vno <= 0 {
+		fail(c, 40001, "invalid version")
+		return
+	}
+	v, snap, err := h.service.GetVersion(c.Request.Context(), c.Param("model_id"), vno)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			fail(c, 40401, err.Error())
+			return
+		}
+		fail(c, 50001, err.Error())
+		return
+	}
+	ok(c, gin.H{"version": v, "snapshot": snap})
+}
+
+func (h *MetaHandler) RollbackModel(c *gin.Context) {
+	c.Set("audit_action", "meta.models.rollback")
+	var req RollbackMetaModelReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, 40001, "请求参数无效，请检查回滚版本")
+		return
+	}
+	m, err := h.service.RollbackModel(c.Request.Context(), c.Param("model_id"), req.Version)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			fail(c, 40401, err.Error())
+			return
+		}
+		fail(c, 40001, err.Error())
+		return
+	}
+	ok(c, m)
 }
