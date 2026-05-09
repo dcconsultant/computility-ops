@@ -481,8 +481,8 @@ export default function MetaModelPage() {
   }
 
   return (
-    <Row gutter={12} style={{ width: '100%', margin: 0 }}>
-      <Col flex={navCollapsed ? '44px' : '8em'} style={{ paddingLeft: 0 }}>
+    <div style={{ display: 'flex', gap: 12, width: '100%', alignItems: 'flex-start' }}>
+      <div style={{ flex: navCollapsed ? '0 0 44px' : '0 0 8em' }}>
         <Card
           title={navCollapsed ? '' : '模型导航'}
           extra={
@@ -513,9 +513,9 @@ export default function MetaModelPage() {
             }}
           /> : null}
         </Card>
-      </Col>
+      </div>
 
-      <Col flex="auto" style={{ paddingRight: 0 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
         {mode === 'data' ? (
           <Card
             loading={loading}
@@ -601,7 +601,7 @@ export default function MetaModelPage() {
             </Card>
           </Space>
         )}
-      </Col>
+      </div>
 
       <Modal title="新建模型" open={modelModalOpen} onCancel={() => setModelModalOpen(false)} onOk={onCreateModel}>
         <Form layout="vertical" form={modelForm}>
@@ -729,6 +729,6 @@ export default function MetaModelPage() {
           ) : null}
         </Space>
       </Modal>
-    </Row>
+    </div>
   );
 }
