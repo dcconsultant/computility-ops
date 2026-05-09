@@ -294,6 +294,21 @@ func (r *MetaRepo) CreateRecord(_ context.Context, record domain.MetaRecord) err
 	return nil
 }
 
+func (r *MetaRepo) CreateRecordsBatch(_ context.Context, records []domain.MetaRecord) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, record := range records {
+		if _, ok := r.models[record.ModelID]; !ok {
+			return fmt.Errorf("model %s not found", record.ModelID)
+		}
+		if r.records[record.ModelID] == nil {
+			r.records[record.ModelID] = map[string]domain.MetaRecord{}
+		}
+		r.records[record.ModelID][record.ID] = record
+	}
+	return nil
+}
+
 func (r *MetaRepo) UpdateRecord(_ context.Context, record domain.MetaRecord) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

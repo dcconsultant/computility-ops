@@ -558,6 +558,13 @@ type UpsertRecordInput struct {
 	Data map[string]any
 }
 
+type ImportRecordsResult struct {
+	Total   int              `json:"total"`
+	Success int              `json:"success"`
+	Failed  int              `json:"failed"`
+	Errors  []map[string]any `json:"errors"`
+}
+
 func (s *MetaService) ListRecords(ctx context.Context, modelID string) (domain.MetaModel, []domain.MetaField, []domain.MetaRecord, error) {
 	modelID = strings.TrimSpace(modelID)
 	m, fields, err := s.GetModel(ctx, modelID)
@@ -626,6 +633,49 @@ func (s *MetaService) UpdateRecord(ctx context.Context, modelID, recordID string
 
 func (s *MetaService) DeleteRecord(ctx context.Context, modelID, recordID string) error {
 	return s.repo.DeleteRecord(ctx, strings.TrimSpace(modelID), strings.TrimSpace(recordID))
+}
+
+func (s *MetaService) ImportRecordsBatch(ctx context.Context, modelID string, rows []map[string]any) (ImportRecordsResult, error) {
+	modelID = strings.TrimSpace(modelID)
+	m, fields, err := s.GetModel(ctx, modelID)
+	if err != nil {
+		return ImportRecordsResult{}, err
+	}
+	if m.Status != domain.MetaModelStatusPublished {
+		return ImportRecordsResult{}, fmt.Errorf("model is not published")
+	}
+	result := ImportRecordsResult{Total: len(rows), Errors: make([]map[string]any, 0)}
+	batch := make([]domain.MetaRecord, 0, 2000)
+	flush := func() error {
+		if len(batch) == 0 {
+			return nil
+		}
+		if err := s.repo.CreateRecordsBatch(ctx, batch); err != nil {
+			return err
+		}
+		result.Success += len(batch)
+		batch = batch[:0]
+		return nil
+	}
+	for i, row := range rows {
+		data, e := validateRecordData(row, fields)
+		if e != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, map[string]any{"row": i + 2, "error": e.Error()})
+			continue
+		}
+		now := time.Now()
+		batch = append(batch, domain.MetaRecord{ID: fmt.Sprintf("%d", now.UnixNano()) + fmt.Sprintf("%d", i), ModelID: modelID, Data: data, CreatedAt: now, UpdatedAt: now})
+		if len(batch) >= 2000 {
+			if err := flush(); err != nil {
+				return ImportRecordsResult{}, err
+			}
+		}
+	}
+	if err := flush(); err != nil {
+		return ImportRecordsResult{}, err
+	}
+	return result, nil
 }
 
 func (s *MetaService) ensureUniqueConstraints(ctx context.Context, modelID, ignoreRecordID string, fields []domain.MetaField, data map[string]any) error {

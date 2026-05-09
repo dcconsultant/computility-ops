@@ -489,25 +489,26 @@ func (h *MetaHandler) ImportRecords(c *gin.Context) {
 			}
 		}
 	}
-	success := 0
-	failed := 0
-	errors := make([]map[string]any, 0)
-	for idx, row := range rows[1:] {
+	rowsData := make([]map[string]any, 0, len(rows)-1)
+	for _, row := range rows[1:] {
 		data := map[string]any{}
 		for ci, fv := range row {
 			if field, ok := fieldMap[ci]; ok {
 				data[field.FieldCode] = strings.TrimSpace(fv)
 			}
 		}
-		_, e := h.service.CreateRecord(c.Request.Context(), c.Param("model_id"), service.UpsertRecordInput{Data: data})
-		if e != nil {
-			failed++
-			errors = append(errors, map[string]any{"row": idx + 2, "error": e.Error()})
-			continue
-		}
-		success++
+		rowsData = append(rowsData, data)
 	}
-	ok(c, gin.H{"total": success + failed, "success": success, "failed": failed, "errors": errors})
+	result, err := h.service.ImportRecordsBatch(c.Request.Context(), c.Param("model_id"), rowsData)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			fail(c, 40401, err.Error())
+			return
+		}
+		fail(c, 40001, err.Error())
+		return
+	}
+	ok(c, result)
 }
 
 func maxFloat(a, b float64) float64 {

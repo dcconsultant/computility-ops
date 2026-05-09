@@ -351,6 +351,28 @@ func (r *MetaRepo) CreateRecord(ctx context.Context, record domain.MetaRecord) e
 	return err
 }
 
+func (r *MetaRepo) CreateRecordsBatch(ctx context.Context, records []domain.MetaRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO md_record (id, model_id, data_json, deleted_flag, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, rec := range records {
+		if _, err := stmt.ExecContext(ctx, rec.ID, rec.ModelID, mustJSON(rec.Data), rec.CreatedAt, rec.UpdatedAt); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 func (r *MetaRepo) UpdateRecord(ctx context.Context, record domain.MetaRecord) error {
 	res, err := r.db.ExecContext(ctx, `UPDATE md_record SET data_json=?, updated_at=? WHERE model_id=? AND id=? AND deleted_flag=0`, mustJSON(record.Data), record.UpdatedAt, record.ModelID, record.ID)
 	if err != nil {
