@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"computility-ops/backend/internal/domain"
@@ -11,9 +13,27 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-type MetaHandler struct{ service *service.MetaService }
+type MetaImportJob struct {
+	JobID      string         `json:"job_id"`
+	ModelID    string         `json:"model_id"`
+	Status     string         `json:"status"`
+	Total      int            `json:"total"`
+	Processed  int            `json:"processed"`
+	Success    int            `json:"success"`
+	Failed     int            `json:"failed"`
+	Errors     []map[string]any `json:"errors"`
+	StartedAt  time.Time      `json:"started_at"`
+	FinishedAt *time.Time     `json:"finished_at,omitempty"`
+	Message    string         `json:"message,omitempty"`
+}
 
-func NewMetaHandler(s *service.MetaService) *MetaHandler { return &MetaHandler{service: s} }
+type MetaHandler struct {
+	service *service.MetaService
+	jobs    map[string]*MetaImportJob
+	mu      sync.RWMutex
+}
+
+func NewMetaHandler(s *service.MetaService) *MetaHandler { return &MetaHandler{service: s, jobs: map[string]*MetaImportJob{}} }
 
 func (h *MetaHandler) CreateModel(c *gin.Context) {
 	c.Set("audit_action", "meta.models.create")
@@ -499,16 +519,62 @@ func (h *MetaHandler) ImportRecords(c *gin.Context) {
 		}
 		rowsData = append(rowsData, data)
 	}
-	result, err := h.service.ImportRecordsBatch(c.Request.Context(), c.Param("model_id"), rowsData)
-	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			fail(c, 40401, err.Error())
+
+	jobID := fmt.Sprintf("meta-import-%d", time.Now().UnixNano())
+	job := &MetaImportJob{
+		JobID:     jobID,
+		ModelID:   c.Param("model_id"),
+		Status:    "running",
+		Total:     len(rowsData),
+		Processed: 0,
+		Success:   0,
+		Failed:    0,
+		Errors:    make([]map[string]any, 0),
+		StartedAt: time.Now(),
+	}
+	h.mu.Lock()
+	h.jobs[jobID] = job
+	h.mu.Unlock()
+
+	ctx := context.Background()
+	go func(modelID string, data []map[string]any) {
+		result, runErr := h.service.ImportRecordsBatch(ctx, modelID, data)
+		now := time.Now()
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		j, ok := h.jobs[jobID]
+		if !ok {
 			return
 		}
-		fail(c, 40001, err.Error())
+		if runErr != nil {
+			j.Status = "failed"
+			j.Message = runErr.Error()
+			j.FinishedAt = &now
+			j.Processed = j.Total
+			return
+		}
+		j.Status = "done"
+		j.Success = result.Success
+		j.Failed = result.Failed
+		j.Errors = result.Errors
+		j.Processed = result.Total
+		j.FinishedAt = &now
+	} (c.Param("model_id"), rowsData)
+
+	ok(c, gin.H{"job_id": jobID, "status": "running", "total": len(rowsData)})
+}
+
+func (h *MetaHandler) GetImportJob(c *gin.Context) {
+	c.Set("audit_action", "meta.records.import.job")
+	jobID := strings.TrimSpace(c.Param("job_id"))
+	h.mu.RLock()
+	job, found := h.jobs[jobID]
+	h.mu.RUnlock()
+	if !found {
+		fail(c, 40401, "import job not found")
 		return
 	}
-	ok(c, result)
+	ok(c, job)
 }
 
 func maxFloat(a, b float64) float64 {

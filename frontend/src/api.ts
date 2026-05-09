@@ -587,8 +587,13 @@ export function exportMetaRecordTemplate(modelId: string) {
 export async function importMetaRecords(modelId: string, file: File) {
   const form = new FormData();
   form.append('file', file);
-  const { data } = await http.post<ApiResp<{ total: number; success: number; failed: number; errors: any[] }>>(`/meta/models/${modelId}/records/import`, form, {
+  const { data } = await http.post<ApiResp<{ job_id: string; status: string; total: number }>>(`/meta/models/${modelId}/records/import`, form, {
     headers: { 'Content-Type': 'multipart/form-data' }
   });
+  return data;
+}
+
+export async function getMetaImportJob(jobId: string) {
+  const { data } = await http.get<ApiResp<{ job_id: string; model_id: string; status: string; total: number; processed: number; success: number; failed: number; errors: any[]; message?: string }>>(`/meta/import-jobs/${jobId}`);
   return data;
 }

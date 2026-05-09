@@ -38,6 +38,7 @@ import {
   listMetaRecords,
   exportMetaRecordTemplate,
   importMetaRecords,
+  getMetaImportJob,
   publishMetaModel,
   reorderMetaFields,
   updateMetaField,
@@ -63,7 +64,7 @@ export default function MetaModelPage() {
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResultOpen, setImportResultOpen] = useState(false);
-  const [importSummary, setImportSummary] = useState<{ total: number; success: number; failed: number }>({ total: 0, success: 0, failed: 0 });
+  const [importSummary, setImportSummary] = useState<{ total: number; success: number; failed: number; processed?: number; status?: string }>({ total: 0, success: 0, failed: 0 });
   const [importErrors, setImportErrors] = useState<Array<{ row: number; error: string }>>([]);
 
   const [modelModalOpen, setModelModalOpen] = useState(false);
@@ -443,15 +444,40 @@ export default function MetaModelPage() {
     if (!selectedModel) return false;
     try {
       setImporting(true);
-      const resp = ensureApiOk(await importMetaRecords(selectedModel.id, file));
-      setImportSummary({ total: resp.data.total, success: resp.data.success, failed: resp.data.failed });
-      setImportErrors((resp.data.errors || []).map((it: any) => ({ row: Number(it.row || 0), error: String(it.error || '') })));
+      const start = ensureApiOk(await importMetaRecords(selectedModel.id, file));
+      const jobId = start.data.job_id;
       setImportResultOpen(true);
-      message.success(`导入完成：成功 ${resp.data.success}，失败 ${resp.data.failed}`);
-      await loadRecordView(selectedModel.id);
+      setImportSummary({ total: start.data.total, success: 0, failed: 0, processed: 0, status: 'running' });
+      setImportErrors([]);
+      const timer = setInterval(async () => {
+        try {
+          const st = ensureApiOk(await getMetaImportJob(jobId));
+          setImportSummary({
+            total: st.data.total,
+            success: st.data.success,
+            failed: st.data.failed,
+            processed: st.data.processed,
+            status: st.data.status
+          });
+          if (st.data.status === 'done' || st.data.status === 'failed') {
+            clearInterval(timer);
+            setImportErrors((st.data.errors || []).map((it: any) => ({ row: Number(it.row || 0), error: String(it.error || '') })));
+            if (st.data.status === 'done') {
+              message.success(`导入完成：成功 ${st.data.success}，失败 ${st.data.failed}`);
+              await loadRecordView(selectedModel.id);
+            } else {
+              message.error(st.data.message || '导入任务失败');
+            }
+            setImporting(false);
+          }
+        } catch {
+          clearInterval(timer);
+          setImporting(false);
+          message.error('导入进度查询失败');
+        }
+      }, 1500);
     } catch (e) {
       message.error(parseApiError(e, '导入失败'));
-    } finally {
       setImporting(false);
     }
     return false;
@@ -720,9 +746,9 @@ export default function MetaModelPage() {
       >
         <Space direction="vertical" style={{ width: '100%' }} size={12}>
           <Alert
-            type={importSummary.failed > 0 ? 'warning' : 'success'}
+            type={importSummary.status === 'failed' ? 'error' : importSummary.status === 'running' ? 'info' : (importSummary.failed > 0 ? 'warning' : 'success')}
             showIcon
-            message={`总计 ${importSummary.total} 条，成功 ${importSummary.success} 条，失败 ${importSummary.failed} 条`}
+            message={`状态: ${importSummary.status || '-'} | 总计 ${importSummary.total} 条，已处理 ${importSummary.processed ?? 0} 条，成功 ${importSummary.success} 条，失败 ${importSummary.failed} 条`}
           />
           {importSummary.failed > 0 ? (
             <Table
