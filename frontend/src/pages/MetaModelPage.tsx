@@ -61,6 +61,9 @@ export default function MetaModelPage() {
   const [loading, setLoading] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importResultOpen, setImportResultOpen] = useState(false);
+  const [importSummary, setImportSummary] = useState<{ total: number; success: number; failed: number }>({ total: 0, success: 0, failed: 0 });
+  const [importErrors, setImportErrors] = useState<Array<{ row: number; error: string }>>([]);
 
   const [modelModalOpen, setModelModalOpen] = useState(false);
   const [editModelModalOpen, setEditModelModalOpen] = useState(false);
@@ -413,7 +416,10 @@ export default function MetaModelPage() {
     try {
       setImporting(true);
       const resp = ensureApiOk(await importMetaRecords(selectedModel.id, file));
-      message.success(`导入完成:成功 ${resp.data.success},失败 ${resp.data.failed}`);
+      setImportSummary({ total: resp.data.total, success: resp.data.success, failed: resp.data.failed });
+      setImportErrors((resp.data.errors || []).map((it: any) => ({ row: Number(it.row || 0), error: String(it.error || '') })));
+      setImportResultOpen(true);
+      message.success(`导入完成：成功 ${resp.data.success}，失败 ${resp.data.failed}`);
       await loadRecordView(selectedModel.id);
     } catch (e) {
       message.error(parseApiError(e, '导入失败'));
@@ -657,6 +663,34 @@ export default function MetaModelPage() {
             <Input.TextArea rows={3} />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title="Excel 导入结果"
+        open={importResultOpen}
+        onCancel={() => setImportResultOpen(false)}
+        footer={<Button type="primary" onClick={() => setImportResultOpen(false)}>知道了</Button>}
+        width={820}
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          <Alert
+            type={importSummary.failed > 0 ? 'warning' : 'success'}
+            showIcon
+            message={`总计 ${importSummary.total} 条，成功 ${importSummary.success} 条，失败 ${importSummary.failed} 条`}
+          />
+          {importSummary.failed > 0 ? (
+            <Table
+              size="small"
+              rowKey={(r) => `${r.row}-${r.error}`}
+              dataSource={importErrors}
+              pagination={{ pageSize: 10 }}
+              columns={[
+                { title: '失败行', dataIndex: 'row', width: 100 },
+                { title: '错误原因', dataIndex: 'error' }
+              ]}
+            />
+          ) : null}
+        </Space>
       </Modal>
     </Row>
   );
