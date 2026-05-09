@@ -496,3 +496,11 @@ export interface MetaModelSnapshot {
   fields: MetaField[];
   references: MetaReference[];
 }
+
+export interface MetaRecord {
+  id: string;
+  model_id: string;
+  data: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}

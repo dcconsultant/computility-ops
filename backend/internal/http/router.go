@@ -120,6 +120,7 @@ func NewRouter(h Handlers) *gin.Engine {
 		v1.GET("/meta/models/:model_id", h.MetaData.GetModel)
 		v1.PUT("/meta/models/:model_id", h.MetaData.UpdateModel)
 		v1.POST("/meta/models/:model_id/archive", h.MetaData.ArchiveModel)
+		v1.POST("/meta/models/:model_id/clone", h.MetaData.CloneModel)
 		v1.DELETE("/meta/models/:model_id", h.MetaData.DeleteModel)
 
 		v1.POST("/meta/models/:model_id/fields", h.MetaData.CreateField)
@@ -136,6 +137,10 @@ func NewRouter(h Handlers) *gin.Engine {
 		v1.GET("/meta/models/:model_id/versions", h.MetaData.ListVersions)
 		v1.GET("/meta/models/:model_id/versions/:version", h.MetaData.GetVersion)
 		v1.POST("/meta/models/:model_id/rollback", h.MetaData.RollbackModel)
+		v1.GET("/meta/models/:model_id/records", h.MetaData.ListRecords)
+		v1.POST("/meta/models/:model_id/records", h.MetaData.CreateRecord)
+		v1.PUT("/meta/models/:model_id/records/:record_id", h.MetaData.UpdateRecord)
+		v1.DELETE("/meta/models/:model_id/records/:record_id", h.MetaData.DeleteRecord)
 
 		v1.GET("/ops/decisions/self-repair", h.SelfRepair.ListSuggestions)
 	}

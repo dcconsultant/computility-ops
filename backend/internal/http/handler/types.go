@@ -131,3 +131,13 @@ type PublishMetaModelReq struct {
 type RollbackMetaModelReq struct {
 	Version int `json:"version" binding:"required,min=1"`
 }
+
+type CloneMetaModelReq struct {
+	ModelCode   string `json:"model_code" binding:"required"`
+	ModelName   string `json:"model_name" binding:"required"`
+	Description string `json:"description"`
+}
+
+type UpsertMetaRecordReq struct {
+	Data map[string]any `json:"data" binding:"required"`
+}

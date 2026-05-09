@@ -37,7 +37,8 @@ import type {
   MetaReference,
   MetaModelVersion,
   MetaModelSnapshot,
-  MetaEnumOption
+  MetaEnumOption,
+  MetaRecord
 } from './types';
 
 const http = axios.create({ baseURL: '/api/v1' });
@@ -493,6 +494,11 @@ export async function deleteMetaModel(modelId: string) {
   return data;
 }
 
+export async function cloneMetaModel(modelId: string, payload: { model_code: string; model_name: string; description?: string }) {
+  const { data } = await http.post<ApiResp<MetaModel>>(`/meta/models/${modelId}/clone`, payload);
+  return data;
+}
+
 export async function createMetaField(modelId: string, payload: MetaFieldPayload) {
   const { data } = await http.post<ApiResp<MetaField>>(`/meta/models/${modelId}/fields`, payload);
   return data;
@@ -551,5 +557,25 @@ export async function getMetaModelVersion(modelId: string, version: number) {
 
 export async function rollbackMetaModel(modelId: string, version: number) {
   const { data } = await http.post<ApiResp<MetaModel>>(`/meta/models/${modelId}/rollback`, { version });
+  return data;
+}
+
+export async function listMetaRecords(modelId: string) {
+  const { data } = await http.get<ApiResp<{ model: MetaModel; fields: MetaField[]; list: MetaRecord[]; total: number }>>(`/meta/models/${modelId}/records`);
+  return data;
+}
+
+export async function createMetaRecord(modelId: string, payload: { data: Record<string, any> }) {
+  const { data } = await http.post<ApiResp<MetaRecord>>(`/meta/models/${modelId}/records`, payload);
+  return data;
+}
+
+export async function updateMetaRecord(modelId: string, recordId: string, payload: { data: Record<string, any> }) {
+  const { data } = await http.put<ApiResp<MetaRecord>>(`/meta/models/${modelId}/records/${recordId}`, payload);
+  return data;
+}
+
+export async function deleteMetaRecord(modelId: string, recordId: string) {
+  const { data } = await http.delete<ApiResp<{ deleted: boolean; record_id: string }>>(`/meta/models/${modelId}/records/${recordId}`);
   return data;
 }

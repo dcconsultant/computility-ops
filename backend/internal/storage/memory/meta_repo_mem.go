@@ -19,6 +19,7 @@ type MetaRepo struct {
 	fieldByCode map[string]map[string]string
 	references  map[string]map[string]domain.MetaReference
 	versions    map[string]map[int]domain.MetaModelVersion
+	records     map[string]map[string]domain.MetaRecord
 }
 
 func NewMetaRepo() *MetaRepo {
@@ -29,6 +30,7 @@ func NewMetaRepo() *MetaRepo {
 		fieldByCode: map[string]map[string]string{},
 		references:  map[string]map[string]domain.MetaReference{},
 		versions:    map[string]map[int]domain.MetaModelVersion{},
+		records:     map[string]map[string]domain.MetaRecord{},
 	}
 }
 
@@ -102,6 +104,7 @@ func (r *MetaRepo) DeleteModel(_ context.Context, modelID string) error {
 	delete(r.fields, modelID)
 	delete(r.fieldByCode, modelID)
 	delete(r.references, modelID)
+	delete(r.records, modelID)
 	return nil
 }
 
@@ -250,7 +253,66 @@ func (r *MetaRepo) DeleteReference(_ context.Context, modelID, refID string) err
 	delete(r.references[modelID], refID)
 	return nil
 }
-func (r *MetaRepo) CountRecords(_ context.Context, _ string) (int64, error) { return 0, nil }
+func (r *MetaRepo) CountRecords(_ context.Context, modelID string) (int64, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return int64(len(r.records[modelID])), nil
+}
+
+func (r *MetaRepo) ListRecords(_ context.Context, modelID string) ([]domain.MetaRecord, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	rm := r.records[modelID]
+	out := make([]domain.MetaRecord, 0, len(rm))
+	for _, rec := range rm {
+		out = append(out, rec)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })
+	return out, nil
+}
+
+func (r *MetaRepo) GetRecord(_ context.Context, modelID, recordID string) (domain.MetaRecord, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	rec, ok := r.records[modelID][recordID]
+	if !ok {
+		return domain.MetaRecord{}, fmt.Errorf("record %s not found", recordID)
+	}
+	return rec, nil
+}
+
+func (r *MetaRepo) CreateRecord(_ context.Context, record domain.MetaRecord) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.models[record.ModelID]; !ok {
+		return fmt.Errorf("model %s not found", record.ModelID)
+	}
+	if r.records[record.ModelID] == nil {
+		r.records[record.ModelID] = map[string]domain.MetaRecord{}
+	}
+	r.records[record.ModelID][record.ID] = record
+	return nil
+}
+
+func (r *MetaRepo) UpdateRecord(_ context.Context, record domain.MetaRecord) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.records[record.ModelID][record.ID]; !ok {
+		return fmt.Errorf("record %s not found", record.ID)
+	}
+	r.records[record.ModelID][record.ID] = record
+	return nil
+}
+
+func (r *MetaRepo) DeleteRecord(_ context.Context, modelID, recordID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.records[modelID][recordID]; !ok {
+		return fmt.Errorf("record %s not found", recordID)
+	}
+	delete(r.records[modelID], recordID)
+	return nil
+}
 
 func (r *MetaRepo) CreateVersion(_ context.Context, version domain.MetaModelVersion) error {
 	r.mu.Lock()

@@ -86,6 +86,25 @@ func (h *MetaHandler) ArchiveModel(c *gin.Context) {
 	ok(c, model)
 }
 
+func (h *MetaHandler) CloneModel(c *gin.Context) {
+	c.Set("audit_action", "meta.models.clone")
+	var req CloneMetaModelReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, 40001, "请求参数无效，请检查模型字段")
+		return
+	}
+	model, err := h.service.CloneModel(c.Request.Context(), c.Param("model_id"), service.CreateModelInput{ModelCode: req.ModelCode, ModelName: req.ModelName, Description: req.Description})
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			fail(c, 40401, err.Error())
+			return
+		}
+		fail(c, 40001, err.Error())
+		return
+	}
+	ok(c, model)
+}
+
 func (h *MetaHandler) DeleteModel(c *gin.Context) {
 	c.Set("audit_action", "meta.models.delete")
 	if err := h.service.DeleteModel(c.Request.Context(), c.Param("model_id")); err != nil {
@@ -316,6 +335,71 @@ func (h *MetaHandler) RollbackModel(c *gin.Context) {
 		return
 	}
 	ok(c, m)
+}
+
+func (h *MetaHandler) ListRecords(c *gin.Context) {
+	c.Set("audit_action", "meta.records.list")
+	m, fields, records, err := h.service.ListRecords(c.Request.Context(), c.Param("model_id"))
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			fail(c, 40401, err.Error())
+			return
+		}
+		fail(c, 40001, err.Error())
+		return
+	}
+	ok(c, gin.H{"model": m, "fields": fields, "list": records, "total": len(records), "page": 1, "page_size": len(records)})
+}
+
+func (h *MetaHandler) CreateRecord(c *gin.Context) {
+	c.Set("audit_action", "meta.records.create")
+	var req UpsertMetaRecordReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, 40001, "请求参数无效，请检查记录字段")
+		return
+	}
+	rec, err := h.service.CreateRecord(c.Request.Context(), c.Param("model_id"), service.UpsertRecordInput{Data: req.Data})
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			fail(c, 40401, err.Error())
+			return
+		}
+		fail(c, 40001, err.Error())
+		return
+	}
+	ok(c, rec)
+}
+
+func (h *MetaHandler) UpdateRecord(c *gin.Context) {
+	c.Set("audit_action", "meta.records.update")
+	var req UpsertMetaRecordReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, 40001, "请求参数无效，请检查记录字段")
+		return
+	}
+	rec, err := h.service.UpdateRecord(c.Request.Context(), c.Param("model_id"), c.Param("record_id"), service.UpsertRecordInput{Data: req.Data})
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			fail(c, 40401, err.Error())
+			return
+		}
+		fail(c, 40001, err.Error())
+		return
+	}
+	ok(c, rec)
+}
+
+func (h *MetaHandler) DeleteRecord(c *gin.Context) {
+	c.Set("audit_action", "meta.records.delete")
+	if err := h.service.DeleteRecord(c.Request.Context(), c.Param("model_id"), c.Param("record_id")); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			fail(c, 40401, err.Error())
+			return
+		}
+		fail(c, 40001, err.Error())
+		return
+	}
+	ok(c, gin.H{"deleted": true, "record_id": c.Param("record_id")})
 }
 
 func toDomainEnumOptions(in []MetaEnumOptionReq) []domain.MetaEnumOption {

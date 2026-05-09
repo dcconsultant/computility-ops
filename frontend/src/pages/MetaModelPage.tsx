@@ -1,123 +1,265 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
+  Alert,
   Button,
   Card,
   Col,
+  Descriptions,
   Form,
   Input,
+  InputNumber,
   Modal,
-  Descriptions,
-  Alert,
+  Popconfirm,
   Row,
   Select,
   Space,
   Table,
   Tag,
+  Tree,
   Typography,
-  message,
-  Popconfirm,
-  Switch,
-  Divider,
+  message
 } from 'antd';
+import { SettingOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import {
-  archiveMetaModel,
+  cloneMetaModel,
   createMetaField,
   createMetaModel,
-  createMetaReference,
+  createMetaRecord,
   deleteMetaField,
   deleteMetaModel,
-  deleteMetaReference,
+  deleteMetaRecord,
   getMetaModel,
+  listMetaModelVersions,
   listMetaModels,
-  listMetaReferences,
+  listMetaRecords,
+  publishMetaModel,
   reorderMetaFields,
   updateMetaField,
   updateMetaModel,
-  updateMetaReference,
-  publishMetaModel,
-  listMetaModelVersions,
-  rollbackMetaModel,
-  getMetaModelVersion
+  updateMetaRecord
 } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
-import type { MetaField, MetaModel, MetaReference, MetaModelVersion, MetaModelSnapshot } from '../types';
+import type { MetaField, MetaModel, MetaModelVersion, MetaRecord } from '../types';
 
 const VALUE_TYPES = ['string', 'int', 'decimal', 'bool', 'date', 'datetime', 'enum', 'json'];
 
+type ViewMode = 'data' | 'config';
+
 export default function MetaModelPage() {
   const [models, setModels] = useState<MetaModel[]>([]);
-  const [loadingModels, setLoadingModels] = useState(false);
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<MetaModel | null>(null);
   const [fields, setFields] = useState<MetaField[]>([]);
-  const [refs, setRefs] = useState<MetaReference[]>([]);
   const [versions, setVersions] = useState<MetaModelVersion[]>([]);
-  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [records, setRecords] = useState<MetaRecord[]>([]);
+  const [mode, setMode] = useState<ViewMode>('data');
+  const [loading, setLoading] = useState(false);
 
-  const [createModelOpen, setCreateModelOpen] = useState(false);
-  const [editModelOpen, setEditModelOpen] = useState(false);
-  const [fieldOpen, setFieldOpen] = useState(false);
-  const [refOpen, setRefOpen] = useState(false);
+  const [modelModalOpen, setModelModalOpen] = useState(false);
+  const [editModelModalOpen, setEditModelModalOpen] = useState(false);
+  const [fieldModalOpen, setFieldModalOpen] = useState(false);
+  const [recordModalOpen, setRecordModalOpen] = useState(false);
+  const [cloneModalOpen, setCloneModalOpen] = useState(false);
 
   const [editingField, setEditingField] = useState<MetaField | null>(null);
-  const [editingRef, setEditingRef] = useState<MetaReference | null>(null);
-
-  const [versionDetailOpen, setVersionDetailOpen] = useState(false);
-  const [versionDetail, setVersionDetail] = useState<{version: MetaModelVersion; snapshot: MetaModelSnapshot} | null>(null);
-  const [versionDiffText, setVersionDiffText] = useState('');
-
+  const [editingRecord, setEditingRecord] = useState<MetaRecord | null>(null);
 
   const [modelForm] = Form.useForm();
   const [editModelForm] = Form.useForm();
   const [fieldForm] = Form.useForm();
-  const fieldValueType = Form.useWatch('value_type', fieldForm);
-  const [refForm] = Form.useForm();
+  const [recordForm] = Form.useForm();
+  const [cloneForm] = Form.useForm();
+  const [filterForm] = Form.useForm();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [filteredRecords, setFilteredRecords] = useState<MetaRecord[]>([]);
 
   useEffect(() => {
+    const qMode = searchParams.get('mode');
+    if (qMode === 'config' || qMode === 'data') {
+      setMode(qMode);
+    }
+    const qModel = searchParams.get('modelId');
+    if (qModel) {
+      setSelectedModelId(qModel);
+    }
     loadModels();
   }, []);
 
   useEffect(() => {
     if (selectedModelId) {
-      loadModelDetail(selectedModelId);
-    } else {
-      setSelectedModel(null);
-      setFields([]);
-      setRefs([]);
+      setSearchParams({ modelId: selectedModelId, mode });
+      if (mode === 'data') {
+        loadRecordView(selectedModelId);
+      } else {
+        loadConfigView(selectedModelId);
+      }
     }
-  }, [selectedModelId]);
+  }, [selectedModelId, mode]);
+
+  useEffect(() => {
+    setFilteredRecords(records);
+  }, [records]);
 
   async function loadModels() {
-    setLoadingModels(true);
     try {
       const resp = ensureApiOk(await listMetaModels());
       const list = resp.data.list || [];
       setModels(list);
-      if (!selectedModelId && list.length > 0) {
-        setSelectedModelId(list[0].id);
+      const cached = localStorage.getItem('meta:selectedModelId');
+      const queryModel = searchParams.get('modelId');
+      const chosen = list.find((m) => m.id === queryModel)?.id || list.find((m) => m.id === cached)?.id || list[0]?.id || '';
+      if (!selectedModelId && chosen) {
+        setSelectedModelId(chosen);
       }
     } catch (e) {
       message.error(parseApiError(e, '加载模型列表失败'));
-    } finally {
-      setLoadingModels(false);
     }
   }
 
-  async function loadModelDetail(modelId: string) {
-    setLoadingDetail(true);
+  async function loadRecordView(modelId: string) {
+    setLoading(true);
+    try {
+      const resp = ensureApiOk(await listMetaRecords(modelId));
+      setSelectedModel(resp.data.model);
+      setFields((resp.data.fields || []).slice().sort((a, b) => a.sort_no - b.sort_no));
+      setRecords(resp.data.list || []);
+    } catch (e) {
+      message.error(parseApiError(e, '加载模型数据失败'));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadConfigView(modelId: string) {
+    setLoading(true);
     try {
       const detail = ensureApiOk(await getMetaModel(modelId));
       setSelectedModel(detail.data.model);
       setFields((detail.data.fields || []).slice().sort((a, b) => a.sort_no - b.sort_no));
-      const r = ensureApiOk(await listMetaReferences(modelId));
-      setRefs(r.data.list || []);
       const vs = ensureApiOk(await listMetaModelVersions(modelId));
       setVersions(vs.data.list || []);
     } catch (e) {
-      message.error(parseApiError(e, '加载模型详情失败'));
+      message.error(parseApiError(e, '加载模型配置失败'));
     } finally {
-      setLoadingDetail(false);
+      setLoading(false);
+    }
+  }
+
+  const dataColumns: ColumnsType<MetaRecord> = useMemo(() => {
+    const visibleFields = fields.filter((f) => f.visible);
+    const fieldCols = visibleFields.map((f) => ({
+      title: f.field_name,
+      key: f.id,
+      dataIndex: ['data', f.field_code],
+      sorter: f.sortable
+        ? (a: MetaRecord, b: MetaRecord) => String(a.data?.[f.field_code] ?? '').localeCompare(String(b.data?.[f.field_code] ?? ''), 'zh')
+        : undefined,
+      render: (v: any) => (typeof v === 'object' ? JSON.stringify(v) : String(v ?? '-'))
+    }));
+
+    return [
+      ...fieldCols,
+      {
+        title: '更新时间',
+        dataIndex: 'updated_at',
+        width: 180
+      },
+      {
+        title: '操作',
+        width: 180,
+        render: (_, row) => (
+          <Space>
+            <Button size="small" onClick={() => openEditRecord(row)}>编辑</Button>
+            <Popconfirm title="确认删除该记录？" onConfirm={() => onDeleteRecord(row.id)}>
+              <Button size="small" danger>删除</Button>
+            </Popconfirm>
+          </Space>
+        )
+      }
+    ];
+  }, [fields]);
+
+  const fieldColumns: ColumnsType<MetaField> = [
+    { title: '排序', dataIndex: 'sort_no', width: 70 },
+    { title: '编码', dataIndex: 'field_code' },
+    { title: '名称', dataIndex: 'field_name' },
+    { title: '类型', dataIndex: 'value_type', width: 90 },
+    {
+      title: '约束',
+      render: (_, row) => (
+        <Space size={4} wrap>
+          {row.required ? <Tag color="red">必填</Tag> : null}
+          {row.unique ? <Tag color="purple">唯一</Tag> : null}
+          {row.visible ? <Tag color="green">展示</Tag> : <Tag>隐藏</Tag>}
+        </Space>
+      )
+    },
+    {
+      title: '操作',
+      width: 240,
+      render: (_, row) => (
+        <Space>
+          <Button size="small" onClick={() => onMoveField(row, -1)}>上移</Button>
+          <Button size="small" onClick={() => onMoveField(row, 1)}>下移</Button>
+          <Button size="small" onClick={() => openEditField(row)}>编辑</Button>
+          <Popconfirm title="确认删除该属性？" onConfirm={() => onDeleteField(row.id)}>
+            <Button size="small" danger>删除</Button>
+          </Popconfirm>
+        </Space>
+      )
+    }
+  ];
+
+  function openCreateRecord() {
+    if (!selectedModel) return;
+    if (selectedModel.status !== 'published') {
+      message.warning('请先发布模型版本后再录入数据');
+      return;
+    }
+    setEditingRecord(null);
+    recordForm.resetFields();
+    const init: Record<string, any> = {};
+    fields.forEach((f) => {
+      if (f.default_value) init[f.field_code] = f.default_value;
+    });
+    recordForm.setFieldsValue(init);
+    setRecordModalOpen(true);
+  }
+
+  function openEditRecord(row: MetaRecord) {
+    setEditingRecord(row);
+    recordForm.setFieldsValue(row.data || {});
+    setRecordModalOpen(true);
+  }
+
+  async function onSubmitRecord() {
+    if (!selectedModel) return;
+    try {
+      const values = await recordForm.validateFields();
+      if (editingRecord) {
+        ensureApiOk(await updateMetaRecord(selectedModel.id, editingRecord.id, { data: values }));
+        message.success('记录更新成功');
+      } else {
+        ensureApiOk(await createMetaRecord(selectedModel.id, { data: values }));
+        message.success('记录创建成功');
+      }
+      setRecordModalOpen(false);
+      await loadRecordView(selectedModel.id);
+    } catch (e) {
+      message.error(parseApiError(e, editingRecord ? '更新记录失败' : '创建记录失败'));
+    }
+  }
+
+  async function onDeleteRecord(recordId: string) {
+    if (!selectedModel) return;
+    try {
+      ensureApiOk(await deleteMetaRecord(selectedModel.id, recordId));
+      message.success('记录已删除');
+      await loadRecordView(selectedModel.id);
+    } catch (e) {
+      message.error(parseApiError(e, '删除记录失败'));
     }
   }
 
@@ -126,7 +268,7 @@ export default function MetaModelPage() {
       const values = await modelForm.validateFields();
       ensureApiOk(await createMetaModel(values));
       message.success('模型创建成功');
-      setCreateModelOpen(false);
+      setModelModalOpen(false);
       modelForm.resetFields();
       await loadModels();
     } catch (e) {
@@ -140,23 +282,11 @@ export default function MetaModelPage() {
       const values = await editModelForm.validateFields();
       ensureApiOk(await updateMetaModel(selectedModel.id, values));
       message.success('模型更新成功');
-      setEditModelOpen(false);
+      setEditModelModalOpen(false);
       await loadModels();
-      await loadModelDetail(selectedModel.id);
+      await loadConfigView(selectedModel.id);
     } catch (e) {
       message.error(parseApiError(e, '更新模型失败'));
-    }
-  }
-
-  async function onArchiveModel() {
-    if (!selectedModel) return;
-    try {
-      ensureApiOk(await archiveMetaModel(selectedModel.id));
-      message.success('模型已归档');
-      await loadModels();
-      await loadModelDetail(selectedModel.id);
-    } catch (e) {
-      message.error(parseApiError(e, '归档模型失败'));
     }
   }
 
@@ -165,35 +295,49 @@ export default function MetaModelPage() {
     try {
       ensureApiOk(await deleteMetaModel(selectedModel.id));
       message.success('模型已删除');
-      const deletedId = selectedModel.id;
+      setSelectedModelId('');
       await loadModels();
-      if (selectedModelId === deletedId) {
-        const next = models.filter((m) => m.id !== deletedId)[0];
-        setSelectedModelId(next?.id || '');
-      }
     } catch (e) {
       message.error(parseApiError(e, '删除模型失败'));
     }
   }
 
+  function openCloneModel() {
+    if (!selectedModel) return;
+    cloneForm.setFieldsValue({
+      model_code: `${selectedModel.model_code}_copy`,
+      model_name: `${selectedModel.model_name}-副本`,
+      description: selectedModel.description || ''
+    });
+    setCloneModalOpen(true);
+  }
+
+  async function onCloneModel() {
+    if (!selectedModel) return;
+    try {
+      const values = await cloneForm.validateFields();
+      const resp = ensureApiOk(await cloneMetaModel(selectedModel.id, values));
+      message.success('模型克隆成功');
+      setCloneModalOpen(false);
+      await loadModels();
+      setSelectedModelId(resp.data.id);
+      setMode('config');
+      localStorage.setItem('meta:selectedModelId', resp.data.id);
+    } catch (e) {
+      message.error(parseApiError(e, '模型克隆失败'));
+    }
+  }
+
   function openCreateField() {
     setEditingField(null);
-    fieldForm.setFieldsValue({
-      category: 'business',
-      value_type: 'string',
-      required: false,
-      unique: false,
-      filterable: true,
-      sortable: false,
-      visible: true
-    });
-    setFieldOpen(true);
+    fieldForm.setFieldsValue({ value_type: 'string', category: 'business', visible: true, required: false });
+    setFieldModalOpen(true);
   }
 
   function openEditField(row: MetaField) {
     setEditingField(row);
     fieldForm.setFieldsValue(row);
-    setFieldOpen(true);
+    setFieldModalOpen(true);
   }
 
   async function onSubmitField() {
@@ -207,20 +351,19 @@ export default function MetaModelPage() {
         ensureApiOk(await createMetaField(selectedModel.id, values));
         message.success('属性创建成功');
       }
-      setFieldOpen(false);
-      fieldForm.resetFields();
-      await loadModelDetail(selectedModel.id);
+      setFieldModalOpen(false);
+      await loadConfigView(selectedModel.id);
     } catch (e) {
       message.error(parseApiError(e, editingField ? '更新属性失败' : '创建属性失败'));
     }
   }
 
-  async function onDeleteField(row: MetaField) {
+  async function onDeleteField(fieldId: string) {
     if (!selectedModel) return;
     try {
-      ensureApiOk(await deleteMetaField(selectedModel.id, row.id));
+      ensureApiOk(await deleteMetaField(selectedModel.id, fieldId));
       message.success('属性删除成功');
-      await loadModelDetail(selectedModel.id);
+      await loadConfigView(selectedModel.id);
     } catch (e) {
       message.error(parseApiError(e, '删除属性失败'));
     }
@@ -236,55 +379,10 @@ export default function MetaModelPage() {
     try {
       ensureApiOk(await reorderMetaFields(selectedModel.id, next.map((f) => f.id)));
       setFields(next.map((f, i) => ({ ...f, sort_no: i + 1 })));
-      message.success('排序已更新');
     } catch (e) {
       message.error(parseApiError(e, '调整排序失败'));
     }
   }
-
-  function openCreateRef() {
-    setEditingRef(null);
-    refForm.setFieldsValue({ on_delete_action: 'restrict', display_fields: [] });
-    setRefOpen(true);
-  }
-
-  function openEditRef(row: MetaReference) {
-    setEditingRef(row);
-    refForm.setFieldsValue(row);
-    setRefOpen(true);
-  }
-
-  async function onSubmitRef() {
-    if (!selectedModel) return;
-    try {
-      const values = await refForm.validateFields();
-      if (editingRef) {
-        ensureApiOk(await updateMetaReference(selectedModel.id, editingRef.id, values));
-        message.success('关联更新成功');
-      } else {
-        ensureApiOk(await createMetaReference(selectedModel.id, values));
-        message.success('关联创建成功');
-      }
-      setRefOpen(false);
-      refForm.resetFields();
-      await loadModelDetail(selectedModel.id);
-    } catch (e) {
-      message.error(parseApiError(e, editingRef ? '更新关联失败' : '创建关联失败'));
-    }
-  }
-
-  async function onDeleteRef(row: MetaReference) {
-    if (!selectedModel) return;
-    try {
-      ensureApiOk(await deleteMetaReference(selectedModel.id, row.id));
-      message.success('关联删除成功');
-      await loadModelDetail(selectedModel.id);
-    } catch (e) {
-      message.error(parseApiError(e, '删除关联失败'));
-    }
-  }
-
-
 
   async function onPublishModel() {
     if (!selectedModel) return;
@@ -292,240 +390,218 @@ export default function MetaModelPage() {
       ensureApiOk(await publishMetaModel(selectedModel.id, { change_summary: '前端发布操作' }));
       message.success('模型发布成功');
       await loadModels();
-      await loadModelDetail(selectedModel.id);
+      await loadConfigView(selectedModel.id);
     } catch (e) {
       message.error(parseApiError(e, '发布模型失败'));
     }
   }
 
-  async function onRollbackModel(versionNo: number) {
-    if (!selectedModel) return;
-    try {
-      ensureApiOk(await rollbackMetaModel(selectedModel.id, versionNo));
-      message.success(`已回滚到版本 v${versionNo}`);
-      await loadModels();
-      await loadModelDetail(selectedModel.id);
-    } catch (e) {
-      message.error(parseApiError(e, '回滚失败'));
-    }
-  }
-
-
-
-  async function onViewVersion(versionNo: number) {
-    if (!selectedModel) return;
-    try {
-      const current = ensureApiOk(await getMetaModelVersion(selectedModel.id, versionNo));
-      let diff = '';
-      if (versionNo > 1) {
-        try {
-          const prev = ensureApiOk(await getMetaModelVersion(selectedModel.id, versionNo - 1));
-          const c = current.data.snapshot;
-          const p = prev.data.snapshot;
-          const fieldAdded = c.fields.filter((f) => !p.fields.some((x) => x.id === f.id)).length;
-          const fieldRemoved = p.fields.filter((f) => !c.fields.some((x) => x.id === f.id)).length;
-          const refAdded = c.references.filter((r) => !p.references.some((x) => x.id === r.id)).length;
-          const refRemoved = p.references.filter((r) => !c.references.some((x) => x.id === r.id)).length;
-          diff = `相比 v${versionNo - 1}：字段 +${fieldAdded} / -${fieldRemoved}，关联 +${refAdded} / -${refRemoved}`;
-        } catch {
-          diff = '未能获取上一版本，暂不显示差异';
+  function applyFilters() {
+    const values = filterForm.getFieldsValue();
+    const filtered = records.filter((rec) => {
+      return fields.every((f) => {
+        if (!f.filterable) return true;
+        const cond = values[f.field_code];
+        if (cond === undefined || cond === null || cond === '') return true;
+        const val = rec.data?.[f.field_code];
+        if (val === undefined || val === null) return false;
+        if (f.value_type === 'string' || f.value_type === 'date' || f.value_type === 'datetime') {
+          return String(val).toLowerCase().includes(String(cond).toLowerCase());
         }
-      } else {
-        diff = '首个版本，无上一版本可比较';
-      }
-      setVersionDetail(current.data);
-      setVersionDiffText(diff);
-      setVersionDetailOpen(true);
-    } catch (e) {
-      message.error(parseApiError(e, '加载版本详情失败'));
-    }
+        return String(val) === String(cond);
+      });
+    });
+    setFilteredRecords(filtered);
   }
 
-  const modelColumns: ColumnsType<MetaModel> = [
-    { title: '模型编码', dataIndex: 'model_code', key: 'model_code' },
-    { title: '模型名称', dataIndex: 'model_name', key: 'model_name' },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      render: (v: string) => (
-        <Tag color={v === 'draft' ? 'blue' : v === 'published' ? 'green' : 'default'}>{v}</Tag>
-      )
-    }
-  ];
-
-  const fieldColumns: ColumnsType<MetaField> = [
-    { title: '排序', dataIndex: 'sort_no', width: 70 },
-    { title: '编码', dataIndex: 'field_code' },
-    { title: '名称', dataIndex: 'field_name' },
-    { title: '类型', dataIndex: 'value_type', width: 90 },
-    {
-      title: '约束',
-      width: 220,
-      render: (_, row) => (
-        <Space size={4} wrap>
-          {row.required ? <Tag color="red">必填</Tag> : null}
-          {row.unique ? <Tag color="purple">唯一</Tag> : null}
-          {row.filterable ? <Tag color="blue">可筛选</Tag> : null}
-          {row.sortable ? <Tag color="cyan">可排序</Tag> : null}
-          {row.visible ? <Tag color="green">可展示</Tag> : <Tag>隐藏</Tag>}
-        </Space>
-      )
-    },
-    {
-      title: '操作',
-      width: 260,
-      render: (_, row) => (
-        <Space>
-          <Button size="small" onClick={() => onMoveField(row, -1)}>上移</Button>
-          <Button size="small" onClick={() => onMoveField(row, 1)}>下移</Button>
-          <Button size="small" onClick={() => openEditField(row)}>编辑</Button>
-          <Popconfirm title="确认删除该属性？" onConfirm={() => onDeleteField(row)}>
-            <Button size="small" danger>删除</Button>
-          </Popconfirm>
-        </Space>
-      )
-    }
-  ];
-
-  const refColumns: ColumnsType<MetaReference> = [
-    { title: '源字段ID', dataIndex: 'source_field_id' },
-    { title: '目标模型ID', dataIndex: 'target_model_id' },
-    { title: '目标字段ID', dataIndex: 'target_field_id' },
-    {
-      title: '展示字段',
-      dataIndex: 'display_fields',
-      render: (v: string[]) => (v || []).join(', ')
-    },
-    { title: '删除策略', dataIndex: 'on_delete_action', width: 110 },
-    {
-      title: '操作',
-      width: 160,
-      render: (_, row) => (
-        <Space>
-          <Button size="small" onClick={() => openEditRef(row)}>编辑</Button>
-          <Popconfirm title="确认删除该关联？" onConfirm={() => onDeleteRef(row)}>
-            <Button size="small" danger>删除</Button>
-          </Popconfirm>
-        </Space>
-      )
-    }
-  ];
-
+  function resetFilters() {
+    filterForm.resetFields();
+    setFilteredRecords(records);
+  }
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <Row gutter={16}>
-        <Col span={8}>
+    <Row gutter={16}>
+      <Col span={6}>
+        <Card
+          title="模型导航"
+          extra={
+            <Space>
+              <Button type={mode === 'config' ? 'primary' : 'default'} icon={<SettingOutlined />} onClick={() => setMode('config')} />
+              <Button type="primary" onClick={() => setModelModalOpen(true)}>新建</Button>
+            </Space>
+          }
+        >
+          <Tree
+            selectedKeys={selectedModelId ? [selectedModelId] : []}
+            treeData={models.map((m) => ({
+              key: m.id,
+              title: (
+                <Space>
+                  <span>{m.model_name}</span>
+                  <Tag color={m.status === 'published' ? 'green' : m.status === 'draft' ? 'blue' : 'default'}>{m.status}</Tag>
+                </Space>
+              )
+            }))}
+            onSelect={(keys) => {
+              const id = String(keys[0] || '');
+              if (!id) return;
+              setSelectedModelId(id);
+              setMode('data');
+              localStorage.setItem('meta:selectedModelId', id);
+            }}
+          />
+        </Card>
+      </Col>
+
+      <Col span={18}>
+        {mode === 'data' ? (
           <Card
-            title="模型列表"
-            extra={<Button type="primary" onClick={() => setCreateModelOpen(true)}>新建模型</Button>}
-            loading={loadingModels}
-          >
-            <Table
-              rowKey="id"
-              size="small"
-              pagination={false}
-              columns={modelColumns}
-              dataSource={models}
-              rowSelection={{
-                type: 'radio',
-                selectedRowKeys: selectedModelId ? [selectedModelId] : [],
-                onChange: (keys) => setSelectedModelId(String(keys[0] || ''))
-              }}
-            />
-          </Card>
-        </Col>
-        <Col span={16}>
-          <Card
-            title={selectedModel ? `模型详情：${selectedModel.model_name}` : '模型详情'}
-            loading={loadingDetail}
-            extra={selectedModel ? (
+            loading={loading}
+            title={selectedModel ? `数据管理：${selectedModel.model_name} (${selectedModel.model_code})` : '数据管理'}
+            extra={
               <Space>
-                <Button onClick={() => {
-                  editModelForm.setFieldsValue({ model_name: selectedModel.model_name, description: selectedModel.description });
-                  setEditModelOpen(true);
-                }}>编辑模型</Button>
-                <Button type="primary" onClick={onPublishModel}>发布</Button>
-                <Button onClick={onArchiveModel}>归档</Button>
-                <Popconfirm title="仅草稿且无记录模型可删除，确认删除？" onConfirm={onDeleteModel}>
-                  <Button danger>删除模型</Button>
-                </Popconfirm>
+                <Button icon={<SettingOutlined />} onClick={() => setMode('config')}>模型配置</Button>
+                <Button type="primary" onClick={openCreateRecord} disabled={!selectedModel || selectedModel.status !== 'published'}>新增记录</Button>
               </Space>
-            ) : null}
+            }
           >
-            {!selectedModel ? <Typography.Text type="secondary">请选择左侧模型</Typography.Text> : (
-              <Space direction="vertical" style={{ width: '100%' }}>
-                <Typography.Text>编码：{selectedModel.model_code}</Typography.Text>
-                <Typography.Text>状态：{selectedModel.status}</Typography.Text>
-                <Typography.Text>描述：{selectedModel.description || '-'}</Typography.Text>
+            {selectedModel?.status !== 'published' ? <Alert type="warning" showIcon message="当前模型未发布，暂不可写入数据。" style={{ marginBottom: 12 }} /> : null}
+            <Form form={filterForm} layout="vertical" style={{ marginBottom: 12 }}>
+              <Row gutter={12}>
+                {fields.filter((f) => f.filterable).map((f) => (
+                  <Col span={8} key={f.id}>
+                    <Form.Item name={f.field_code} label={f.field_name}>
+                      {f.value_type === 'enum' ? (
+                        <Select allowClear options={(f.enum_options || []).filter((v) => !v.disabled).map((v) => ({ label: v.label, value: v.value }))} />
+                      ) : f.value_type === 'bool' ? (
+                        <Select allowClear options={[{ label: 'true', value: true }, { label: 'false', value: false }]} />
+                      ) : (
+                        <Input allowClear placeholder={`按${f.field_name}筛选`} />
+                      )}
+                    </Form.Item>
+                  </Col>
+                ))}
+              </Row>
+              <Space style={{ marginBottom: 8 }}>
+                <Button type="primary" onClick={applyFilters}>查询</Button>
+                <Button onClick={resetFilters}>重置</Button>
               </Space>
-            )}
+            </Form>
+            <Table rowKey="id" columns={dataColumns} dataSource={filteredRecords} />
           </Card>
+        ) : (
+          <Space direction="vertical" style={{ width: '100%' }} size={16}>
+            <Card
+              loading={loading}
+              title={selectedModel ? `模型配置：${selectedModel.model_name}` : '模型配置'}
+              extra={selectedModel ? (
+                <Space>
+                  <Button onClick={() => {
+                    editModelForm.setFieldsValue({ model_name: selectedModel.model_name, description: selectedModel.description });
+                    setEditModelModalOpen(true);
+                  }}>编辑模型</Button>
+                  <Button type="primary" onClick={onPublishModel}>发布</Button>
+                  <Popconfirm title="确认删除模型？" onConfirm={onDeleteModel}>
+                    <Button danger>删除模型</Button>
+                  </Popconfirm>
+                  <Button onClick={openCloneModel}>克隆模型</Button>
+                </Space>
+              ) : null}
+            >
+              {selectedModel ? (
+                <Descriptions bordered size="small" column={2}>
+                  <Descriptions.Item label="模型编码">{selectedModel.model_code}</Descriptions.Item>
+                  <Descriptions.Item label="状态">{selectedModel.status}</Descriptions.Item>
+                  <Descriptions.Item label="当前版本">v{selectedModel.current_version}</Descriptions.Item>
+                  <Descriptions.Item label="描述">{selectedModel.description || '-'}</Descriptions.Item>
+                </Descriptions>
+              ) : <Typography.Text type="secondary">请选择模型</Typography.Text>}
+            </Card>
 
+            <Card title="属性管理" extra={selectedModel ? <Button onClick={openCreateField}>新增属性</Button> : null}>
+              <Table rowKey="id" columns={fieldColumns} dataSource={fields} />
+            </Card>
 
+            <Card title="发布版本">
+              <Table
+                rowKey="id"
+                dataSource={versions}
+                columns={[
+                  { title: '版本', dataIndex: 'version_no', render: (v: number) => `v${v}` },
+                  { title: '发布时间', dataIndex: 'published_at' },
+                  { title: '说明', dataIndex: 'change_summary', render: (v: string) => v || '-' }
+                ]}
+              />
+            </Card>
+          </Space>
+        )}
+      </Col>
 
-          <Card
-            style={{ marginTop: 16 }}
-            title="版本管理"
-          >
-            <Table
-              rowKey="id"
-              size="small"
-              pagination={false}
-              dataSource={versions}
-              columns={[
-                { title: '版本号', dataIndex: 'version_no', render: (v:number) => `v${v}` },
-                { title: '发布时间', dataIndex: 'published_at' },
-                { title: '变更说明', dataIndex: 'change_summary', render: (v:string) => v || '-' },
-                {
-                  title: '操作',
-                  width: 120,
-                  render: (_:unknown, row: MetaModelVersion) => (
-                    <Popconfirm title={`确认回滚到 v${row.version_no} ?`} onConfirm={() => onRollbackModel(row.version_no)}>
-                      <Space><Button size="small" onClick={() => onViewVersion(row.version_no)}>查看</Button><Button size="small">回滚</Button></Space>
-                    </Popconfirm>
-                  )
-                }
-              ]}
-            />
-          </Card>
-
-          <Card
-            style={{ marginTop: 16 }}
-            title="属性管理"
-            extra={selectedModel ? <Button type="primary" onClick={openCreateField}>新增属性</Button> : null}
-          >
-            <Table rowKey="id" size="small" columns={fieldColumns} dataSource={fields} pagination={false} />
-          </Card>
-
-          <Card
-            style={{ marginTop: 16 }}
-            title="关联管理"
-            extra={selectedModel ? <Button type="primary" onClick={openCreateRef}>新增关联</Button> : null}
-          >
-            <Table rowKey="id" size="small" columns={refColumns} dataSource={refs} pagination={false} />
-          </Card>
-        </Col>
-      </Row>
-
-      <Modal title="新建模型" open={createModelOpen} onCancel={() => setCreateModelOpen(false)} onOk={onCreateModel}>
+      <Modal title="新建模型" open={modelModalOpen} onCancel={() => setModelModalOpen(false)} onOk={onCreateModel}>
         <Form layout="vertical" form={modelForm}>
-          <Form.Item name="model_code" label="模型编码" rules={[{ required: true }]}>
-            <Input placeholder="如 host_meta" />
-          </Form.Item>
-          <Form.Item name="model_name" label="模型名称" rules={[{ required: true }]}>
-            <Input placeholder="如 主机元数据" />
-          </Form.Item>
-          <Form.Item name="description" label="描述">
-            <Input.TextArea rows={3} />
+          <Form.Item name="model_code" label="模型编码" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="model_name" label="模型名称" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="description" label="描述"><Input.TextArea rows={3} /></Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal title="编辑模型" open={editModelModalOpen} onCancel={() => setEditModelModalOpen(false)} onOk={onUpdateModel}>
+        <Form layout="vertical" form={editModelForm}>
+          <Form.Item name="model_name" label="模型名称" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="description" label="描述"><Input.TextArea rows={3} /></Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal title={editingField ? '编辑属性' : '新增属性'} open={fieldModalOpen} onCancel={() => setFieldModalOpen(false)} onOk={onSubmitField}>
+        <Form layout="vertical" form={fieldForm}>
+          <Form.Item name="field_code" label="属性编码" rules={[{ required: true }]}><Input disabled={!!editingField} /></Form.Item>
+          <Form.Item name="field_name" label="属性名称" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="category" label="分类"><Input /></Form.Item>
+          <Form.Item name="value_type" label="值类型" rules={[{ required: true }]}>
+            <Select options={VALUE_TYPES.map((v) => ({ label: v, value: v }))} />
           </Form.Item>
         </Form>
       </Modal>
 
-      <Modal title="编辑模型" open={editModelOpen} onCancel={() => setEditModelOpen(false)} onOk={onUpdateModel}>
-        <Form layout="vertical" form={editModelForm}>
-          <Form.Item name="model_name" label="模型名称" rules={[{ required: true }]}>
+      <Modal title={editingRecord ? '编辑记录' : '新增记录'} open={recordModalOpen} onCancel={() => setRecordModalOpen(false)} onOk={onSubmitRecord} width={760}>
+        <Form layout="vertical" form={recordForm}>
+          {fields.map((f) => {
+            if (f.value_type === 'bool') {
+              return (
+                <Form.Item key={f.id} name={f.field_code} label={f.field_name} rules={f.required ? [{ required: true }] : []}>
+                  <Select options={[{ label: 'true', value: true }, { label: 'false', value: false }]} />
+                </Form.Item>
+              );
+            }
+            if (f.value_type === 'enum') {
+              return (
+                <Form.Item key={f.id} name={f.field_code} label={f.field_name} rules={f.required ? [{ required: true }] : []}>
+                  <Select options={(f.enum_options || []).filter((v) => !v.disabled).map((v) => ({ label: v.label, value: v.value }))} />
+                </Form.Item>
+              );
+            }
+            if (f.value_type === 'int' || f.value_type === 'decimal') {
+              return (
+                <Form.Item key={f.id} name={f.field_code} label={f.field_name} rules={f.required ? [{ required: true }] : []}>
+                  <InputNumber style={{ width: '100%' }} />
+                </Form.Item>
+              );
+            }
+            return (
+              <Form.Item key={f.id} name={f.field_code} label={f.field_name} rules={f.required ? [{ required: true }] : []}>
+                <Input />
+              </Form.Item>
+            );
+          })}
+        </Form>
+      </Modal>
+
+      <Modal title="克隆模型" open={cloneModalOpen} onCancel={() => setCloneModalOpen(false)} onOk={onCloneModel}>
+        <Form layout="vertical" form={cloneForm}>
+          <Form.Item name="model_code" label="模型编码" rules={[{ required: true, message: '请输入模型编码' }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="model_name" label="模型名称" rules={[{ required: true, message: '请输入模型名称' }]}>
             <Input />
           </Form.Item>
           <Form.Item name="description" label="描述">
@@ -533,143 +609,6 @@ export default function MetaModelPage() {
           </Form.Item>
         </Form>
       </Modal>
-
-      <Modal title={editingField ? '编辑属性' : '新增属性'} open={fieldOpen} onCancel={() => setFieldOpen(false)} onOk={onSubmitField} width={760}>
-        <Form layout="vertical" form={fieldForm}>
-          <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item name="field_code" label="属性编码" rules={[{ required: true }]}>
-                <Input disabled={!!editingField} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="field_name" label="属性名称" rules={[{ required: true }]}>
-                <Input />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={12}>
-            <Col span={8}>
-              <Form.Item name="category" label="分类"><Input /></Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="value_type" label="值类型" rules={[{ required: true }]}>
-                <Select options={VALUE_TYPES.map((v) => ({ label: v, value: v }))} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="default_value" label="默认值"><Input /></Form.Item>
-            </Col>
-          </Row>
-          <Form.Item name="validation_rule" label="校验规则"><Input /></Form.Item>
-
-          {fieldValueType === 'enum' ? (
-            <>
-              <Divider style={{ margin: '8px 0' }} />
-              <Typography.Text strong>枚举项（value + label）</Typography.Text>
-              <Form.List
-                name="enum_options"
-                rules={[
-                  {
-                    validator: async (_, value) => {
-                      if (!value || value.length === 0) {
-                        throw new Error('value_type=enum 时必须至少配置1个枚举项');
-                      }
-                    }
-                  }
-                ]}
-              >
-                {(items, { add, remove }, { errors }) => (
-                  <Space direction="vertical" style={{ width: '100%', marginTop: 8 }}>
-                    {items.map((item) => (
-                      <Row key={item.key} gutter={8} align="middle">
-                        <Col span={9}>
-                          <Form.Item name={[item.name, 'value']} rules={[{ required: true, message: '必填' }]}>
-                            <Input placeholder="value（存储值）" />
-                          </Form.Item>
-                        </Col>
-                        <Col span={9}>
-                          <Form.Item name={[item.name, 'label']} rules={[{ required: true, message: '必填' }]}>
-                            <Input placeholder="label（展示名）" />
-                          </Form.Item>
-                        </Col>
-                        <Col span={4}>
-                          <Form.Item name={[item.name, 'disabled']} valuePropName="checked" initialValue={false}>
-                            <Switch checkedChildren="禁用" unCheckedChildren="启用" />
-                          </Form.Item>
-                        </Col>
-                        <Col span={2}>
-                          <Button danger onClick={() => remove(item.name)}>删</Button>
-                        </Col>
-                      </Row>
-                    ))}
-                    <Button onClick={() => add({ value: '', label: '', disabled: false })}>+ 新增枚举项</Button>
-                    <Form.ErrorList errors={errors} />
-                  </Space>
-                )}
-              </Form.List>
-            </>
-          ) : null}
-
-          <Space wrap style={{ marginTop: 8 }}>
-            <Form.Item name="required" valuePropName="checked" label="必填"><Switch /></Form.Item>
-            <Form.Item name="unique" valuePropName="checked" label="唯一"><Switch /></Form.Item>
-            <Form.Item name="filterable" valuePropName="checked" label="可筛选"><Switch /></Form.Item>
-            <Form.Item name="sortable" valuePropName="checked" label="可排序"><Switch /></Form.Item>
-            <Form.Item name="visible" valuePropName="checked" label="可展示"><Switch /></Form.Item>
-          </Space>
-        </Form>
-      </Modal>
-
-      <Modal title={editingRef ? '编辑关联' : '新增关联'} open={refOpen} onCancel={() => setRefOpen(false)} onOk={onSubmitRef}>
-        <Form layout="vertical" form={refForm}>
-          <Form.Item name="source_field_id" label="源字段ID" rules={[{ required: true }]}><Input /></Form.Item>
-          <Form.Item name="target_model_id" label="目标模型ID" rules={[{ required: true }]}><Input /></Form.Item>
-          <Form.Item name="target_field_id" label="目标字段ID" rules={[{ required: true }]}><Input /></Form.Item>
-          <Form.Item name="display_fields" label="展示字段ID（多选）">
-            <Select mode="tags" tokenSeparators={[',']} />
-          </Form.Item>
-          <Form.Item name="on_delete_action" label="删除策略">
-            <Select options={[{ label: 'restrict', value: 'restrict' }, { label: 'set_null', value: 'set_null' }, { label: 'cascade', value: 'cascade' }]} />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-
-      <Modal title="版本详情" open={versionDetailOpen} footer={null} onCancel={() => setVersionDetailOpen(false)} width={900}>
-        {versionDetail ? (
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <Descriptions bordered size="small" column={2}>
-              <Descriptions.Item label="版本号">v{versionDetail.version.version_no}</Descriptions.Item>
-              <Descriptions.Item label="发布时间">{versionDetail.version.published_at}</Descriptions.Item>
-              <Descriptions.Item label="发布人">{versionDetail.version.published_by || '-'}</Descriptions.Item>
-              <Descriptions.Item label="变更说明">{versionDetail.version.change_summary || '-'}</Descriptions.Item>
-            </Descriptions>
-            <Alert type="info" message={versionDiffText} showIcon />
-            <Row gutter={16}>
-              <Col span={12}>
-                <Card size="small" title={`字段快照 (${versionDetail.snapshot.fields.length})`}>
-                  <Space direction="vertical" size={4}>
-                    {versionDetail.snapshot.fields.map((f) => (
-                      <Typography.Text key={f.id}>{f.field_code} / {f.field_name} / {f.value_type}</Typography.Text>
-                    ))}
-                  </Space>
-                </Card>
-              </Col>
-              <Col span={12}>
-                <Card size="small" title={`关联快照 (${versionDetail.snapshot.references.length})`}>
-                  <Space direction="vertical" size={4}>
-                    {versionDetail.snapshot.references.map((r) => (
-                      <Typography.Text key={r.id}>{r.source_field_id}{' -> '}{r.target_model_id}.{r.target_field_id}</Typography.Text>
-                    ))}
-                  </Space>
-                </Card>
-              </Col>
-            </Row>
-          </Space>
-        ) : null}
-      </Modal>
-
-    </Space>
+    </Row>
   );
 }

@@ -304,6 +304,77 @@ func (r *MetaRepo) CountRecords(ctx context.Context, modelID string) (int64, err
 	return cnt, nil
 }
 
+func (r *MetaRepo) ListRecords(ctx context.Context, modelID string) ([]domain.MetaRecord, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT id, model_id, data_json, created_at, updated_at FROM md_record WHERE model_id=? AND deleted_flag=0 ORDER BY updated_at DESC`, modelID)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "doesn't exist") {
+			return []domain.MetaRecord{}, nil
+		}
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]domain.MetaRecord, 0)
+	for rows.Next() {
+		var rec domain.MetaRecord
+		var dataJSON string
+		if err := rows.Scan(&rec.ID, &rec.ModelID, &dataJSON, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+			return nil, err
+		}
+		rec.Data = map[string]any{}
+		if strings.TrimSpace(dataJSON) != "" {
+			_ = json.Unmarshal([]byte(dataJSON), &rec.Data)
+		}
+		out = append(out, rec)
+	}
+	return out, rows.Err()
+}
+
+func (r *MetaRepo) GetRecord(ctx context.Context, modelID, recordID string) (domain.MetaRecord, error) {
+	var rec domain.MetaRecord
+	var dataJSON string
+	err := r.db.QueryRowContext(ctx, `SELECT id, model_id, data_json, created_at, updated_at FROM md_record WHERE model_id=? AND id=? AND deleted_flag=0`, modelID, recordID).Scan(&rec.ID, &rec.ModelID, &dataJSON, &rec.CreatedAt, &rec.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return domain.MetaRecord{}, fmt.Errorf("record %s not found", recordID)
+		}
+		return domain.MetaRecord{}, err
+	}
+	rec.Data = map[string]any{}
+	if strings.TrimSpace(dataJSON) != "" {
+		_ = json.Unmarshal([]byte(dataJSON), &rec.Data)
+	}
+	return rec, nil
+}
+
+func (r *MetaRepo) CreateRecord(ctx context.Context, record domain.MetaRecord) error {
+	_, err := r.db.ExecContext(ctx, `INSERT INTO md_record (id, model_id, data_json, deleted_flag, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)`, record.ID, record.ModelID, mustJSON(record.Data), record.CreatedAt, record.UpdatedAt)
+	return err
+}
+
+func (r *MetaRepo) UpdateRecord(ctx context.Context, record domain.MetaRecord) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE md_record SET data_json=?, updated_at=? WHERE model_id=? AND id=? AND deleted_flag=0`, mustJSON(record.Data), record.UpdatedAt, record.ModelID, record.ID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("record %s not found", record.ID)
+	}
+	return nil
+}
+
+func (r *MetaRepo) DeleteRecord(ctx context.Context, modelID, recordID string) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE md_record SET deleted_flag=1, updated_at=? WHERE model_id=? AND id=? AND deleted_flag=0`, time.Now(), modelID, recordID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("record %s not found", recordID)
+	}
+	return nil
+}
+
 func boolToInt(v bool) int {
 	if v {
 		return 1

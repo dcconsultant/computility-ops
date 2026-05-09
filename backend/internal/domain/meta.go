@@ -58,3 +58,11 @@ type MetaReference struct {
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
+
+type MetaRecord struct {
+	ID        string         `json:"id"`
+	ModelID   string         `json:"model_id"`
+	Data      map[string]any `json:"data"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+}

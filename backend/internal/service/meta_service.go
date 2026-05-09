@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -474,6 +475,47 @@ func (s *MetaService) RollbackModel(ctx context.Context, modelID string, version
 	return m, nil
 }
 
+func (s *MetaService) CloneModel(ctx context.Context, sourceModelID string, in CreateModelInput) (domain.MetaModel, error) {
+	sourceModelID = strings.TrimSpace(sourceModelID)
+	if _, err := s.repo.GetModel(ctx, sourceModelID); err != nil {
+		return domain.MetaModel{}, err
+	}
+	sourceFields, err := s.repo.ListFields(ctx, sourceModelID)
+	if err != nil {
+		return domain.MetaModel{}, err
+	}
+	target, err := s.CreateModel(ctx, in)
+	if err != nil {
+		return domain.MetaModel{}, err
+	}
+	for _, sf := range sourceFields {
+		now := time.Now()
+		nf := domain.MetaField{
+			ID:             fmt.Sprintf("%d", now.UnixNano()),
+			ModelID:        target.ID,
+			FieldCode:      sf.FieldCode,
+			FieldName:      sf.FieldName,
+			Category:       sf.Category,
+			ValueType:      sf.ValueType,
+			Required:       sf.Required,
+			Unique:         sf.Unique,
+			Filterable:     sf.Filterable,
+			Sortable:       sf.Sortable,
+			Visible:        sf.Visible,
+			DefaultValue:   sf.DefaultValue,
+			ValidationRule: sf.ValidationRule,
+			EnumOptions:    sf.EnumOptions,
+			SortNo:         sf.SortNo,
+			CreatedAt:      now,
+			UpdatedAt:      now,
+		}
+		if err := s.repo.CreateField(ctx, nf); err != nil {
+			return domain.MetaModel{}, err
+		}
+	}
+	return target, nil
+}
+
 func (s *MetaService) validateNoCycle(ctx context.Context, modelID string) error {
 	models, err := s.repo.ListModels(ctx, "")
 	if err != nil {
@@ -510,6 +552,179 @@ func (s *MetaService) validateNoCycle(ctx context.Context, modelID string) error
 		}
 	}
 	return nil
+}
+
+type UpsertRecordInput struct {
+	Data map[string]any
+}
+
+func (s *MetaService) ListRecords(ctx context.Context, modelID string) (domain.MetaModel, []domain.MetaField, []domain.MetaRecord, error) {
+	modelID = strings.TrimSpace(modelID)
+	m, fields, err := s.GetModel(ctx, modelID)
+	if err != nil {
+		return domain.MetaModel{}, nil, nil, err
+	}
+	records, err := s.repo.ListRecords(ctx, modelID)
+	if err != nil {
+		return domain.MetaModel{}, nil, nil, err
+	}
+	return m, fields, records, nil
+}
+
+func (s *MetaService) CreateRecord(ctx context.Context, modelID string, in UpsertRecordInput) (domain.MetaRecord, error) {
+	modelID = strings.TrimSpace(modelID)
+	m, fields, err := s.GetModel(ctx, modelID)
+	if err != nil {
+		return domain.MetaRecord{}, err
+	}
+	if m.Status != domain.MetaModelStatusPublished {
+		return domain.MetaRecord{}, fmt.Errorf("model is not published")
+	}
+	data, err := validateRecordData(in.Data, fields)
+	if err != nil {
+		return domain.MetaRecord{}, err
+	}
+	if err := s.ensureUniqueConstraints(ctx, modelID, "", fields, data); err != nil {
+		return domain.MetaRecord{}, err
+	}
+	now := time.Now()
+	rec := domain.MetaRecord{ID: fmt.Sprintf("%d", now.UnixNano()), ModelID: modelID, Data: data, CreatedAt: now, UpdatedAt: now}
+	if err := s.repo.CreateRecord(ctx, rec); err != nil {
+		return domain.MetaRecord{}, err
+	}
+	return rec, nil
+}
+
+func (s *MetaService) UpdateRecord(ctx context.Context, modelID, recordID string, in UpsertRecordInput) (domain.MetaRecord, error) {
+	modelID = strings.TrimSpace(modelID)
+	recordID = strings.TrimSpace(recordID)
+	m, fields, err := s.GetModel(ctx, modelID)
+	if err != nil {
+		return domain.MetaRecord{}, err
+	}
+	if m.Status != domain.MetaModelStatusPublished {
+		return domain.MetaRecord{}, fmt.Errorf("model is not published")
+	}
+	rec, err := s.repo.GetRecord(ctx, modelID, recordID)
+	if err != nil {
+		return domain.MetaRecord{}, err
+	}
+	data, err := validateRecordData(in.Data, fields)
+	if err != nil {
+		return domain.MetaRecord{}, err
+	}
+	if err := s.ensureUniqueConstraints(ctx, modelID, recordID, fields, data); err != nil {
+		return domain.MetaRecord{}, err
+	}
+	rec.Data = data
+	rec.UpdatedAt = time.Now()
+	if err := s.repo.UpdateRecord(ctx, rec); err != nil {
+		return domain.MetaRecord{}, err
+	}
+	return rec, nil
+}
+
+func (s *MetaService) DeleteRecord(ctx context.Context, modelID, recordID string) error {
+	return s.repo.DeleteRecord(ctx, strings.TrimSpace(modelID), strings.TrimSpace(recordID))
+}
+
+func (s *MetaService) ensureUniqueConstraints(ctx context.Context, modelID, ignoreRecordID string, fields []domain.MetaField, data map[string]any) error {
+	records, err := s.repo.ListRecords(ctx, modelID)
+	if err != nil {
+		return err
+	}
+	uniqueFields := make([]domain.MetaField, 0)
+	for _, f := range fields {
+		if f.Unique {
+			uniqueFields = append(uniqueFields, f)
+		}
+	}
+	for _, uf := range uniqueFields {
+		val, ok := data[uf.FieldCode]
+		if !ok {
+			continue
+		}
+		cur := fmt.Sprintf("%v", val)
+		for _, rec := range records {
+			if rec.ID == ignoreRecordID {
+				continue
+			}
+			if fmt.Sprintf("%v", rec.Data[uf.FieldCode]) == cur {
+				return fmt.Errorf("unique field conflict: %s=%v", uf.FieldCode, val)
+			}
+		}
+	}
+	return nil
+}
+
+func validateRecordData(in map[string]any, fields []domain.MetaField) (map[string]any, error) {
+	if in == nil {
+		in = map[string]any{}
+	}
+	out := map[string]any{}
+	for _, f := range fields {
+		raw, ok := in[f.FieldCode]
+		if !ok || raw == nil {
+			if strings.TrimSpace(f.DefaultValue) != "" {
+				out[f.FieldCode] = f.DefaultValue
+				continue
+			}
+			if f.Required {
+				return nil, fmt.Errorf("field %s is required", f.FieldCode)
+			}
+			continue
+		}
+		v, err := normalizeValueByType(raw, f)
+		if err != nil {
+			return nil, err
+		}
+		out[f.FieldCode] = v
+	}
+	return out, nil
+}
+
+func normalizeValueByType(raw any, f domain.MetaField) (any, error) {
+	s := strings.TrimSpace(fmt.Sprintf("%v", raw))
+	switch f.ValueType {
+	case "string", "date", "datetime":
+		if s == "" && f.Required {
+			return nil, fmt.Errorf("field %s is required", f.FieldCode)
+		}
+		return s, nil
+	case "int":
+		i, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("field %s must be int", f.FieldCode)
+		}
+		return i, nil
+	case "decimal":
+		fv, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return nil, fmt.Errorf("field %s must be decimal", f.FieldCode)
+		}
+		return fv, nil
+	case "bool":
+		b, err := strconv.ParseBool(strings.ToLower(s))
+		if err != nil {
+			return nil, fmt.Errorf("field %s must be bool", f.FieldCode)
+		}
+		return b, nil
+	case "enum":
+		allowed := map[string]struct{}{}
+		for _, opt := range f.EnumOptions {
+			if !opt.Disabled {
+				allowed[opt.Value] = struct{}{}
+			}
+		}
+		if _, ok := allowed[s]; !ok {
+			return nil, fmt.Errorf("field %s enum value invalid", f.FieldCode)
+		}
+		return s, nil
+	case "json":
+		return raw, nil
+	default:
+		return s, nil
+	}
 }
 
 func validateEnumOptions(valueType string, options []domain.MetaEnumOption) ([]domain.MetaEnumOption, error) {
