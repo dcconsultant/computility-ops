@@ -552,7 +552,16 @@ export default function MetaModelPage() {
                 <Button onClick={resetFilters}>重置</Button>
               </Space>
             </Form>
-            <Table rowKey="id" columns={dataColumns} dataSource={filteredRecords} scroll={{ x: 'max-content' }} />
+            <Table
+              rowKey="id"
+              columns={dataColumns}
+              dataSource={filteredRecords}
+              scroll={{ x: 'max-content' }}
+              pagination={{
+                showSizeChanger: true,
+                showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条 / 共 ${total} 条`
+              }}
+            />
           </Card>
         ) : (
           <Space direction="vertical" style={{ width: '100%' }} size={16}>
