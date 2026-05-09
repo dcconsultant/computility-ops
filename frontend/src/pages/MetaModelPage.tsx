@@ -487,7 +487,7 @@ export default function MetaModelPage() {
           title={navCollapsed ? '' : '模型导航'}
           extra={
             <Space>
-              {!navCollapsed ? <Button type={mode === 'config' ? 'primary' : 'default'} icon={<SettingOutlined />} onClick={() => setMode('config')} /> : null}
+              {!navCollapsed ? <Button type={mode === 'config' ? 'primary' : 'default'} icon={<SettingOutlined />} onClick={() => setMode((m) => (m === 'config' ? 'data' : 'config'))} /> : null}
               {!navCollapsed ? <Button icon={<PlusOutlined />} onClick={() => setModelModalOpen(true)} /> : null}
               <Button icon={navCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setNavCollapsed((v) => !v)} />
             </Space>
@@ -508,7 +508,6 @@ export default function MetaModelPage() {
               const id = String(keys[0] || '');
               if (!id) return;
               setSelectedModelId(id);
-              setMode('data');
               localStorage.setItem('meta:selectedModelId', id);
             }}
           /> : null}
@@ -562,6 +561,7 @@ export default function MetaModelPage() {
               title={selectedModel ? `模型配置:${selectedModel.model_name}` : '模型配置'}
               extra={selectedModel ? (
                 <Space>
+                  <Button onClick={() => setMode('data')}>数据模式</Button>
                   <Button onClick={() => {
                     editModelForm.setFieldsValue({ model_name: selectedModel.model_name, description: selectedModel.description });
                     setEditModelModalOpen(true);
