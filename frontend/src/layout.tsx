@@ -27,6 +27,7 @@ export default function AppLayout() {
         ? '/meta-models'
         : location.pathname;
   const isFailureDashboard = location.pathname === '/failure/dashboard';
+  const isMetaModels = location.pathname.startsWith('/meta-models');
 
   useEffect(() => {
     if (open) {
@@ -89,7 +90,7 @@ export default function AppLayout() {
           onClick={() => setOpen(true)}
         />
       </Header>
-      <Content style={{ padding: isFailureDashboard ? 0 : 24, maxWidth: isFailureDashboard ? 'none' : 1400, width: '100%', margin: '0 auto' }}>
+      <Content style={{ padding: isFailureDashboard ? 0 : (isMetaModels ? 12 : 24), maxWidth: (isFailureDashboard || isMetaModels) ? 'none' : 1400, width: '100%', margin: isMetaModels ? 0 : '0 auto' }}>
         <Outlet />
       </Content>
 

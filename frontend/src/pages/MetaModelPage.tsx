@@ -21,7 +21,7 @@ import {
   Upload,
   message
 } from 'antd';
-import { MenuUnfoldOutlined, MenuFoldOutlined, SettingOutlined, UploadOutlined } from '@ant-design/icons';
+import { MenuUnfoldOutlined, MenuFoldOutlined, PlusOutlined, SettingOutlined, UploadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import {
   cloneMetaModel,
@@ -453,19 +453,19 @@ export default function MetaModelPage() {
   }
 
   return (
-    <Row gutter={16}>
-      <Col span={navCollapsed ? 1 : 4}>
+    <Row gutter={12} style={{ width: '100%', margin: 0 }}>
+      <Col flex={navCollapsed ? '44px' : '16ch'} style={{ paddingLeft: 0 }}>
         <Card
           title="模型导航"
           extra={
             <Space>
-              <Button type={mode === 'config' ? 'primary' : 'default'} icon={<SettingOutlined />} onClick={() => setMode('config')} />
+              {!navCollapsed ? <Button type={mode === 'config' ? 'primary' : 'default'} icon={<SettingOutlined />} onClick={() => setMode('config')} /> : null}
+              {!navCollapsed ? <Button icon={<PlusOutlined />} onClick={() => setModelModalOpen(true)} /> : null}
               <Button icon={navCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setNavCollapsed((v) => !v)} />
-              {!navCollapsed ? <Button type="primary" onClick={() => setModelModalOpen(true)}>新建</Button> : null}
             </Space>
           }
         >
-          <Tree
+          {!navCollapsed ? <Tree
             selectedKeys={selectedModelId ? [selectedModelId] : []}
             treeData={models.map((m) => ({
               key: m.id,
@@ -483,11 +483,11 @@ export default function MetaModelPage() {
               setMode('data');
               localStorage.setItem('meta:selectedModelId', id);
             }}
-          />
+          /> : null}
         </Card>
       </Col>
 
-      <Col span={navCollapsed ? 23 : 20}>
+      <Col flex="auto" style={{ paddingRight: 0 }}>
         {mode === 'data' ? (
           <Card
             loading={loading}
