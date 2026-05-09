@@ -82,6 +82,13 @@ export default function MetaModelPage() {
   const [cloneForm] = Form.useForm();
   const [filterForm] = Form.useForm();
   const fieldValueType = Form.useWatch('value_type', fieldForm);
+
+  const navModels = useMemo(() => {
+    if (mode === 'data') {
+      return models.filter((m) => m.status === 'published');
+    }
+    return models;
+  }, [models, mode]);
   const [searchParams, setSearchParams] = useSearchParams();
   const [filteredRecords, setFilteredRecords] = useState<MetaRecord[]>([]);
 
@@ -111,6 +118,18 @@ export default function MetaModelPage() {
   useEffect(() => {
     setFilteredRecords(records);
   }, [records]);
+
+  useEffect(() => {
+    if (!navModels.length) {
+      setSelectedModelId('');
+      return;
+    }
+    if (!selectedModelId || !navModels.some((m) => m.id === selectedModelId)) {
+      const nextId = navModels[0].id;
+      setSelectedModelId(nextId);
+      localStorage.setItem('meta:selectedModelId', nextId);
+    }
+  }, [navModels, selectedModelId]);
 
   async function loadModels() {
     try {
@@ -463,9 +482,9 @@ export default function MetaModelPage() {
 
   return (
     <Row gutter={12} style={{ width: '100%', margin: 0 }}>
-      <Col flex={navCollapsed ? '44px' : '16ch'} style={{ paddingLeft: 0 }}>
+      <Col flex={navCollapsed ? '44px' : '8em'} style={{ paddingLeft: 0 }}>
         <Card
-          title="模型导航"
+          title={navCollapsed ? '' : '模型导航'}
           extra={
             <Space>
               {!navCollapsed ? <Button type={mode === 'config' ? 'primary' : 'default'} icon={<SettingOutlined />} onClick={() => setMode('config')} /> : null}
@@ -476,14 +495,14 @@ export default function MetaModelPage() {
         >
           {!navCollapsed ? <Tree
             selectedKeys={selectedModelId ? [selectedModelId] : []}
-            treeData={models.map((m) => ({
+            treeData={navModels.map((m) => ({
               key: m.id,
-              title: navCollapsed ? m.model_name.slice(0, 1) : (
+              title: mode === 'config' ? (
                 <Space>
                   <span>{m.model_name}</span>
                   <Tag color={m.status === 'published' ? 'green' : m.status === 'draft' ? 'blue' : 'default'}>{m.status}</Tag>
                 </Space>
-              )
+              ) : m.model_name
             }))}
             onSelect={(keys) => {
               const id = String(keys[0] || '');
