@@ -14,6 +14,7 @@ import {
   Row,
   Select,
   Space,
+  Switch,
   Table,
   Tag,
   Tree,
@@ -340,7 +341,15 @@ export default function MetaModelPage() {
 
   function openCreateField() {
     setEditingField(null);
-    fieldForm.setFieldsValue({ value_type: 'string', category: 'business', visible: true, required: false });
+    fieldForm.setFieldsValue({
+      value_type: 'string',
+      category: 'business',
+      required: false,
+      unique: false,
+      filterable: true,
+      sortable: false,
+      visible: true
+    });
     setFieldModalOpen(true);
   }
 
@@ -598,6 +607,15 @@ export default function MetaModelPage() {
           <Form.Item name="value_type" label="值类型" rules={[{ required: true }]}>
             <Select options={VALUE_TYPES.map((v) => ({ label: v, value: v }))} />
           </Form.Item>
+
+          <Space wrap>
+            <Form.Item name="required" valuePropName="checked" label="是否必填"><Switch /></Form.Item>
+            <Form.Item name="unique" valuePropName="checked" label="是否唯一"><Switch /></Form.Item>
+            <Form.Item name="visible" valuePropName="checked" label="默认展示"><Switch /></Form.Item>
+            <Form.Item name="filterable" valuePropName="checked" label="支持搜索"><Switch /></Form.Item>
+            <Form.Item name="sortable" valuePropName="checked" label="支持排序"><Switch /></Form.Item>
+          </Space>
+
           {fieldValueType === 'enum' ? (
             <Form.List name="enum_options" rules={[{ validator: async (_, v) => { if (!v || v.length === 0) throw new Error('请至少配置1个枚举项'); } }]}>
               {(items, { add, remove }, { errors }) => (
