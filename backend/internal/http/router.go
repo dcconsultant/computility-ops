@@ -141,6 +141,8 @@ func NewRouter(h Handlers) *gin.Engine {
 		v1.POST("/meta/models/:model_id/records", h.MetaData.CreateRecord)
 		v1.PUT("/meta/models/:model_id/records/:record_id", h.MetaData.UpdateRecord)
 		v1.DELETE("/meta/models/:model_id/records/:record_id", h.MetaData.DeleteRecord)
+		v1.GET("/meta/models/:model_id/records/template/export", h.MetaData.ExportRecordTemplate)
+		v1.POST("/meta/models/:model_id/records/import", h.MetaData.ImportRecords)
 
 		v1.GET("/ops/decisions/self-repair", h.SelfRepair.ListSuggestions)
 	}

@@ -3,10 +3,12 @@ package handler
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"computility-ops/backend/internal/domain"
 	"computility-ops/backend/internal/service"
 	"github.com/gin-gonic/gin"
+	"github.com/xuri/excelize/v2"
 )
 
 type MetaHandler struct{ service *service.MetaService }
@@ -400,6 +402,119 @@ func (h *MetaHandler) DeleteRecord(c *gin.Context) {
 		return
 	}
 	ok(c, gin.H{"deleted": true, "record_id": c.Param("record_id")})
+}
+
+func (h *MetaHandler) ExportRecordTemplate(c *gin.Context) {
+	c.Set("audit_action", "meta.records.template.export")
+	_, fields, err := h.service.GetModel(c.Request.Context(), c.Param("model_id"))
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			fail(c, 40401, err.Error())
+			return
+		}
+		fail(c, 40001, err.Error())
+		return
+	}
+	f := excelize.NewFile()
+	sheet := f.GetSheetName(0)
+	for i, field := range fields {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		_ = f.SetCellValue(sheet, cell, field.FieldCode)
+		_ = f.SetColWidth(sheet, cell[:1], cell[:1], maxFloat(float64(len([]rune(field.FieldName)))+4, 12))
+	}
+	for i, field := range fields {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 2)
+		hint := field.FieldName
+		if field.ValueType == "enum" && len(field.EnumOptions) > 0 {
+			enums := make([]string, 0, len(field.EnumOptions))
+			for _, op := range field.EnumOptions {
+				if !op.Disabled {
+					enums = append(enums, op.Value)
+				}
+			}
+			hint = fmt.Sprintf("%s (enum: %s)", field.FieldName, strings.Join(enums, "/"))
+		}
+		_ = f.SetCellValue(sheet, cell, hint)
+	}
+	filename := fmt.Sprintf("meta-record-template-%s.xlsx", time.Now().Format("20060102"))
+	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	if err := f.Write(c.Writer); err != nil {
+		fail(c, 50001, "模板导出失败")
+		return
+	}
+	c.Set("audit_result", "ok")
+}
+
+func (h *MetaHandler) ImportRecords(c *gin.Context) {
+	c.Set("audit_action", "meta.records.import")
+	file, err := c.FormFile("file")
+	if err != nil {
+		fail(c, 40002, "缺少上传文件")
+		return
+	}
+	f, err := file.Open()
+	if err != nil {
+		fail(c, 50001, "读取上传文件失败")
+		return
+	}
+	defer f.Close()
+	xf, err := excelize.OpenReader(f)
+	if err != nil {
+		fail(c, 40003, "文件格式无效，请确认是标准 .xlsx")
+		return
+	}
+	_, fields, err := h.service.GetModel(c.Request.Context(), c.Param("model_id"))
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			fail(c, 40401, err.Error())
+			return
+		}
+		fail(c, 40001, err.Error())
+		return
+	}
+	sheet := xf.GetSheetName(0)
+	rows, err := xf.GetRows(sheet)
+	if err != nil || len(rows) < 1 {
+		fail(c, 40003, "Excel内容为空")
+		return
+	}
+	headers := rows[0]
+	fieldMap := map[int]domain.MetaField{}
+	for i, hname := range headers {
+		for _, field := range fields {
+			if strings.TrimSpace(hname) == field.FieldCode {
+				fieldMap[i] = field
+				break
+			}
+		}
+	}
+	success := 0
+	failed := 0
+	errors := make([]map[string]any, 0)
+	for idx, row := range rows[1:] {
+		data := map[string]any{}
+		for ci, fv := range row {
+			if field, ok := fieldMap[ci]; ok {
+				data[field.FieldCode] = strings.TrimSpace(fv)
+			}
+		}
+		_, e := h.service.CreateRecord(c.Request.Context(), c.Param("model_id"), service.UpsertRecordInput{Data: data})
+		if e != nil {
+			failed++
+			errors = append(errors, map[string]any{"row": idx + 2, "error": e.Error()})
+			continue
+		}
+		success++
+	}
+	ok(c, gin.H{"total": success + failed, "success": success, "failed": failed, "errors": errors})
+}
+
+func maxFloat(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func toDomainEnumOptions(in []MetaEnumOptionReq) []domain.MetaEnumOption {

@@ -579,3 +579,16 @@ export async function deleteMetaRecord(modelId: string, recordId: string) {
   const { data } = await http.delete<ApiResp<{ deleted: boolean; record_id: string }>>(`/meta/models/${modelId}/records/${recordId}`);
   return data;
 }
+
+export function exportMetaRecordTemplate(modelId: string) {
+  window.open(`/api/v1/meta/models/${modelId}/records/template/export`, '_blank');
+}
+
+export async function importMetaRecords(modelId: string, file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await http.post<ApiResp<{ total: number; success: number; failed: number; errors: any[] }>>(`/meta/models/${modelId}/records/import`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
+  return data;
+}

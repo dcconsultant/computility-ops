@@ -18,9 +18,10 @@ import {
   Tag,
   Tree,
   Typography,
+  Upload,
   message
 } from 'antd';
-import { SettingOutlined } from '@ant-design/icons';
+import { MenuUnfoldOutlined, MenuFoldOutlined, SettingOutlined, UploadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import {
   cloneMetaModel,
@@ -34,6 +35,8 @@ import {
   listMetaModelVersions,
   listMetaModels,
   listMetaRecords,
+  exportMetaRecordTemplate,
+  importMetaRecords,
   publishMetaModel,
   reorderMetaFields,
   updateMetaField,
@@ -56,6 +59,8 @@ export default function MetaModelPage() {
   const [records, setRecords] = useState<MetaRecord[]>([]);
   const [mode, setMode] = useState<ViewMode>('data');
   const [loading, setLoading] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const [modelModalOpen, setModelModalOpen] = useState(false);
   const [editModelModalOpen, setEditModelModalOpen] = useState(false);
@@ -72,6 +77,7 @@ export default function MetaModelPage() {
   const [recordForm] = Form.useForm();
   const [cloneForm] = Form.useForm();
   const [filterForm] = Form.useForm();
+  const fieldValueType = Form.useWatch('value_type', fieldForm);
   const [searchParams, setSearchParams] = useSearchParams();
   const [filteredRecords, setFilteredRecords] = useState<MetaRecord[]>([]);
 
@@ -152,6 +158,7 @@ export default function MetaModelPage() {
     const fieldCols = visibleFields.map((f) => ({
       title: f.field_name,
       key: f.id,
+      width: Math.max((f.field_name?.length || 6) * 18, 140),
       dataIndex: ['data', f.field_code],
       sorter: f.sortable
         ? (a: MetaRecord, b: MetaRecord) => String(a.data?.[f.field_code] ?? '').localeCompare(String(b.data?.[f.field_code] ?? ''), 'zh')
@@ -172,7 +179,7 @@ export default function MetaModelPage() {
         render: (_, row) => (
           <Space>
             <Button size="small" onClick={() => openEditRecord(row)}>编辑</Button>
-            <Popconfirm title="确认删除该记录？" onConfirm={() => onDeleteRecord(row.id)}>
+            <Popconfirm title="确认删除该记录?" onConfirm={() => onDeleteRecord(row.id)}>
               <Button size="small" danger>删除</Button>
             </Popconfirm>
           </Space>
@@ -204,7 +211,7 @@ export default function MetaModelPage() {
           <Button size="small" onClick={() => onMoveField(row, -1)}>上移</Button>
           <Button size="small" onClick={() => onMoveField(row, 1)}>下移</Button>
           <Button size="small" onClick={() => openEditField(row)}>编辑</Button>
-          <Popconfirm title="确认删除该属性？" onConfirm={() => onDeleteField(row.id)}>
+          <Popconfirm title="确认删除该属性?" onConfirm={() => onDeleteField(row.id)}>
             <Button size="small" danger>删除</Button>
           </Popconfirm>
         </Space>
@@ -396,6 +403,26 @@ export default function MetaModelPage() {
     }
   }
 
+  function onExportTemplate() {
+    if (!selectedModel) return;
+    exportMetaRecordTemplate(selectedModel.id);
+  }
+
+  async function onImportRecords(file: File) {
+    if (!selectedModel) return false;
+    try {
+      setImporting(true);
+      const resp = ensureApiOk(await importMetaRecords(selectedModel.id, file));
+      message.success(`导入完成:成功 ${resp.data.success},失败 ${resp.data.failed}`);
+      await loadRecordView(selectedModel.id);
+    } catch (e) {
+      message.error(parseApiError(e, '导入失败'));
+    } finally {
+      setImporting(false);
+    }
+    return false;
+  }
+
   function applyFilters() {
     const values = filterForm.getFieldsValue();
     const filtered = records.filter((rec) => {
@@ -421,13 +448,14 @@ export default function MetaModelPage() {
 
   return (
     <Row gutter={16}>
-      <Col span={6}>
+      <Col span={navCollapsed ? 1 : 4}>
         <Card
           title="模型导航"
           extra={
             <Space>
               <Button type={mode === 'config' ? 'primary' : 'default'} icon={<SettingOutlined />} onClick={() => setMode('config')} />
-              <Button type="primary" onClick={() => setModelModalOpen(true)}>新建</Button>
+              <Button icon={navCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setNavCollapsed((v) => !v)} />
+              {!navCollapsed ? <Button type="primary" onClick={() => setModelModalOpen(true)}>新建</Button> : null}
             </Space>
           }
         >
@@ -435,7 +463,7 @@ export default function MetaModelPage() {
             selectedKeys={selectedModelId ? [selectedModelId] : []}
             treeData={models.map((m) => ({
               key: m.id,
-              title: (
+              title: navCollapsed ? m.model_name.slice(0, 1) : (
                 <Space>
                   <span>{m.model_name}</span>
                   <Tag color={m.status === 'published' ? 'green' : m.status === 'draft' ? 'blue' : 'default'}>{m.status}</Tag>
@@ -453,19 +481,23 @@ export default function MetaModelPage() {
         </Card>
       </Col>
 
-      <Col span={18}>
+      <Col span={navCollapsed ? 23 : 20}>
         {mode === 'data' ? (
           <Card
             loading={loading}
-            title={selectedModel ? `数据管理：${selectedModel.model_name} (${selectedModel.model_code})` : '数据管理'}
+            title={selectedModel ? `数据管理:${selectedModel.model_name} (${selectedModel.model_code})` : '数据管理'}
             extra={
               <Space>
                 <Button icon={<SettingOutlined />} onClick={() => setMode('config')}>模型配置</Button>
+                <Button onClick={onExportTemplate}>导入模板</Button>
+                <Upload beforeUpload={(file) => onImportRecords(file as File)} showUploadList={false} disabled={!selectedModel || selectedModel.status !== 'published'}>
+                  <Button icon={<UploadOutlined />} loading={importing} disabled={!selectedModel || selectedModel.status !== 'published'}>Excel导入</Button>
+                </Upload>
                 <Button type="primary" onClick={openCreateRecord} disabled={!selectedModel || selectedModel.status !== 'published'}>新增记录</Button>
               </Space>
             }
           >
-            {selectedModel?.status !== 'published' ? <Alert type="warning" showIcon message="当前模型未发布，暂不可写入数据。" style={{ marginBottom: 12 }} /> : null}
+            {selectedModel?.status !== 'published' ? <Alert type="warning" showIcon message="当前模型未发布,暂不可写入数据。" style={{ marginBottom: 12 }} /> : null}
             <Form form={filterForm} layout="vertical" style={{ marginBottom: 12 }}>
               <Row gutter={12}>
                 {fields.filter((f) => f.filterable).map((f) => (
@@ -487,21 +519,21 @@ export default function MetaModelPage() {
                 <Button onClick={resetFilters}>重置</Button>
               </Space>
             </Form>
-            <Table rowKey="id" columns={dataColumns} dataSource={filteredRecords} />
+            <Table rowKey="id" columns={dataColumns} dataSource={filteredRecords} scroll={{ x: 'max-content' }} />
           </Card>
         ) : (
           <Space direction="vertical" style={{ width: '100%' }} size={16}>
             <Card
               loading={loading}
-              title={selectedModel ? `模型配置：${selectedModel.model_name}` : '模型配置'}
+              title={selectedModel ? `模型配置:${selectedModel.model_name}` : '模型配置'}
               extra={selectedModel ? (
                 <Space>
                   <Button onClick={() => {
                     editModelForm.setFieldsValue({ model_name: selectedModel.model_name, description: selectedModel.description });
                     setEditModelModalOpen(true);
-                  }}>编辑模型</Button>
+                  }}>保存</Button>
                   <Button type="primary" onClick={onPublishModel}>发布</Button>
-                  <Popconfirm title="确认删除模型？" onConfirm={onDeleteModel}>
+                  <Popconfirm title="确认删除模型?" onConfirm={onDeleteModel}>
                     <Button danger>删除模型</Button>
                   </Popconfirm>
                   <Button onClick={openCloneModel}>克隆模型</Button>
@@ -560,6 +592,23 @@ export default function MetaModelPage() {
           <Form.Item name="value_type" label="值类型" rules={[{ required: true }]}>
             <Select options={VALUE_TYPES.map((v) => ({ label: v, value: v }))} />
           </Form.Item>
+          {fieldValueType === 'enum' ? (
+            <Form.List name="enum_options" rules={[{ validator: async (_, v) => { if (!v || v.length === 0) throw new Error('请至少配置1个枚举项'); } }]}>
+              {(items, { add, remove }, { errors }) => (
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  {items.map((item) => (
+                    <Row key={item.key} gutter={8}>
+                      <Col span={10}><Form.Item name={[item.name, 'value']} rules={[{ required: true, message: 'value必填' }]}><Input placeholder="value" /></Form.Item></Col>
+                      <Col span={10}><Form.Item name={[item.name, 'label']} rules={[{ required: true, message: 'label必填' }]}><Input placeholder="label" /></Form.Item></Col>
+                      <Col span={4}><Button danger onClick={() => remove(item.name)}>删除</Button></Col>
+                    </Row>
+                  ))}
+                  <Button onClick={() => add({ value: '', label: '', disabled: false })}>新增枚举项</Button>
+                  <Form.ErrorList errors={errors} />
+                </Space>
+              )}
+            </Form.List>
+          ) : null}
         </Form>
       </Modal>
 
