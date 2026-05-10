@@ -11,6 +11,7 @@ type Config struct {
 	MySQLDSN             string
 	MetaImportCleanDays  int
 	MetaImportKeepLatest int
+	MetaImportUniqueMode string
 }
 
 func Load() Config {
@@ -20,6 +21,7 @@ func Load() Config {
 		MySQLDSN:             os.Getenv("MYSQL_DSN"),
 		MetaImportCleanDays:  getenvInt("META_IMPORT_CLEAN_DAYS", 7),
 		MetaImportKeepLatest: getenvInt("META_IMPORT_KEEP_LATEST", 200),
+		MetaImportUniqueMode: getenv("META_IMPORT_UNIQUE_MODE", "strict"),
 	}
 }
 

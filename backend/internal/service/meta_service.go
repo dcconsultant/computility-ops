@@ -20,16 +20,21 @@ type MetaService struct {
 	repo             repository.MetaRepo
 	importCleanDays  int
 	importKeepLatest int
+	importUniqueMode string
 }
 
-func NewMetaService(repo repository.MetaRepo, importCleanDays, importKeepLatest int) *MetaService {
+func NewMetaService(repo repository.MetaRepo, importCleanDays, importKeepLatest int, importUniqueMode string) *MetaService {
 	if importCleanDays <= 0 {
 		importCleanDays = 7
 	}
 	if importKeepLatest < 0 {
 		importKeepLatest = 0
 	}
-	return &MetaService{repo: repo, importCleanDays: importCleanDays, importKeepLatest: importKeepLatest}
+	mode := strings.ToLower(strings.TrimSpace(importUniqueMode))
+	if mode == "" {
+		mode = "strict"
+	}
+	return &MetaService{repo: repo, importCleanDays: importCleanDays, importKeepLatest: importKeepLatest, importUniqueMode: mode}
 }
 
 type CreateModelInput struct {
@@ -656,6 +661,37 @@ func (s *MetaService) ImportRecordsBatch(ctx context.Context, modelID string, ro
 	}
 	result := ImportRecordsResult{Total: len(rows), Errors: make([]map[string]any, 0)}
 	batch := make([]domain.MetaRecord, 0, 2000)
+
+	strictUnique := s.importUniqueMode != "off"
+	uniqueFields := make([]domain.MetaField, 0)
+	existingUnique := map[string]map[string]struct{}{}
+	seenInImport := map[string]map[string]int{}
+	if strictUnique {
+		for _, f := range fields {
+			if f.Unique {
+				uniqueFields = append(uniqueFields, f)
+				existingUnique[f.FieldCode] = map[string]struct{}{}
+				seenInImport[f.FieldCode] = map[string]int{}
+			}
+		}
+		if len(uniqueFields) > 0 {
+			existing, listErr := s.repo.ListRecords(ctx, modelID)
+			if listErr != nil {
+				return ImportRecordsResult{}, listErr
+			}
+			for _, rec := range existing {
+				for _, uf := range uniqueFields {
+					if v, ok := rec.Data[uf.FieldCode]; ok {
+						val := strings.TrimSpace(fmt.Sprintf("%v", v))
+						if val != "" {
+							existingUnique[uf.FieldCode][val] = struct{}{}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	flush := func() error {
 		if len(batch) == 0 {
 			return nil
@@ -673,6 +709,44 @@ func (s *MetaService) ImportRecordsBatch(ctx context.Context, modelID string, ro
 			result.Failed++
 			result.Errors = append(result.Errors, map[string]any{"row": i + 2, "error": e.Error()})
 			continue
+		}
+		if strictUnique && len(uniqueFields) > 0 {
+			conflictErr := ""
+			for _, uf := range uniqueFields {
+				raw, ok := data[uf.FieldCode]
+				if !ok {
+					continue
+				}
+				val := strings.TrimSpace(fmt.Sprintf("%v", raw))
+				if val == "" {
+					continue
+				}
+				if _, exists := existingUnique[uf.FieldCode][val]; exists {
+					conflictErr = fmt.Sprintf("unique field conflict: %s=%s", uf.FieldCode, val)
+					break
+				}
+				if firstRow, seen := seenInImport[uf.FieldCode][val]; seen {
+					conflictErr = fmt.Sprintf("unique field conflict in import: %s=%s (first at row %d)", uf.FieldCode, val, firstRow)
+					break
+				}
+			}
+			if conflictErr != "" {
+				result.Failed++
+				result.Errors = append(result.Errors, map[string]any{"row": i + 2, "error": conflictErr})
+				continue
+			}
+			for _, uf := range uniqueFields {
+				raw, ok := data[uf.FieldCode]
+				if !ok {
+					continue
+				}
+				val := strings.TrimSpace(fmt.Sprintf("%v", raw))
+				if val == "" {
+					continue
+				}
+				existingUnique[uf.FieldCode][val] = struct{}{}
+				seenInImport[uf.FieldCode][val] = i + 2
+			}
 		}
 		now := time.Now()
 		batch = append(batch, domain.MetaRecord{ID: fmt.Sprintf("%d", now.UnixNano()) + fmt.Sprintf("%d", i), ModelID: modelID, Data: data, CreatedAt: now, UpdatedAt: now})
