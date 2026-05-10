@@ -679,6 +679,8 @@ func (s *MetaService) ImportRecordsBatch(ctx context.Context, modelID string, ro
 }
 
 func (s *MetaService) CreateImportJob(ctx context.Context, job domain.MetaImportJob) error {
+	// 自动清理：清理 7 天前已结束任务，仅保留最近 200 条避免任务表膨胀
+	_, _ = s.repo.CleanupImportJobs(ctx, time.Now().Add(-7*24*time.Hour), 200)
 	return s.repo.CreateImportJob(ctx, job)
 }
 

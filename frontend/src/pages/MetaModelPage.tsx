@@ -462,12 +462,14 @@ export default function MetaModelPage() {
             processed: st.data.processed,
             status: st.data.status
           });
-          if (st.data.status === 'done' || st.data.status === 'failed') {
+          if (st.data.status === 'done' || st.data.status === 'failed' || st.data.status === 'cleaned') {
             clearInterval(timer);
             setImportErrors((st.data.errors || []).map((it: any) => ({ row: Number(it.row || 0), error: String(it.error || '') })));
             if (st.data.status === 'done') {
               message.success(`导入完成：成功 ${st.data.success}，失败 ${st.data.failed}`);
               await loadRecordView(selectedModel.id);
+            } else if (st.data.status === 'cleaned') {
+              message.warning(st.data.message || '导入任务明细已自动清理');
             } else {
               message.error(st.data.message || '导入任务失败');
             }
@@ -746,7 +748,7 @@ export default function MetaModelPage() {
         onCancel={() => setImportResultOpen(false)}
         footer={(
           <Space>
-            {importSummary.failed > 0 && importJobId ? (
+            {importSummary.failed > 0 && importJobId && importSummary.status !== 'cleaned' ? (
               <Button onClick={() => exportMetaImportErrorsCSV(importJobId)}>导出失败明细 CSV</Button>
             ) : null}
             <Button type="primary" onClick={() => setImportResultOpen(false)}>知道了</Button>
@@ -756,9 +758,9 @@ export default function MetaModelPage() {
       >
         <Space direction="vertical" style={{ width: '100%' }} size={12}>
           <Alert
-            type={importSummary.status === 'failed' ? 'error' : importSummary.status === 'running' ? 'info' : (importSummary.failed > 0 ? 'warning' : 'success')}
+            type={importSummary.status === 'failed' ? 'error' : importSummary.status === 'running' ? 'info' : importSummary.status === 'cleaned' ? 'warning' : (importSummary.failed > 0 ? 'warning' : 'success')}
             showIcon
-            message={`状态: ${importSummary.status || '-'} | 总计 ${importSummary.total} 条，已处理 ${importSummary.processed ?? 0} 条，成功 ${importSummary.success} 条，失败 ${importSummary.failed} 条`}
+            message={`状态: ${importSummary.status || '-'} | 总计 ${importSummary.total} 条，已处理 ${importSummary.processed ?? 0} 条，成功 ${importSummary.success} 条，失败 ${importSummary.failed} 条${importSummary.status === 'cleaned' ? '（该任务明细已自动清理）' : ''}`}
           />
           {importSummary.failed > 0 ? (
             <Table

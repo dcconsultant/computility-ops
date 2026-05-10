@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"computility-ops/backend/internal/domain"
 )
@@ -43,6 +44,7 @@ type MetaRepo interface {
 	CreateImportJob(ctx context.Context, job domain.MetaImportJob) error
 	UpdateImportJob(ctx context.Context, job domain.MetaImportJob) error
 	GetImportJob(ctx context.Context, jobID string) (domain.MetaImportJob, error)
+	CleanupImportJobs(ctx context.Context, finishedBefore time.Time, keepLatest int) (int64, error)
 }
 
 type FieldOrderItem struct {

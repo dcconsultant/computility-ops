@@ -658,6 +658,10 @@ func (h *MetaHandler) ExportImportJobErrorsCSV(c *gin.Context) {
 		fail(c, 50001, "查询导入任务失败")
 		return
 	}
+	if job.Status == "cleaned" {
+		fail(c, 40001, "导入任务明细已自动清理，无法导出")
+		return
+	}
 	buf := &strings.Builder{}
 	w := csv.NewWriter(buf)
 	_ = w.Write([]string{"row", "error"})

@@ -479,6 +479,42 @@ func (r *MetaRepo) GetImportJob(ctx context.Context, jobID string) (domain.MetaI
 	return job, nil
 }
 
+func (r *MetaRepo) CleanupImportJobs(ctx context.Context, finishedBefore time.Time, keepLatest int) (int64, error) {
+	if keepLatest < 0 {
+		keepLatest = 0
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT job_id FROM md_import_job WHERE status IN ('done','failed') AND finished_at IS NOT NULL AND finished_at < ? ORDER BY finished_at DESC`, finishedBefore)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	ids := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return 0, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	if len(ids) <= keepLatest {
+		return 0, nil
+	}
+	toClean := ids[keepLatest:]
+	cleaned := int64(0)
+	for _, id := range toClean {
+		res, err := r.db.ExecContext(ctx, `UPDATE md_import_job SET status='cleaned', errors_json='[]', message='导入任务明细已自动清理', updated_at=? WHERE job_id=?`, time.Now(), id)
+		if err != nil {
+			return cleaned, err
+		}
+		n, _ := res.RowsAffected()
+		cleaned += n
+	}
+	return cleaned, nil
+}
+
 func mustJSON(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)

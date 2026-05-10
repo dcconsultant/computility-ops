@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"computility-ops/backend/internal/domain"
 	"computility-ops/backend/internal/repository"
@@ -400,4 +401,35 @@ func (r *MetaRepo) GetImportJob(_ context.Context, jobID string) (domain.MetaImp
 		return domain.MetaImportJob{}, fmt.Errorf("import job %s not found", jobID)
 	}
 	return job, nil
+}
+
+func (r *MetaRepo) CleanupImportJobs(_ context.Context, finishedBefore time.Time, keepLatest int) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	type kv struct {
+		id  string
+		job domain.MetaImportJob
+	}
+	finished := make([]kv, 0)
+	for id, job := range r.importJobs {
+		if (job.Status == "done" || job.Status == "failed") && job.FinishedAt != nil && job.FinishedAt.Before(finishedBefore) {
+			finished = append(finished, kv{id: id, job: job})
+		}
+	}
+	sort.Slice(finished, func(i, j int) bool {
+		return finished[i].job.FinishedAt.After(*finished[j].job.FinishedAt)
+	})
+	var cleaned int64
+	for i, item := range finished {
+		if i < keepLatest {
+			continue
+		}
+		job := item.job
+		job.Status = "cleaned"
+		job.Errors = []map[string]any{}
+		job.Message = "导入任务明细已自动清理"
+		r.importJobs[item.id] = job
+		cleaned++
+	}
+	return cleaned, nil
 }
