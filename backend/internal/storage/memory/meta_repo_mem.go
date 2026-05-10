@@ -20,6 +20,7 @@ type MetaRepo struct {
 	references  map[string]map[string]domain.MetaReference
 	versions    map[string]map[int]domain.MetaModelVersion
 	records     map[string]map[string]domain.MetaRecord
+	importJobs  map[string]domain.MetaImportJob
 }
 
 func NewMetaRepo() *MetaRepo {
@@ -31,6 +32,7 @@ func NewMetaRepo() *MetaRepo {
 		references:  map[string]map[string]domain.MetaReference{},
 		versions:    map[string]map[int]domain.MetaModelVersion{},
 		records:     map[string]map[string]domain.MetaRecord{},
+		importJobs:  map[string]domain.MetaImportJob{},
 	}
 }
 
@@ -371,4 +373,31 @@ func (r *MetaRepo) GetVersion(_ context.Context, modelID string, versionNo int) 
 		return domain.MetaModelVersion{}, fmt.Errorf("version %d not found", versionNo)
 	}
 	return v, nil
+}
+
+func (r *MetaRepo) CreateImportJob(_ context.Context, job domain.MetaImportJob) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.importJobs[job.JobID] = job
+	return nil
+}
+
+func (r *MetaRepo) UpdateImportJob(_ context.Context, job domain.MetaImportJob) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.importJobs[job.JobID]; !ok {
+		return fmt.Errorf("import job %s not found", job.JobID)
+	}
+	r.importJobs[job.JobID] = job
+	return nil
+}
+
+func (r *MetaRepo) GetImportJob(_ context.Context, jobID string) (domain.MetaImportJob, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	job, ok := r.importJobs[jobID]
+	if !ok {
+		return domain.MetaImportJob{}, fmt.Errorf("import job %s not found", jobID)
+	}
+	return job, nil
 }

@@ -678,6 +678,18 @@ func (s *MetaService) ImportRecordsBatch(ctx context.Context, modelID string, ro
 	return result, nil
 }
 
+func (s *MetaService) CreateImportJob(ctx context.Context, job domain.MetaImportJob) error {
+	return s.repo.CreateImportJob(ctx, job)
+}
+
+func (s *MetaService) UpdateImportJob(ctx context.Context, job domain.MetaImportJob) error {
+	return s.repo.UpdateImportJob(ctx, job)
+}
+
+func (s *MetaService) GetImportJob(ctx context.Context, jobID string) (domain.MetaImportJob, error) {
+	return s.repo.GetImportJob(ctx, strings.TrimSpace(jobID))
+}
+
 func (s *MetaService) ensureUniqueConstraints(ctx context.Context, modelID, ignoreRecordID string, fields []domain.MetaField, data map[string]any) error {
 	records, err := s.repo.ListRecords(ctx, modelID)
 	if err != nil {

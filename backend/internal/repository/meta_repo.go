@@ -39,6 +39,10 @@ type MetaRepo interface {
 	CreateVersion(ctx context.Context, version domain.MetaModelVersion) error
 	ListVersions(ctx context.Context, modelID string) ([]domain.MetaModelVersion, error)
 	GetVersion(ctx context.Context, modelID string, versionNo int) (domain.MetaModelVersion, error)
+
+	CreateImportJob(ctx context.Context, job domain.MetaImportJob) error
+	UpdateImportJob(ctx context.Context, job domain.MetaImportJob) error
+	GetImportJob(ctx context.Context, jobID string) (domain.MetaImportJob, error)
 }
 
 type FieldOrderItem struct {

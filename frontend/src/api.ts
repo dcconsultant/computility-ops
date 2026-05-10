@@ -597,3 +597,7 @@ export async function getMetaImportJob(jobId: string) {
   const { data } = await http.get<ApiResp<{ job_id: string; model_id: string; status: string; total: number; processed: number; success: number; failed: number; errors: any[]; message?: string }>>(`/meta/import-jobs/${jobId}`);
   return data;
 }
+
+export function exportMetaImportErrorsCSV(jobId: string) {
+  window.open(`/api/v1/meta/import-jobs/${jobId}/errors/export`, '_blank');
+}

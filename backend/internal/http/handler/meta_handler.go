@@ -2,9 +2,10 @@ package handler
 
 import (
 	"context"
+	"encoding/csv"
 	"fmt"
+	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"computility-ops/backend/internal/domain"
@@ -13,27 +14,11 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-type MetaImportJob struct {
-	JobID      string         `json:"job_id"`
-	ModelID    string         `json:"model_id"`
-	Status     string         `json:"status"`
-	Total      int            `json:"total"`
-	Processed  int            `json:"processed"`
-	Success    int            `json:"success"`
-	Failed     int            `json:"failed"`
-	Errors     []map[string]any `json:"errors"`
-	StartedAt  time.Time      `json:"started_at"`
-	FinishedAt *time.Time     `json:"finished_at,omitempty"`
-	Message    string         `json:"message,omitempty"`
-}
-
 type MetaHandler struct {
 	service *service.MetaService
-	jobs    map[string]*MetaImportJob
-	mu      sync.RWMutex
 }
 
-func NewMetaHandler(s *service.MetaService) *MetaHandler { return &MetaHandler{service: s, jobs: map[string]*MetaImportJob{}} }
+func NewMetaHandler(s *service.MetaService) *MetaHandler { return &MetaHandler{service: s} }
 
 func (h *MetaHandler) CreateModel(c *gin.Context) {
 	c.Set("audit_action", "meta.models.create")
@@ -494,12 +479,25 @@ func (h *MetaHandler) ImportRecords(c *gin.Context) {
 		return
 	}
 	sheet := xf.GetSheetName(0)
-	rows, err := xf.GetRows(sheet)
-	if err != nil || len(rows) < 1 {
+	if strings.TrimSpace(sheet) == "" {
 		fail(c, 40003, "Excel内容为空")
 		return
 	}
-	headers := rows[0]
+	iter, err := xf.Rows(sheet)
+	if err != nil {
+		fail(c, 40003, "Excel内容为空")
+		return
+	}
+	defer iter.Close()
+	if !iter.Next() {
+		fail(c, 40003, "Excel内容为空")
+		return
+	}
+	headers, err := iter.Columns()
+	if err != nil {
+		fail(c, 40003, "Excel内容为空")
+		return
+	}
 	fieldMap := map[int]domain.MetaField{}
 	for i, hname := range headers {
 		for _, field := range fields {
@@ -509,72 +507,172 @@ func (h *MetaHandler) ImportRecords(c *gin.Context) {
 			}
 		}
 	}
-	rowsData := make([]map[string]any, 0, len(rows)-1)
-	for _, row := range rows[1:] {
-		data := map[string]any{}
-		for ci, fv := range row {
-			if field, ok := fieldMap[ci]; ok {
-				data[field.FieldCode] = strings.TrimSpace(fv)
-			}
-		}
-		rowsData = append(rowsData, data)
+	total := 0
+	for iter.Next() {
+		total++
+	}
+	if total == 0 {
+		fail(c, 40003, "Excel内容为空")
+		return
 	}
 
 	jobID := fmt.Sprintf("meta-import-%d", time.Now().UnixNano())
-	job := &MetaImportJob{
+	job := domain.MetaImportJob{
 		JobID:     jobID,
 		ModelID:   c.Param("model_id"),
 		Status:    "running",
-		Total:     len(rowsData),
+		Total:     total,
 		Processed: 0,
 		Success:   0,
 		Failed:    0,
 		Errors:    make([]map[string]any, 0),
 		StartedAt: time.Now(),
 	}
-	h.mu.Lock()
-	h.jobs[jobID] = job
-	h.mu.Unlock()
+	if err := h.service.CreateImportJob(c.Request.Context(), job); err != nil {
+		fail(c, 50001, "创建导入任务失败")
+		return
+	}
 
 	ctx := context.Background()
-	go func(modelID string, data []map[string]any) {
-		result, runErr := h.service.ImportRecordsBatch(ctx, modelID, data)
-		now := time.Now()
-		h.mu.Lock()
-		defer h.mu.Unlock()
-		j, ok := h.jobs[jobID]
-		if !ok {
-			return
-		}
-		if runErr != nil {
-			j.Status = "failed"
-			j.Message = runErr.Error()
-			j.FinishedAt = &now
-			j.Processed = j.Total
-			return
-		}
-		j.Status = "done"
-		j.Success = result.Success
-		j.Failed = result.Failed
-		j.Errors = result.Errors
-		j.Processed = result.Total
-		j.FinishedAt = &now
-	} (c.Param("model_id"), rowsData)
+	go h.runImportJob(ctx, jobID, c.Param("model_id"), xf, sheet, fieldMap)
+	ok(c, gin.H{"job_id": jobID, "status": "running", "total": total})
+}
 
-	ok(c, gin.H{"job_id": jobID, "status": "running", "total": len(rowsData)})
+func (h *MetaHandler) runImportJob(ctx context.Context, jobID, modelID string, xf *excelize.File, sheet string, fieldMap map[int]domain.MetaField) {
+	iter, err := xf.Rows(sheet)
+	if err != nil {
+		h.failJob(ctx, jobID, "读取Excel失败")
+		return
+	}
+	defer iter.Close()
+	if !iter.Next() {
+		h.failJob(ctx, jobID, "Excel内容为空")
+		return
+	}
+	_, _ = iter.Columns()
+
+	chunkSize := 2000
+	chunk := make([]map[string]any, 0, chunkSize)
+	processed := 0
+	for iter.Next() {
+		cols, colErr := iter.Columns()
+		if colErr != nil {
+			h.failJob(ctx, jobID, "读取Excel失败")
+			return
+		}
+		data := map[string]any{}
+		for ci, fv := range cols {
+			if field, ok := fieldMap[ci]; ok {
+				data[field.FieldCode] = strings.TrimSpace(fv)
+			}
+		}
+		chunk = append(chunk, data)
+		if len(chunk) >= chunkSize {
+			if err := h.flushImportChunk(ctx, jobID, modelID, chunk, processed); err != nil {
+				h.failJob(ctx, jobID, err.Error())
+				return
+			}
+			processed += len(chunk)
+			chunk = chunk[:0]
+		}
+	}
+	if len(chunk) > 0 {
+		if err := h.flushImportChunk(ctx, jobID, modelID, chunk, processed); err != nil {
+			h.failJob(ctx, jobID, err.Error())
+			return
+		}
+	}
+	job, err := h.service.GetImportJob(ctx, jobID)
+	if err != nil {
+		return
+	}
+	now := time.Now()
+	job.Status = "done"
+	job.FinishedAt = &now
+	job.Message = ""
+	_ = h.service.UpdateImportJob(ctx, job)
+}
+
+func (h *MetaHandler) flushImportChunk(ctx context.Context, jobID, modelID string, chunk []map[string]any, processedBefore int) error {
+	res, err := h.service.ImportRecordsBatch(ctx, modelID, chunk)
+	if err != nil {
+		return err
+	}
+	job, err := h.service.GetImportJob(ctx, jobID)
+	if err != nil {
+		return err
+	}
+	for _, e := range res.Errors {
+		rowNo, _ := strconv.Atoi(fmt.Sprintf("%v", e["row"]))
+		e["row"] = rowNo + processedBefore
+		job.Errors = append(job.Errors, e)
+	}
+	job.Processed = processedBefore + len(chunk)
+	job.Success += res.Success
+	job.Failed += res.Failed
+	if job.Errors == nil {
+		job.Errors = make([]map[string]any, 0)
+	}
+	return h.service.UpdateImportJob(ctx, job)
+}
+
+func (h *MetaHandler) failJob(ctx context.Context, jobID, msg string) {
+	job, err := h.service.GetImportJob(ctx, jobID)
+	if err != nil {
+		return
+	}
+	now := time.Now()
+	job.Status = "failed"
+	job.Message = msg
+	job.FinishedAt = &now
+	if job.Processed < job.Total {
+		job.Processed = job.Total
+	}
+	_ = h.service.UpdateImportJob(ctx, job)
 }
 
 func (h *MetaHandler) GetImportJob(c *gin.Context) {
 	c.Set("audit_action", "meta.records.import.job")
 	jobID := strings.TrimSpace(c.Param("job_id"))
-	h.mu.RLock()
-	job, found := h.jobs[jobID]
-	h.mu.RUnlock()
-	if !found {
-		fail(c, 40401, "import job not found")
+	job, err := h.service.GetImportJob(c.Request.Context(), jobID)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			fail(c, 40401, "import job not found")
+			return
+		}
+		fail(c, 50001, "查询导入任务失败")
 		return
 	}
 	ok(c, job)
+}
+
+func (h *MetaHandler) ExportImportJobErrorsCSV(c *gin.Context) {
+	c.Set("audit_action", "meta.records.import.errors.export")
+	jobID := strings.TrimSpace(c.Param("job_id"))
+	job, err := h.service.GetImportJob(c.Request.Context(), jobID)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			fail(c, 40401, "import job not found")
+			return
+		}
+		fail(c, 50001, "查询导入任务失败")
+		return
+	}
+	buf := &strings.Builder{}
+	w := csv.NewWriter(buf)
+	_ = w.Write([]string{"row", "error"})
+	for _, it := range job.Errors {
+		_ = w.Write([]string{fmt.Sprintf("%v", it["row"]), fmt.Sprintf("%v", it["error"])})
+	}
+	w.Flush()
+	if err := w.Error(); err != nil {
+		fail(c, 50001, "导出失败")
+		return
+	}
+	filename := fmt.Sprintf("meta-import-errors-%s.csv", time.Now().Format("20060102-150405"))
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	c.String(200, "\uFEFF%s", buf.String())
 }
 
 func maxFloat(a, b float64) float64 {

@@ -39,6 +39,7 @@ import {
   exportMetaRecordTemplate,
   importMetaRecords,
   getMetaImportJob,
+  exportMetaImportErrorsCSV,
   publishMetaModel,
   reorderMetaFields,
   updateMetaField,
@@ -66,6 +67,7 @@ export default function MetaModelPage() {
   const [importResultOpen, setImportResultOpen] = useState(false);
   const [importSummary, setImportSummary] = useState<{ total: number; success: number; failed: number; processed?: number; status?: string }>({ total: 0, success: 0, failed: 0 });
   const [importErrors, setImportErrors] = useState<Array<{ row: number; error: string }>>([]);
+  const [importJobId, setImportJobId] = useState<string>('');
 
   const [modelModalOpen, setModelModalOpen] = useState(false);
   const [editModelModalOpen, setEditModelModalOpen] = useState(false);
@@ -446,6 +448,7 @@ export default function MetaModelPage() {
       setImporting(true);
       const start = ensureApiOk(await importMetaRecords(selectedModel.id, file));
       const jobId = start.data.job_id;
+      setImportJobId(jobId);
       setImportResultOpen(true);
       setImportSummary({ total: start.data.total, success: 0, failed: 0, processed: 0, status: 'running' });
       setImportErrors([]);
@@ -741,7 +744,14 @@ export default function MetaModelPage() {
         title="Excel 导入结果"
         open={importResultOpen}
         onCancel={() => setImportResultOpen(false)}
-        footer={<Button type="primary" onClick={() => setImportResultOpen(false)}>知道了</Button>}
+        footer={(
+          <Space>
+            {importSummary.failed > 0 && importJobId ? (
+              <Button onClick={() => exportMetaImportErrorsCSV(importJobId)}>导出失败明细 CSV</Button>
+            ) : null}
+            <Button type="primary" onClick={() => setImportResultOpen(false)}>知道了</Button>
+          </Space>
+        )}
         width={820}
       >
         <Space direction="vertical" style={{ width: '100%' }} size={12}>

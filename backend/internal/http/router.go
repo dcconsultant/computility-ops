@@ -144,6 +144,7 @@ func NewRouter(h Handlers) *gin.Engine {
 		v1.GET("/meta/models/:model_id/records/template/export", h.MetaData.ExportRecordTemplate)
 		v1.POST("/meta/models/:model_id/records/import", h.MetaData.ImportRecords)
 		v1.GET("/meta/import-jobs/:job_id", h.MetaData.GetImportJob)
+		v1.GET("/meta/import-jobs/:job_id/errors/export", h.MetaData.ExportImportJobErrorsCSV)
 
 		v1.GET("/ops/decisions/self-repair", h.SelfRepair.ListSuggestions)
 	}

@@ -66,3 +66,17 @@ type MetaRecord struct {
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 }
+
+type MetaImportJob struct {
+	JobID      string           `json:"job_id"`
+	ModelID    string           `json:"model_id"`
+	Status     string           `json:"status"`
+	Total      int              `json:"total"`
+	Processed  int              `json:"processed"`
+	Success    int              `json:"success"`
+	Failed     int              `json:"failed"`
+	Errors     []map[string]any `json:"errors"`
+	StartedAt  time.Time        `json:"started_at"`
+	FinishedAt *time.Time       `json:"finished_at,omitempty"`
+	Message    string           `json:"message,omitempty"`
+}

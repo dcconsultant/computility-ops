@@ -442,6 +442,43 @@ func (r *MetaRepo) GetVersion(ctx context.Context, modelID string, versionNo int
 	return v, nil
 }
 
+func (r *MetaRepo) CreateImportJob(ctx context.Context, job domain.MetaImportJob) error {
+	_, err := r.db.ExecContext(ctx, `INSERT INTO md_import_job (job_id, model_id, status, total, processed, success, failed, errors_json, started_at, finished_at, message, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		job.JobID, job.ModelID, job.Status, job.Total, job.Processed, job.Success, job.Failed, mustJSON(job.Errors), job.StartedAt, job.FinishedAt, job.Message, time.Now(), time.Now())
+	return err
+}
+
+func (r *MetaRepo) UpdateImportJob(ctx context.Context, job domain.MetaImportJob) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE md_import_job SET status=?, total=?, processed=?, success=?, failed=?, errors_json=?, started_at=?, finished_at=?, message=?, updated_at=? WHERE job_id=?`,
+		job.Status, job.Total, job.Processed, job.Success, job.Failed, mustJSON(job.Errors), job.StartedAt, job.FinishedAt, job.Message, time.Now(), job.JobID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("import job %s not found", job.JobID)
+	}
+	return nil
+}
+
+func (r *MetaRepo) GetImportJob(ctx context.Context, jobID string) (domain.MetaImportJob, error) {
+	var job domain.MetaImportJob
+	var errorsJSON sql.NullString
+	err := r.db.QueryRowContext(ctx, `SELECT job_id, model_id, status, total, processed, success, failed, errors_json, started_at, finished_at, message FROM md_import_job WHERE job_id=?`, jobID).
+		Scan(&job.JobID, &job.ModelID, &job.Status, &job.Total, &job.Processed, &job.Success, &job.Failed, &errorsJSON, &job.StartedAt, &job.FinishedAt, &job.Message)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return domain.MetaImportJob{}, fmt.Errorf("import job %s not found", jobID)
+		}
+		return domain.MetaImportJob{}, err
+	}
+	job.Errors = make([]map[string]any, 0)
+	if errorsJSON.Valid && strings.TrimSpace(errorsJSON.String) != "" {
+		_ = json.Unmarshal([]byte(errorsJSON.String), &job.Errors)
+	}
+	return job, nil
+}
+
 func mustJSON(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
