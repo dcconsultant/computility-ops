@@ -534,11 +534,15 @@ func (h *MetaHandler) ImportRecords(c *gin.Context) {
 	}
 
 	ctx := context.Background()
-	go h.runImportJob(ctx, jobID, c.Param("model_id"), xf, sheet, fieldMap)
+	primaryFieldCode := ""
+	if len(fields) > 0 {
+		primaryFieldCode = strings.TrimSpace(fields[0].FieldCode)
+	}
+	go h.runImportJob(ctx, jobID, c.Param("model_id"), xf, sheet, fieldMap, primaryFieldCode)
 	ok(c, gin.H{"job_id": jobID, "status": "running", "total": total})
 }
 
-func (h *MetaHandler) runImportJob(ctx context.Context, jobID, modelID string, xf *excelize.File, sheet string, fieldMap map[int]domain.MetaField) {
+func (h *MetaHandler) runImportJob(ctx context.Context, jobID, modelID string, xf *excelize.File, sheet string, fieldMap map[int]domain.MetaField, primaryFieldCode string) {
 	iter, err := xf.Rows(sheet)
 	if err != nil {
 		h.failJob(ctx, jobID, "读取Excel失败")
@@ -553,6 +557,7 @@ func (h *MetaHandler) runImportJob(ctx context.Context, jobID, modelID string, x
 
 	chunkSize := 2000
 	chunk := make([]map[string]any, 0, chunkSize)
+	chunkKeys := make([]string, 0, chunkSize)
 	processed := 0
 	for iter.Next() {
 		cols, colErr := iter.Columns()
@@ -566,18 +571,27 @@ func (h *MetaHandler) runImportJob(ctx context.Context, jobID, modelID string, x
 				data[field.FieldCode] = strings.TrimSpace(fv)
 			}
 		}
+		displayKey := ""
+		if len(cols) > 0 {
+			displayKey = strings.TrimSpace(cols[0])
+		}
+		if displayKey == "" && primaryFieldCode != "" {
+			displayKey = strings.TrimSpace(fmt.Sprintf("%v", data[primaryFieldCode]))
+		}
 		chunk = append(chunk, data)
+		chunkKeys = append(chunkKeys, displayKey)
 		if len(chunk) >= chunkSize {
-			if err := h.flushImportChunk(ctx, jobID, modelID, chunk, processed); err != nil {
+			if err := h.flushImportChunk(ctx, jobID, modelID, chunk, chunkKeys, processed); err != nil {
 				h.failJob(ctx, jobID, err.Error())
 				return
 			}
 			processed += len(chunk)
 			chunk = chunk[:0]
+			chunkKeys = chunkKeys[:0]
 		}
 	}
 	if len(chunk) > 0 {
-		if err := h.flushImportChunk(ctx, jobID, modelID, chunk, processed); err != nil {
+		if err := h.flushImportChunk(ctx, jobID, modelID, chunk, chunkKeys, processed); err != nil {
 			h.failJob(ctx, jobID, err.Error())
 			return
 		}
@@ -593,7 +607,7 @@ func (h *MetaHandler) runImportJob(ctx context.Context, jobID, modelID string, x
 	_ = h.service.UpdateImportJob(ctx, job)
 }
 
-func (h *MetaHandler) flushImportChunk(ctx context.Context, jobID, modelID string, chunk []map[string]any, processedBefore int) error {
+func (h *MetaHandler) flushImportChunk(ctx context.Context, jobID, modelID string, chunk []map[string]any, chunkKeys []string, processedBefore int) error {
 	res, err := h.service.ImportRecordsBatch(ctx, modelID, chunk)
 	if err != nil {
 		return err
@@ -604,7 +618,13 @@ func (h *MetaHandler) flushImportChunk(ctx context.Context, jobID, modelID strin
 	}
 	for _, e := range res.Errors {
 		rowNo, _ := strconv.Atoi(fmt.Sprintf("%v", e["row"]))
+		errorIndex := rowNo - 2
 		e["row"] = rowNo + processedBefore
+		if errorIndex >= 0 && errorIndex < len(chunkKeys) {
+			e["key"] = chunkKeys[errorIndex]
+		} else {
+			e["key"] = ""
+		}
 		job.Errors = append(job.Errors, e)
 	}
 	job.Processed = processedBefore + len(chunk)
@@ -664,9 +684,9 @@ func (h *MetaHandler) ExportImportJobErrorsCSV(c *gin.Context) {
 	}
 	buf := &strings.Builder{}
 	w := csv.NewWriter(buf)
-	_ = w.Write([]string{"row", "error"})
+	_ = w.Write([]string{"row", "key", "error"})
 	for _, it := range job.Errors {
-		_ = w.Write([]string{fmt.Sprintf("%v", it["row"]), fmt.Sprintf("%v", it["error"])})
+		_ = w.Write([]string{fmt.Sprintf("%v", it["row"]), fmt.Sprintf("%v", it["key"]), fmt.Sprintf("%v", it["error"])})
 	}
 	w.Flush()
 	if err := w.Error(); err != nil {

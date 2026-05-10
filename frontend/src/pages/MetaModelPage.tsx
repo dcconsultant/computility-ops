@@ -66,7 +66,7 @@ export default function MetaModelPage() {
   const [importing, setImporting] = useState(false);
   const [importResultOpen, setImportResultOpen] = useState(false);
   const [importSummary, setImportSummary] = useState<{ total: number; success: number; failed: number; processed?: number; status?: string }>({ total: 0, success: 0, failed: 0 });
-  const [importErrors, setImportErrors] = useState<Array<{ row: number; error: string }>>([]);
+  const [importErrors, setImportErrors] = useState<Array<{ row: number; key?: string; error: string }>>([]);
   const [importJobId, setImportJobId] = useState<string>('');
 
   const [modelModalOpen, setModelModalOpen] = useState(false);
@@ -464,7 +464,7 @@ export default function MetaModelPage() {
           });
           if (st.data.status === 'done' || st.data.status === 'failed' || st.data.status === 'cleaned') {
             clearInterval(timer);
-            setImportErrors((st.data.errors || []).map((it: any) => ({ row: Number(it.row || 0), error: String(it.error || '') })));
+            setImportErrors((st.data.errors || []).map((it: any) => ({ row: Number(it.row || 0), key: String(it.key || ''), error: String(it.error || '') })));
             if (st.data.status === 'done') {
               message.success(`导入完成：成功 ${st.data.success}，失败 ${st.data.failed}`);
               await loadRecordView(selectedModel.id);
@@ -770,6 +770,7 @@ export default function MetaModelPage() {
               pagination={{ pageSize: 10 }}
               columns={[
                 { title: '失败行', dataIndex: 'row', width: 100 },
+                { title: '主键值', dataIndex: 'key', width: 220, render: (v) => v || '-' },
                 { title: '错误原因', dataIndex: 'error' }
               ]}
             />
