@@ -558,10 +558,10 @@ export default function MetaModelPage() {
                 <Select
                   value={importUniqueMode}
                   onChange={(v) => setImportUniqueMode(v as 'strict' | 'off')}
-                  style={{ width: 170 }}
+                  style={{ width: 320 }}
                   options={[
-                    { label: '唯一校验: strict', value: 'strict' },
-                    { label: '唯一校验: off', value: 'off' }
+                    { label: '唯一校验: strict（默认，重复唯一字段会拦截并报错）', value: 'strict' },
+                    { label: '唯一校验: off（不校验唯一字段，可能导入重复数据）', value: 'off' }
                   ]}
                 />
                 <Upload beforeUpload={(file) => onImportRecords(file as File)} showUploadList={false} disabled={!selectedModel || selectedModel.status !== 'published'}>
