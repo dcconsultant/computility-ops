@@ -651,6 +651,10 @@ func (s *MetaService) DeleteRecord(ctx context.Context, modelID, recordID string
 }
 
 func (s *MetaService) ImportRecordsBatch(ctx context.Context, modelID string, rows []map[string]any) (ImportRecordsResult, error) {
+	return s.ImportRecordsBatchWithMode(ctx, modelID, rows, "")
+}
+
+func (s *MetaService) ImportRecordsBatchWithMode(ctx context.Context, modelID string, rows []map[string]any, mode string) (ImportRecordsResult, error) {
 	modelID = strings.TrimSpace(modelID)
 	m, fields, err := s.GetModel(ctx, modelID)
 	if err != nil {
@@ -662,7 +666,11 @@ func (s *MetaService) ImportRecordsBatch(ctx context.Context, modelID string, ro
 	result := ImportRecordsResult{Total: len(rows), Errors: make([]map[string]any, 0)}
 	batch := make([]domain.MetaRecord, 0, 2000)
 
-	strictUnique := s.importUniqueMode != "off"
+	useMode := strings.ToLower(strings.TrimSpace(mode))
+	if useMode == "" {
+		useMode = s.importUniqueMode
+	}
+	strictUnique := useMode != "off"
 	uniqueFields := make([]domain.MetaField, 0)
 	existingUnique := map[string]map[string]struct{}{}
 	seenInImport := map[string]map[string]int{}

@@ -584,9 +584,10 @@ export function exportMetaRecordTemplate(modelId: string) {
   window.open(`/api/v1/meta/models/${modelId}/records/template/export`, '_blank');
 }
 
-export async function importMetaRecords(modelId: string, file: File) {
+export async function importMetaRecords(modelId: string, file: File, uniqueMode: 'strict' | 'off' = 'strict') {
   const form = new FormData();
   form.append('file', file);
+  form.append('unique_mode', uniqueMode);
   const { data } = await http.post<ApiResp<{ job_id: string; status: string; total: number }>>(`/meta/models/${modelId}/records/import`, form, {
     headers: { 'Content-Type': 'multipart/form-data' }
   });

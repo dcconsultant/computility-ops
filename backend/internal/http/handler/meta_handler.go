@@ -534,15 +534,19 @@ func (h *MetaHandler) ImportRecords(c *gin.Context) {
 	}
 
 	ctx := context.Background()
+	importUniqueMode := strings.ToLower(strings.TrimSpace(c.PostForm("unique_mode")))
+	if importUniqueMode != "off" && importUniqueMode != "strict" {
+		importUniqueMode = ""
+	}
 	primaryFieldCode := ""
 	if len(fields) > 0 {
 		primaryFieldCode = strings.TrimSpace(fields[0].FieldCode)
 	}
-	go h.runImportJob(ctx, jobID, c.Param("model_id"), xf, sheet, fieldMap, primaryFieldCode)
+	go h.runImportJob(ctx, jobID, c.Param("model_id"), xf, sheet, fieldMap, primaryFieldCode, importUniqueMode)
 	ok(c, gin.H{"job_id": jobID, "status": "running", "total": total})
 }
 
-func (h *MetaHandler) runImportJob(ctx context.Context, jobID, modelID string, xf *excelize.File, sheet string, fieldMap map[int]domain.MetaField, primaryFieldCode string) {
+func (h *MetaHandler) runImportJob(ctx context.Context, jobID, modelID string, xf *excelize.File, sheet string, fieldMap map[int]domain.MetaField, primaryFieldCode, importUniqueMode string) {
 	iter, err := xf.Rows(sheet)
 	if err != nil {
 		h.failJob(ctx, jobID, "读取Excel失败")
@@ -581,7 +585,7 @@ func (h *MetaHandler) runImportJob(ctx context.Context, jobID, modelID string, x
 		chunk = append(chunk, data)
 		chunkKeys = append(chunkKeys, displayKey)
 		if len(chunk) >= chunkSize {
-			if err := h.flushImportChunk(ctx, jobID, modelID, chunk, chunkKeys, processed); err != nil {
+			if err := h.flushImportChunk(ctx, jobID, modelID, chunk, chunkKeys, processed, importUniqueMode); err != nil {
 				h.failJob(ctx, jobID, err.Error())
 				return
 			}
@@ -591,7 +595,7 @@ func (h *MetaHandler) runImportJob(ctx context.Context, jobID, modelID string, x
 		}
 	}
 	if len(chunk) > 0 {
-		if err := h.flushImportChunk(ctx, jobID, modelID, chunk, chunkKeys, processed); err != nil {
+		if err := h.flushImportChunk(ctx, jobID, modelID, chunk, chunkKeys, processed, importUniqueMode); err != nil {
 			h.failJob(ctx, jobID, err.Error())
 			return
 		}
@@ -607,8 +611,8 @@ func (h *MetaHandler) runImportJob(ctx context.Context, jobID, modelID string, x
 	_ = h.service.UpdateImportJob(ctx, job)
 }
 
-func (h *MetaHandler) flushImportChunk(ctx context.Context, jobID, modelID string, chunk []map[string]any, chunkKeys []string, processedBefore int) error {
-	res, err := h.service.ImportRecordsBatch(ctx, modelID, chunk)
+func (h *MetaHandler) flushImportChunk(ctx context.Context, jobID, modelID string, chunk []map[string]any, chunkKeys []string, processedBefore int, importUniqueMode string) error {
+	res, err := h.service.ImportRecordsBatchWithMode(ctx, modelID, chunk, importUniqueMode)
 	if err != nil {
 		return err
 	}

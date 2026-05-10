@@ -64,6 +64,7 @@ export default function MetaModelPage() {
   const [loading, setLoading] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importUniqueMode, setImportUniqueMode] = useState<'strict' | 'off'>('strict');
   const [importResultOpen, setImportResultOpen] = useState(false);
   const [importSummary, setImportSummary] = useState<{ total: number; success: number; failed: number; processed?: number; status?: string }>({ total: 0, success: 0, failed: 0 });
   const [importErrors, setImportErrors] = useState<Array<{ row: number; key?: string; error: string }>>([]);
@@ -446,7 +447,7 @@ export default function MetaModelPage() {
     if (!selectedModel) return false;
     try {
       setImporting(true);
-      const start = ensureApiOk(await importMetaRecords(selectedModel.id, file));
+      const start = ensureApiOk(await importMetaRecords(selectedModel.id, file, importUniqueMode));
       const jobId = start.data.job_id;
       setImportJobId(jobId);
       setImportResultOpen(true);
@@ -554,6 +555,15 @@ export default function MetaModelPage() {
               <Space>
                 <Button icon={<SettingOutlined />} onClick={() => setMode('config')}>模型配置</Button>
                 <Button onClick={onExportTemplate}>导入模板</Button>
+                <Select
+                  value={importUniqueMode}
+                  onChange={(v) => setImportUniqueMode(v as 'strict' | 'off')}
+                  style={{ width: 170 }}
+                  options={[
+                    { label: '唯一校验: strict', value: 'strict' },
+                    { label: '唯一校验: off', value: 'off' }
+                  ]}
+                />
                 <Upload beforeUpload={(file) => onImportRecords(file as File)} showUploadList={false} disabled={!selectedModel || selectedModel.status !== 'published'}>
                   <Button icon={<UploadOutlined />} loading={importing} disabled={!selectedModel || selectedModel.status !== 'published'}>Excel导入</Button>
                 </Upload>
