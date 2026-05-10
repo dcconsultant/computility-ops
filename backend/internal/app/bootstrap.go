@@ -36,7 +36,7 @@ func Build(cfg config.Config) (*gin.Engine, error) {
 	valueScoreSetupSvc := service.NewValueScoreSetupService(datasetRepo, serverRepo)
 	renewalSvc := service.NewRenewalService(serverRepo, datasetRepo, renewalRepo)
 	contractSvc := service.NewContractService(contractRepo)
-	metaSvc := service.NewMetaService(metaRepo)
+	metaSvc := service.NewMetaService(metaRepo, cfg.MetaImportCleanDays, cfg.MetaImportKeepLatest)
 
 	rules, err := rpinfra.LoadScoringRules(os.Getenv("REPLACEMENT_RULES_FILE"))
 	if err != nil {

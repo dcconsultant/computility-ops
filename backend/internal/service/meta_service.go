@@ -17,10 +17,20 @@ import (
 var modelCodeRegexp = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
 
 type MetaService struct {
-	repo repository.MetaRepo
+	repo             repository.MetaRepo
+	importCleanDays  int
+	importKeepLatest int
 }
 
-func NewMetaService(repo repository.MetaRepo) *MetaService { return &MetaService{repo: repo} }
+func NewMetaService(repo repository.MetaRepo, importCleanDays, importKeepLatest int) *MetaService {
+	if importCleanDays <= 0 {
+		importCleanDays = 7
+	}
+	if importKeepLatest < 0 {
+		importKeepLatest = 0
+	}
+	return &MetaService{repo: repo, importCleanDays: importCleanDays, importKeepLatest: importKeepLatest}
+}
 
 type CreateModelInput struct {
 	ModelCode   string
@@ -679,8 +689,8 @@ func (s *MetaService) ImportRecordsBatch(ctx context.Context, modelID string, ro
 }
 
 func (s *MetaService) CreateImportJob(ctx context.Context, job domain.MetaImportJob) error {
-	// 自动清理：清理 7 天前已结束任务，仅保留最近 200 条避免任务表膨胀
-	_, _ = s.repo.CleanupImportJobs(ctx, time.Now().Add(-7*24*time.Hour), 200)
+	// 自动清理：清理 N 天前已结束任务，仅保留最近 M 条避免任务表膨胀
+	_, _ = s.repo.CleanupImportJobs(ctx, time.Now().Add(-time.Duration(s.importCleanDays)*24*time.Hour), s.importKeepLatest)
 	return s.repo.CreateImportJob(ctx, job)
 }
 
