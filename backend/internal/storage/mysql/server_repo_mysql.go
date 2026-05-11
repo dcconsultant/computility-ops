@@ -92,6 +92,69 @@ func (r *ServerRepo) ReplaceAll(ctx context.Context, servers []domain.Server) er
 }
 
 func (r *ServerRepo) List(ctx context.Context) ([]domain.Server, error) {
+	// Preferred source: metadata model `sever` (as currently configured).
+	metaRows, err := r.db.QueryContext(ctx, `
+		SELECT
+			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(s.data_json, '$.sn')), '') AS sn,
+			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(s.data_json, '$.manufacture')), '') AS manufacturer,
+			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(s.data_json, '$.model')), '') AS model,
+			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(s.data_json, '$.detail_configuration')), '') AS detailed_config,
+			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(s.data_json, '$.psa')), '') AS psa,
+			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(rk.data_json, '$.datacenter')), '') AS idc,
+			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(s.data_json, '$.env')), '') AS environment,
+			COALESCE(
+				JSON_UNQUOTE(JSON_EXTRACT(s.data_json, '$.config_type')),
+				JSON_UNQUOTE(JSON_EXTRACT(s.data_json, '$.package_type')),
+				''
+			) AS config_type,
+			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(s.data_json, '$.server_warranty_last_date')), '') AS warranty_end_date,
+			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(s.data_json, '$.install_date')), '') AS launch_date
+		FROM md_record s
+		INNER JOIN md_model ms ON ms.id = s.model_id
+		LEFT JOIN md_model mr ON mr.model_code = 'rack'
+		LEFT JOIN md_record rk
+			ON rk.model_id = mr.id
+			AND rk.deleted_flag = 0
+			AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(rk.data_json, '$.sn')), '') = COALESCE(JSON_UNQUOTE(JSON_EXTRACT(s.data_json, '$.rack')), '')
+		WHERE ms.model_code = 'sever'
+			AND s.deleted_flag = 0
+		ORDER BY s.updated_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer metaRows.Close()
+
+	out := make([]domain.Server, 0)
+	for metaRows.Next() {
+		var s domain.Server
+		if err := metaRows.Scan(
+			&s.SN,
+			&s.Manufacturer,
+			&s.Model,
+			&s.DetailedConfig,
+			&s.PSA,
+			&s.IDC,
+			&s.Environment,
+			&s.ConfigType,
+			&s.WarrantyEndDate,
+			&s.LaunchDate,
+		); err != nil {
+			return nil, err
+		}
+		if s.SN == "" {
+			continue
+		}
+		out = append(out, s)
+	}
+	if err := metaRows.Err(); err != nil {
+		return nil, err
+	}
+	if len(out) > 0 {
+		return out, nil
+	}
+
+	// Fallback source for rollback/compatibility: legacy ops_servers
 	withDetailedConfigCol, err := hasServerDetailedConfigColumn(ctx, r.db)
 	if err != nil {
 		return nil, err
@@ -116,7 +179,6 @@ func (r *ServerRepo) List(ctx context.Context) ([]domain.Server, error) {
 	}
 	defer rows.Close()
 
-	out := make([]domain.Server, 0)
 	for rows.Next() {
 		var s domain.Server
 		if withDetailedConfigCol {
