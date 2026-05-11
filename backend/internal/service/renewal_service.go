@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -89,6 +90,18 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	if err != nil {
 		return domain.RenewalPlan{}, err
 	}
+	costParams, err := s.datasetRepo.GetValueScoreCostParams(ctx)
+	if err != nil {
+		return domain.RenewalPlan{}, err
+	}
+	perfParams, err := s.datasetRepo.ListValueScorePerformanceParams(ctx)
+	if err != nil {
+		return domain.RenewalPlan{}, err
+	}
+	originalRows, err := s.datasetRepo.ListValueScoreOriginalValues(ctx)
+	if err != nil {
+		return domain.RenewalPlan{}, err
+	}
 
 	excludedSet := make(map[string]bool)
 	excludedCanonical := make([]string, 0, len(in.ExcludedEnvironments))
@@ -164,6 +177,77 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	}
 	for k, v := range pkgRecentByYear {
 		pkgRecent1Y[k] = v.rate
+	}
+
+	perfByConfig := map[string]domain.ValueScorePerformanceParam{}
+	for _, p := range perfParams {
+		k := strings.TrimSpace(p.ConfigType)
+		if k == "" {
+			continue
+		}
+		perfByConfig[k] = p
+	}
+	origByConfig := map[string]float64{}
+	for _, r := range originalRows {
+		k := strings.TrimSpace(r.ConfigType)
+		if k == "" {
+			continue
+		}
+		if r.ServerOriginalCNY < 0 {
+			origByConfig[k] = 0
+			continue
+		}
+		origByConfig[k] = r.ServerOriginalCNY
+	}
+	valueScoreV1ByConfig := map[string]float64{}
+	for _, pkg := range packages {
+		cfg := strings.TrimSpace(pkg.ConfigType)
+		if cfg == "" {
+			continue
+		}
+		perf, ok := perfByConfig[cfg]
+		if !ok {
+			continue
+		}
+		availableCores := pkg.CPULogicalCores - perf.UnavailableCores
+		availableMemoryGB := pkg.MemoryCapacityGB - perf.UnavailableMemoryGB
+		if availableCores <= 0 || availableMemoryGB <= 0 || perf.PerformanceScore <= 0 {
+			continue
+		}
+		standardScore := math.Pow(2277.0/perf.PerformanceScore, 0.4)
+		cpuFactor := standardScore*0.43 + 0.57
+		memoryRatio := availableMemoryGB / float64(availableCores)
+		memoryRatioFactor := 1.0
+		switch {
+		case memoryRatio <= 3:
+			memoryRatioFactor = 1.5
+		case memoryRatio < 6:
+			memoryRatioFactor = 1.25
+		default:
+			memoryRatioFactor = 1
+		}
+		overallRatio := cpuFactor * memoryRatioFactor
+
+		cabinetCost := 0.0
+		if costParams.RatedPowerKW > 0 && costParams.CabinetUtilization > 0 {
+			cabinetCost = costParams.MonthlyRentCNY * (pkg.PowerWatts/1000.0) / (costParams.RatedPowerKW * costParams.CabinetUtilization)
+		}
+		depreciation := 0.0
+		if costParams.DepreciationMonths > 0 {
+			age := 0
+			if pkg.ReleaseYear > 0 {
+				age = time.Now().Year() - pkg.ReleaseYear
+			}
+			if age < 5 {
+				depreciation = origByConfig[cfg] * 0.95 / float64(costParams.DepreciationMonths)
+			}
+		}
+		totalTCO := cabinetCost + depreciation + costParams.NetworkDeviceShareCNY + cabinetCost*0.2 + costParams.ServerRenewalFeeCNY
+		singleCoreMonthlyTCO := totalTCO / float64(availableCores)
+		valueScoreV1 := (singleCoreMonthlyTCO * overallRatio) / 30.0
+		if !math.IsNaN(valueScoreV1) && !math.IsInf(valueScoreV1, 0) && valueScoreV1 > 0 {
+			valueScoreV1ByConfig[cfg] = valueScoreV1
+		}
 	}
 
 	type specialPolicyRule struct {
@@ -302,8 +386,13 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			if afrAvg > 0 {
 				item.AFRAvg = afrAvg
 				item.FailureAdjustFactor = 1 / afrAvg
-				item.FinalScore = baseScore / afrAvg
 			}
+		}
+		if v1, ok := valueScoreV1ByConfig[strings.TrimSpace(srv.ConfigType)]; ok {
+			item.ValueScoreV1 = v1
+			item.FinalScore = v1
+		} else {
+			item.FinalScore = 1e12
 		}
 
 		specialRule, hasSpecialRule := specialMap[srv.SN]
@@ -339,7 +428,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	sortItems := func(items []domain.RenewalItem) {
 		sort.Slice(items, func(i, j int) bool {
 			if items[i].FinalScore != items[j].FinalScore {
-				return items[i].FinalScore > items[j].FinalScore
+				return items[i].FinalScore < items[j].FinalScore // value_score_v1: lower is better
 			}
 			if items[i].StorageCapacityTB != items[j].StorageCapacityTB {
 				return items[i].StorageCapacityTB > items[j].StorageCapacityTB

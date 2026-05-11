@@ -104,6 +104,7 @@ type RenewalItem struct {
 	AFROld                 float64   `json:"afr_old,omitempty"`
 	AFRAvg                 float64   `json:"afr_avg,omitempty"`
 	FailureAdjustFactor    float64   `json:"failure_adjust_factor,omitempty"`
+	ValueScoreV1           float64   `json:"value_score_v1,omitempty"`
 	FinalScore             float64   `json:"final_score"`
 	SpecialPolicy          string    `json:"special_policy,omitempty"`
 }
