@@ -78,6 +78,9 @@ export interface ValueScoreCostParams {
   depreciation_months: number;
   network_device_share_cny: number;
   server_renewal_fee_cny: number;
+  cabinet_utilization: number;
+  rated_power_kw: number;
+  monthly_rent_cny: number;
 }
 
 export interface ValueScoreOriginalValue {

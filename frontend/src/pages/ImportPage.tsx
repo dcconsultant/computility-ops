@@ -67,7 +67,14 @@ export default function ImportPage() {
   const [editingCabinet, setEditingCabinet] = useState<CabinetConfig | null>(null);
   const [cabinetForm, setCabinetForm] = useState({ idc: '', rated_power_kw: 0, monthly_rent: 0 });
   const [cabinetBaseline, setCabinetBaseline] = useState<ValueScoreCabinetBaseline | null>(null);
-  const [costParams, setCostParams] = useState<ValueScoreCostParams>({ depreciation_months: 60, network_device_share_cny: 0, server_renewal_fee_cny: 0 });
+  const [costParams, setCostParams] = useState<ValueScoreCostParams>({
+    depreciation_months: 60,
+    network_device_share_cny: 0,
+    server_renewal_fee_cny: 0,
+    cabinet_utilization: 1,
+    rated_power_kw: 0,
+    monthly_rent_cny: 0
+  });
   const [performancePreview, setPerformancePreview] = useState<any>(null);
   const [performanceResult, setPerformanceResult] = useState<{ items: ValueScorePerformanceCalcItem[]; alert_count: number; note?: string } | null>(null);
   const [tcoResult, setTcoResult] = useState<ValueScoreTCOResult | null>(null);
@@ -382,9 +389,9 @@ export default function ImportPage() {
                       {cabinetBaseline ? (
                         <Space direction="vertical" style={{ width: '100%' }} size="small">
                           <Text>目标机房：{cabinetBaseline.idc}</Text>
-                          <Text>机柜利用率（来自机柜配置管理）：{formatFloat(cabinetBaseline.cabinet_utilization)}</Text>
-                          <Text>最低额定功率(KW)：{formatFloat(cabinetBaseline.min_rated_power_kw)}</Text>
-                          <Text>对应机柜月租(CNY)：{formatFloat(cabinetBaseline.monthly_rent_cny)}</Text>
+                          <Text>机柜利用率（全局参数）：{formatFloat(cabinetBaseline.cabinet_utilization)}</Text>
+                          <Text>额定功率(KW)（全局参数）：{formatFloat(cabinetBaseline.min_rated_power_kw)}</Text>
+                          <Text>机柜月租(CNY)（全局参数）：{formatFloat(cabinetBaseline.monthly_rent_cny)}</Text>
                           <Text>折旧月数：固定 {costParams.depreciation_months}</Text>
                           <Text>网络设备分摊成本(CNY/月)：{formatFloat(costParams.network_device_share_cny)}</Text>
                           <Text>服务器续保费(CNY/月)：{formatFloat(costParams.server_renewal_fee_cny)}</Text>
@@ -439,6 +446,18 @@ export default function ImportPage() {
                         <Space size="small" align="center">
                           <Text style={{ width: 160 }}>服务器续保费(CNY/月)</Text>
                           <InputNumber min={0} value={costParams.server_renewal_fee_cny} onChange={(v) => setCostParams({ ...costParams, server_renewal_fee_cny: Number(v || 0) })} />
+                        </Space>
+                        <Space size="small" align="center">
+                          <Text style={{ width: 160 }}>机柜利用率</Text>
+                          <InputNumber min={0.0001} step={0.0001} value={costParams.cabinet_utilization} onChange={(v) => setCostParams({ ...costParams, cabinet_utilization: Number(v || 0) })} />
+                        </Space>
+                        <Space size="small" align="center">
+                          <Text style={{ width: 160 }}>额定功率(KW)</Text>
+                          <InputNumber min={0.0001} step={0.0001} value={costParams.rated_power_kw} onChange={(v) => setCostParams({ ...costParams, rated_power_kw: Number(v || 0) })} />
+                        </Space>
+                        <Space size="small" align="center">
+                          <Text style={{ width: 160 }}>机柜月租(CNY)</Text>
+                          <InputNumber min={0.0001} step={0.01} value={costParams.monthly_rent_cny} onChange={(v) => setCostParams({ ...costParams, monthly_rent_cny: Number(v || 0) })} />
                         </Space>
                         <Text type="secondary">当前口径：机柜费 + 折旧 + 网络设备分摊成本 + 网络机柜等分摊 + 服务器续保费</Text>
                         <Text type="secondary">单文件导入：主键配置类型。后端一次解析、一次事务落库（原值+性能参数原子提交）。</Text>
