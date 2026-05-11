@@ -118,12 +118,22 @@ func (r *DatasetRepo) ReplaceHostPackages(ctx context.Context, rows []domain.Hos
 
 func (r *DatasetRepo) ListHostPackages(ctx context.Context) ([]domain.HostPackageConfig, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT config_type, COALESCE(scene_category,''), cpu_logical_cores, gpu_card_count,
-			COALESCE(data_disk_type,''), data_disk_count, storage_capacity_tb,
-			power_watts, release_year, memory_capacity_gb,
-			arch_standardized_factor
-		FROM ops_host_packages
-		ORDER BY created_at DESC
+		SELECT
+			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.config_type')), '') AS config_type,
+			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.application_category')), '') AS scene_category,
+			COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.logical_cores')) AS SIGNED), 0) AS cpu_logical_cores,
+			COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.count_gpu')) AS SIGNED), 0) AS gpu_card_count,
+			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.disk_type_data')), '') AS data_disk_type,
+			COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.count_disk_data')) AS SIGNED), 0) AS data_disk_count,
+			COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.capacity_storage_tb')) AS DECIMAL(18,4)), 0) AS storage_capacity_tb,
+			COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.power_rated')) AS DECIMAL(18,4)), 0) AS power_watts,
+			COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.year_released')) AS SIGNED), 0) AS release_year,
+			COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.capacity_memory_gb')) AS DECIMAL(18,4)), 0) AS memory_capacity_gb
+		FROM md_record r
+		INNER JOIN md_model m ON m.id = r.model_id
+		WHERE m.model_code = 'config_type'
+			AND r.deleted_flag = 0
+		ORDER BY r.updated_at DESC
 	`)
 	if err != nil {
 		return nil, err
@@ -143,10 +153,13 @@ func (r *DatasetRepo) ListHostPackages(ctx context.Context) ([]domain.HostPackag
 			&x.PowerWatts,
 			&x.ReleaseYear,
 			&x.MemoryCapacityGB,
-			&x.ArchStandardizedFactor,
 		); err != nil {
 			return nil, err
 		}
+		if x.ConfigType == "" {
+			continue
+		}
+		x.ArchStandardizedFactor = 0
 		out = append(out, x)
 	}
 	return out, rows.Err()
