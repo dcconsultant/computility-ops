@@ -23,42 +23,28 @@ func NewValueScoreSetupService(repo repository.DatasetRepo, serverRepo repositor
 }
 
 func (s *ValueScoreSetupService) GetCabinetBaseline(ctx context.Context) (domain.ValueScoreCabinetBaseline, error) {
-	util, err := s.repo.GetCabinetUtilization(ctx)
+	params, err := s.repo.GetValueScoreCostParams(ctx)
 	if err != nil {
 		return domain.ValueScoreCabinetBaseline{}, err
 	}
-	if util.Utilization <= 0 {
-		util.Utilization = 1
+	if params.CabinetUtilization <= 0 {
+		params.CabinetUtilization = 1
 	}
-	cabs, err := s.repo.ListCabinetConfigs(ctx)
-	if err != nil {
-		return domain.ValueScoreCabinetBaseline{}, err
-	}
-	const targetIDC = "CN-N01-TJ01-ZJ01"
-	minPower := 0.0
-	minRent := 0.0
-	count := 0
-	for _, c := range cabs {
-		if strings.EqualFold(strings.TrimSpace(c.IDC), targetIDC) {
-			count++
-			if minPower == 0 || c.RatedPowerKW < minPower || (c.RatedPowerKW == minPower && c.MonthlyRent < minRent) {
-				minPower = c.RatedPowerKW
-				minRent = c.MonthlyRent
-			}
-		}
-	}
-	if count == 0 || minPower <= 0 || minRent <= 0 {
-		return domain.ValueScoreCabinetBaseline{Status: "warning", IDC: targetIDC, CabinetUtilization: util.Utilization, Formula: "机柜月租 * (功率(W)/1000) / (额定功率(KW) * 机柜利用率)", SourceCount: 0, Note: "目标机房没有可用机柜配置"}, nil
+	status := "ok"
+	note := "机柜基线已切换为全局参数（不再依赖机柜配置管理表）"
+	if params.RatedPowerKW <= 0 || params.MonthlyRentCNY <= 0 {
+		status = "warning"
+		note = "全局参数缺少有效机柜额定功率或机柜月租"
 	}
 	return domain.ValueScoreCabinetBaseline{
-		Status:             "ok",
-		IDC:                targetIDC,
-		CabinetUtilization: util.Utilization,
-		MinRatedPowerKW:    minPower,
-		MonthlyRentCNY:     minRent,
+		Status:             status,
+		IDC:                "GLOBAL",
+		CabinetUtilization: params.CabinetUtilization,
+		MinRatedPowerKW:    params.RatedPowerKW,
+		MonthlyRentCNY:     params.MonthlyRentCNY,
 		Formula:            "机柜月租 * (功率(W)/1000) / (额定功率(KW) * 机柜利用率)",
-		SourceCount:        count,
-		Note:               fmt.Sprintf("套餐展示按目标机房 %s 的最低额定功率机柜统一取参", targetIDC),
+		SourceCount:        1,
+		Note:               note,
 	}, nil
 }
 
@@ -76,6 +62,15 @@ func (s *ValueScoreSetupService) GetCostParams(ctx context.Context) (domain.Valu
 	if params.ServerRenewalFeeCNY < 0 {
 		params.ServerRenewalFeeCNY = 0
 	}
+	if params.CabinetUtilization <= 0 {
+		params.CabinetUtilization = 1
+	}
+	if params.RatedPowerKW < 0 {
+		params.RatedPowerKW = 0
+	}
+	if params.MonthlyRentCNY < 0 {
+		params.MonthlyRentCNY = 0
+	}
 	return params, nil
 }
 
@@ -87,6 +82,15 @@ func (s *ValueScoreSetupService) UpdateCostParams(ctx context.Context, params do
 	}
 	if params.ServerRenewalFeeCNY < 0 {
 		return domain.ValueScoreCostParams{}, fmt.Errorf("服务器续保费(CNY) 必须大于等于0")
+	}
+	if params.CabinetUtilization <= 0 {
+		return domain.ValueScoreCostParams{}, fmt.Errorf("机柜利用率必须大于0")
+	}
+	if params.RatedPowerKW <= 0 {
+		return domain.ValueScoreCostParams{}, fmt.Errorf("额定功率(KW) 必须大于0")
+	}
+	if params.MonthlyRentCNY <= 0 {
+		return domain.ValueScoreCostParams{}, fmt.Errorf("机柜月租(CNY) 必须大于0")
 	}
 	if err := s.repo.SetValueScoreCostParams(ctx, params); err != nil {
 		return domain.ValueScoreCostParams{}, err

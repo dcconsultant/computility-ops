@@ -100,13 +100,14 @@ func (r *DatasetRepo) ListCabinetConfigs(ctx context.Context) ([]domain.CabinetC
 func (r *DatasetRepo) GetValueScoreCostParams(ctx context.Context) (domain.ValueScoreCostParams, error) {
 	var out domain.ValueScoreCostParams
 	err := r.db.QueryRowContext(ctx, `
-		SELECT depreciation_months, network_device_share_cny, server_renewal_fee_cny
+		SELECT depreciation_months, network_device_share_cny, server_renewal_fee_cny,
+			cabinet_utilization, rated_power_kw, monthly_rent_cny
 		FROM ops_value_score_cost_params
 		WHERE id=1
-	`).Scan(&out.DepreciationMonths, &out.NetworkDeviceShareCNY, &out.ServerRenewalFeeCNY)
+	`).Scan(&out.DepreciationMonths, &out.NetworkDeviceShareCNY, &out.ServerRenewalFeeCNY, &out.CabinetUtilization, &out.RatedPowerKW, &out.MonthlyRentCNY)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return domain.ValueScoreCostParams{DepreciationMonths: 60}, nil
+			return domain.ValueScoreCostParams{DepreciationMonths: 60, CabinetUtilization: 1}, nil
 		}
 		return domain.ValueScoreCostParams{}, err
 	}
@@ -119,18 +120,30 @@ func (r *DatasetRepo) GetValueScoreCostParams(ctx context.Context) (domain.Value
 	if out.ServerRenewalFeeCNY < 0 {
 		out.ServerRenewalFeeCNY = 0
 	}
+	if out.CabinetUtilization <= 0 {
+		out.CabinetUtilization = 1
+	}
+	if out.RatedPowerKW < 0 {
+		out.RatedPowerKW = 0
+	}
+	if out.MonthlyRentCNY < 0 {
+		out.MonthlyRentCNY = 0
+	}
 	return out, nil
 }
 
 func (r *DatasetRepo) SetValueScoreCostParams(ctx context.Context, params domain.ValueScoreCostParams) error {
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO ops_value_score_cost_params (id, depreciation_months, network_device_share_cny, server_renewal_fee_cny)
-		VALUES (1, ?, ?, ?)
+		INSERT INTO ops_value_score_cost_params (id, depreciation_months, network_device_share_cny, server_renewal_fee_cny, cabinet_utilization, rated_power_kw, monthly_rent_cny)
+		VALUES (1, ?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE
 			depreciation_months = VALUES(depreciation_months),
 			network_device_share_cny = VALUES(network_device_share_cny),
-			server_renewal_fee_cny = VALUES(server_renewal_fee_cny)
-	`, params.DepreciationMonths, params.NetworkDeviceShareCNY, params.ServerRenewalFeeCNY)
+			server_renewal_fee_cny = VALUES(server_renewal_fee_cny),
+			cabinet_utilization = VALUES(cabinet_utilization),
+			rated_power_kw = VALUES(rated_power_kw),
+			monthly_rent_cny = VALUES(monthly_rent_cny)
+	`, params.DepreciationMonths, params.NetworkDeviceShareCNY, params.ServerRenewalFeeCNY, params.CabinetUtilization, params.RatedPowerKW, params.MonthlyRentCNY)
 	return err
 }
 

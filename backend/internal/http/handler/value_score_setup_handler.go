@@ -239,10 +239,40 @@ func (h *ValueScoreSetupHandler) ImportCostParams(c *gin.Context) {
 		}
 		renewal = v
 	}
+	cabinetUtilization := 1.0
+	if s := get("机柜利用率"); s != "" {
+		v, e := strconv.ParseFloat(s, 64)
+		if e != nil {
+			fail(c, 40004, "机柜利用率必须是数字")
+			return
+		}
+		cabinetUtilization = v
+	}
+	ratedPower := 0.0
+	if s := get("额定功率(KW)"); s != "" {
+		v, e := strconv.ParseFloat(s, 64)
+		if e != nil {
+			fail(c, 40004, "额定功率(KW) 必须是数字")
+			return
+		}
+		ratedPower = v
+	}
+	monthlyRent := 0.0
+	if s := get("机柜月租(CNY)"); s != "" {
+		v, e := strconv.ParseFloat(s, 64)
+		if e != nil {
+			fail(c, 40004, "机柜月租(CNY) 必须是数字")
+			return
+		}
+		monthlyRent = v
+	}
 	out, err := h.svc.UpdateCostParams(c.Request.Context(), domain.ValueScoreCostParams{
-		DepreciationMonths: dep,
+		DepreciationMonths:    dep,
 		NetworkDeviceShareCNY: network,
-		ServerRenewalFeeCNY: renewal,
+		ServerRenewalFeeCNY:   renewal,
+		CabinetUtilization:    cabinetUtilization,
+		RatedPowerKW:          ratedPower,
+		MonthlyRentCNY:        monthlyRent,
 	})
 	if err != nil {
 		fail(c, 40004, err.Error())
@@ -255,7 +285,7 @@ func (h *ValueScoreSetupHandler) ExportCostParamsTemplate(c *gin.Context) {
 	c.Set("audit_action", "value_score.cost_params.template.export")
 	xf := excelize.NewFile()
 	sheet := xf.GetSheetName(0)
-	headers := []string{"折旧月数", "网络设备分摊成本(CNY/月)", "服务器续保费(CNY/月)"}
+	headers := []string{"折旧月数", "网络设备分摊成本(CNY/月)", "服务器续保费(CNY/月)", "机柜利用率", "额定功率(KW)", "机柜月租(CNY)"}
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		_ = xf.SetCellValue(sheet, cell, h)
@@ -263,6 +293,9 @@ func (h *ValueScoreSetupHandler) ExportCostParamsTemplate(c *gin.Context) {
 	_ = xf.SetCellValue(sheet, "A2", 60)
 	_ = xf.SetCellValue(sheet, "B2", 0)
 	_ = xf.SetCellValue(sheet, "C2", 0)
+	_ = xf.SetCellValue(sheet, "D2", 1)
+	_ = xf.SetCellValue(sheet, "E2", 4)
+	_ = xf.SetCellValue(sheet, "F2", 1000)
 	buf, err := xf.WriteToBuffer()
 	if err != nil {
 		fail(c, 50001, "导出失败")
