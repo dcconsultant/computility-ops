@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 
 	"computility-ops/backend/internal/domain"
 )
@@ -172,56 +171,6 @@ func (r *DatasetRepo) ReplaceSpecialRules(ctx context.Context, rows []domain.Spe
 		return err
 	}
 	defer tx.Rollback()
-
-	var specialModelID string
-	err = tx.QueryRowContext(ctx, `SELECT id FROM md_model WHERE model_code='special_rule' LIMIT 1`).Scan(&specialModelID)
-	if err == nil {
-		if _, err := tx.ExecContext(ctx, `UPDATE md_record SET deleted_flag=1, updated_at=NOW() WHERE model_id=? AND deleted_flag=0`, specialModelID); err != nil {
-			return err
-		}
-		stmt, err := tx.PrepareContext(ctx, `
-			INSERT INTO md_record (id, model_id, data_json, deleted_flag, created_at, updated_at)
-			VALUES (REPLACE(UUID(),'-',''), ?, JSON_OBJECT(
-				'sn', ?,
-				'manufacturer', ?,
-				'model', ?,
-				'psa', ?,
-				'idc', ?,
-				'package_type', ?,
-				'warranty_end_date', ?,
-				'launch_date', ?,
-				'policy', ?,
-				'reason', ?
-			), 0, NOW(), NOW())
-		`)
-		if err != nil {
-			return err
-		}
-		defer stmt.Close()
-		for _, x := range rows {
-			if _, err := stmt.ExecContext(ctx,
-				specialModelID,
-				strings.TrimSpace(x.SN),
-				strings.TrimSpace(x.Manufacturer),
-				strings.TrimSpace(x.Model),
-				strings.TrimSpace(x.PSA),
-				strings.TrimSpace(x.IDC),
-				strings.TrimSpace(x.PackageType),
-				strings.TrimSpace(x.WarrantyEndDate),
-				strings.TrimSpace(x.LaunchDate),
-				strings.TrimSpace(x.Policy),
-				strings.TrimSpace(x.Reason),
-			); err != nil {
-				return fmt.Errorf("insert special rule %s to md_record failed: %w", x.SN, err)
-			}
-		}
-		return tx.Commit()
-	}
-	if err != sql.ErrNoRows {
-		return err
-	}
-
-	// fallback: legacy table when metadata model not present
 	if _, err := tx.ExecContext(ctx, `DELETE FROM ops_special_rules`); err != nil {
 		return err
 	}
@@ -284,61 +233,6 @@ func (r *DatasetRepo) ReplaceSpecialRules(ctx context.Context, rows []domain.Spe
 }
 
 func (r *DatasetRepo) ListSpecialRules(ctx context.Context) ([]domain.SpecialRule, error) {
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT
-			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.sn')), '') AS sn,
-			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.manufacturer')), '') AS manufacturer,
-			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.model')), '') AS model,
-			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.psa')), '') AS psa,
-			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.idc')), '') AS idc,
-			COALESCE(
-				JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.package_type')),
-				JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.config_type')),
-				''
-			) AS package_type,
-			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.warranty_end_date')), '') AS warranty_end_date,
-			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.launch_date')), '') AS launch_date,
-			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.policy')), '') AS policy,
-			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.reason')), '') AS reason
-		FROM md_record r
-		INNER JOIN md_model m ON m.id = r.model_id
-		WHERE m.model_code = 'special_rule'
-			AND r.deleted_flag = 0
-		ORDER BY r.updated_at DESC
-	`)
-	if err == nil {
-		defer rows.Close()
-		out := make([]domain.SpecialRule, 0)
-		for rows.Next() {
-			var x domain.SpecialRule
-			if err := rows.Scan(
-				&x.SN,
-				&x.Manufacturer,
-				&x.Model,
-				&x.PSA,
-				&x.IDC,
-				&x.PackageType,
-				&x.WarrantyEndDate,
-				&x.LaunchDate,
-				&x.Policy,
-				&x.Reason,
-			); err != nil {
-				return nil, err
-			}
-			if strings.TrimSpace(x.SN) == "" {
-				continue
-			}
-			out = append(out, x)
-		}
-		if err := rows.Err(); err != nil {
-			return nil, err
-		}
-		if len(out) > 0 {
-			return out, nil
-		}
-	}
-
-	// fallback: legacy table
 	withReasonCol, err := hasSpecialRuleReasonColumn(ctx, r.db)
 	if err != nil {
 		return nil, err
@@ -359,7 +253,7 @@ func (r *DatasetRepo) ListSpecialRules(ctx context.Context) ([]domain.SpecialRul
 			ORDER BY created_at DESC
 		`
 	}
-	rows, err = r.db.QueryContext(ctx, querySQL)
+	rows, err := r.db.QueryContext(ctx, querySQL)
 	if err != nil {
 		return nil, err
 	}
