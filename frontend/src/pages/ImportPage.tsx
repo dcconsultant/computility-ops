@@ -182,6 +182,13 @@ export default function ImportPage() {
     for (const p of packages) packageMap.set(p.config_type, p);
 
     const classifyScene = (pkg?: HostPackageConfig): 'compute' | 'warm_storage' | 'hot_storage' | 'gpu' => {
+      const appCategory = String((pkg as any)?.application_category || '').trim();
+      if (appCategory === 'GPU') return 'gpu';
+      if (appCategory === '温存储') return 'warm_storage';
+      if (appCategory === '热存储') return 'hot_storage';
+      if (appCategory === '计算') return 'compute';
+
+      // 兼容历史数据兜底
       const scene = String(pkg?.scene_category || '').toLowerCase();
       if (Number(pkg?.gpu_card_count || 0) > 0 || scene.includes('gpu')) return 'gpu';
       if (scene.includes('warm') || scene.includes('温')) return 'warm_storage';
@@ -218,7 +225,7 @@ export default function ImportPage() {
         ...p,
         ...t,
         scene_type: sceneType,
-        scene_category: pkg?.scene_category,
+        scene_category: (pkg as any)?.application_category || pkg?.scene_category,
         capacity_storage_tb: storageTB,
         count_gpu: gpuCount,
         unit_tco: Number.isFinite(unitTCO) ? unitTCO : 0,
