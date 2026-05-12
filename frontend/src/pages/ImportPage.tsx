@@ -455,6 +455,40 @@ export default function ImportPage() {
             label: '价值分管理',
             children: (
               <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                <Card>
+                  <Space style={{ width: '100%', justifyContent: 'space-between' }} align="center" wrap>
+                    <Typography.Title level={5} style={{ margin: 0 }}>价值分管理</Typography.Title>
+                    <Space wrap>
+                      <Tabs
+                        activeKey={valueSceneTab}
+                        onChange={(k) => setValueSceneTab(k as any)}
+                        items={[
+                          { key: 'compute', label: `计算（${sceneScoreRows.compute.length}）` },
+                          { key: 'warm_storage', label: `温存储（${sceneScoreRows.warm_storage.length}）` },
+                          { key: 'hot_storage', label: `热存储（${sceneScoreRows.hot_storage.length}）` },
+                          { key: 'gpu', label: `GPU（${sceneScoreRows.gpu.length}）` }
+                        ]}
+                      />
+                      <Button onClick={() => setValueConfigVisible((v) => !v)}>参数配置</Button>
+                      <Button onClick={exportValueScoreTCO}>导出Excel</Button>
+                      <Button loading={performanceLoading || tcoLoading} onClick={async () => {
+                        setPerformanceLoading(true);
+                        setTcoLoading(true);
+                        try {
+                          const [perf, tco] = await Promise.all([calculateValueScorePerformance(), calculateValueScoreTCO()]);
+                          setPerformanceResult((ensureApiOk(perf) as any).data);
+                          setTcoResult((ensureApiOk(tco) as any).data);
+                          message.success('结果已刷新');
+                        } catch (e) {
+                          message.error(parseApiError(e, '刷新失败'));
+                        } finally {
+                          setPerformanceLoading(false);
+                          setTcoLoading(false);
+                        }
+                      }}>刷新</Button>
+                    </Space>
+                  </Space>
+                </Card>
                 {valueConfigVisible ? <>
                 <Row gutter={[16, 16]}>
                   <Col xs={24} lg={12}>
@@ -546,32 +580,8 @@ export default function ImportPage() {
 
                 </> : null}
 
-                <Card title="" extra={<Space><Button onClick={() => setValueConfigVisible((v) => !v)}>参数配置</Button><Button onClick={exportValueScoreTCO}>导出Excel</Button><Button loading={performanceLoading || tcoLoading} onClick={async () => {
-                  setPerformanceLoading(true);
-                  setTcoLoading(true);
-                  try {
-                    const [perf, tco] = await Promise.all([calculateValueScorePerformance(), calculateValueScoreTCO()]);
-                    setPerformanceResult((ensureApiOk(perf) as any).data);
-                    setTcoResult((ensureApiOk(tco) as any).data);
-                    message.success('结果已刷新');
-                  } catch (e) {
-                    message.error(parseApiError(e, '刷新失败'));
-                  } finally {
-                    setPerformanceLoading(false);
-                    setTcoLoading(false);
-                  }
-                }}>刷新</Button></Space>}>
+                <Card>
                   {performanceResult?.alert_count ? <Alert type="warning" showIcon message={`检测到 ${performanceResult.alert_count} 条告警`} description={(performanceResult.items || []).flatMap((it: any) => (it.alerts || []).map((a: any) => `${a.config_type} | ${a.error_code} | ${a.field} | ${a.current_value} | ${a.suggestion}`)).slice(0, 10).join('；') || '请检查配置类型、性能跑分、可用核数/内存等数据'} style={{ marginBottom: 12 }} /> : null}
-                  <Tabs
-                    activeKey={valueSceneTab}
-                    onChange={(k) => setValueSceneTab(k as any)}
-                    items={[
-                      { key: 'compute', label: `计算（${sceneScoreRows.compute.length}）` },
-                      { key: 'warm_storage', label: `温存储（${sceneScoreRows.warm_storage.length}）` },
-                      { key: 'hot_storage', label: `热存储（${sceneScoreRows.hot_storage.length}）` },
-                      { key: 'gpu', label: `GPU（${sceneScoreRows.gpu.length}）` }
-                    ]}
-                  />
                   <Table rowKey="config_type" dataSource={(sceneScoreRows as any)[valueSceneTab] || []} scroll={{ x: 2800 }} pagination={withTotalPagination(10)} columns={[
                     { title: '配置类型', dataIndex: 'config_type', fixed: 'left', width: 160 },
                     { title: '场景', dataIndex: 'scene_category', width: 120, render: (v: string) => v || '-' },
