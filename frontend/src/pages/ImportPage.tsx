@@ -208,18 +208,21 @@ export default function ImportPage() {
 
       let unitTCO = 0;
       let convertedUnitTCO = 0;
+      let appliedOverallRatio = overallRatio;
       if (sceneType === 'gpu') {
         unitTCO = gpuCount > 0 ? totalTCO / gpuCount : 0;
-        convertedUnitTCO = unitTCO * overallRatio;
+        appliedOverallRatio = 1;
+        convertedUnitTCO = unitTCO;
       } else if (sceneType === 'warm_storage' || sceneType === 'hot_storage') {
         unitTCO = storageTB > 0 ? totalTCO / storageTB : 0;
-        convertedUnitTCO = unitTCO * overallRatio;
+        appliedOverallRatio = 1;
+        convertedUnitTCO = unitTCO;
       } else {
         unitTCO = availableCores > 0 ? totalTCO / availableCores : 0;
         convertedUnitTCO = unitTCO * overallRatio;
       }
 
-      const valueScoreV1 = convertedUnitTCO / 30;
+      const valueScoreV1 = sceneType === 'compute' ? (convertedUnitTCO / 30) : unitTCO;
 
       return {
         ...p,
@@ -229,6 +232,7 @@ export default function ImportPage() {
         capacity_storage_tb: storageTB,
         count_gpu: gpuCount,
         unit_tco: Number.isFinite(unitTCO) ? unitTCO : 0,
+        overall_performance_ratio: Number.isFinite(appliedOverallRatio) ? appliedOverallRatio : 0,
         converted_unit_tco: Number.isFinite(convertedUnitTCO) ? convertedUnitTCO : 0,
         value_score_v1: Number.isFinite(valueScoreV1) ? valueScoreV1 : 0
       };
@@ -542,7 +546,7 @@ export default function ImportPage() {
 
                 </> : null}
 
-                <Card title="价值分析" extra={<Space><Button onClick={() => setValueConfigVisible((v) => !v)}>参数配置</Button><Button onClick={exportValueScoreTCO}>导出Excel</Button><Button loading={performanceLoading || tcoLoading} onClick={async () => {
+                <Card title="" extra={<Space><Button onClick={() => setValueConfigVisible((v) => !v)}>参数配置</Button><Button onClick={exportValueScoreTCO}>导出Excel</Button><Button loading={performanceLoading || tcoLoading} onClick={async () => {
                   setPerformanceLoading(true);
                   setTcoLoading(true);
                   try {
@@ -604,7 +608,7 @@ export default function ImportPage() {
                         return `${formatFloat(v)} /核`;
                       }
                     },
-                    { title: '折算后单位月TCO', dataIndex: 'converted_unit_tco', render: (v: number) => formatFloat(v) },
+
                     { title: '价值分v1', dataIndex: 'value_score_v1', render: (v: number) => formatFloat(v) }
                   ]} />
                 </Card>
