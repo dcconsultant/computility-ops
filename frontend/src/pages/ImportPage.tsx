@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { Alert, Button, Card, Col, Input, InputNumber, Modal, Popconfirm, Row, message, Space, Table, Tabs, Typography, Upload } from 'antd';
 import type { UploadProps } from 'antd';
@@ -54,6 +55,7 @@ const titles: Record<DataKey, string> = {
 };
 
 export default function ImportPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [uploading, setUploading] = useState<DataKey | null>(null);
 
@@ -155,6 +157,21 @@ export default function ImportPage() {
 
   const assetAnalysis = useMemo(() => buildAssetAnalysis(servers), [servers]);
 
+  const section = searchParams.get('section') || '';
+  const requestedTab = (searchParams.get('tab') as DataKey | null) || null;
+
+  const visibleTabKeys: DataKey[] = section === 'value-score'
+    ? ['value_score_setup']
+    : section === 'resource-analysis'
+      ? ['assets']
+      : section === 'test-zone'
+        ? ['servers', 'packages', 'cabinet']
+        : ['servers', 'packages', 'cabinet', 'value_score_setup', 'assets'];
+
+  const activeTab = requestedTab && visibleTabKeys.includes(requestedTab)
+    ? requestedTab
+    : visibleTabKeys[0];
+
   const mergedScoreRows = useMemo(() => {
     const perfItems = (performanceResult?.items || []) as any[];
     const tcoItems = (tcoResult?.items || []) as any[];
@@ -229,6 +246,12 @@ export default function ImportPage() {
       )}
 
       <Tabs
+        activeKey={activeTab}
+        onChange={(key) => {
+          const next = new URLSearchParams(searchParams);
+          next.set('tab', key);
+          setSearchParams(next, { replace: true });
+        }}
         items={[
           {
             key: 'servers',
@@ -538,7 +561,7 @@ export default function ImportPage() {
               </Space>
             )
           }
-        ]}
+        ].filter((item) => visibleTabKeys.includes(item.key as DataKey))}
       />
     </Space>
   );

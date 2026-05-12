@@ -19,13 +19,20 @@ export default function AppLayout() {
   const [importErrors, setImportErrors] = useState<ImportErrorInsight[]>([]);
   const [form] = Form.useForm();
 
+  const section = new URLSearchParams(location.search).get('section') || '';
   const key = location.pathname.startsWith('/result') || location.pathname.startsWith('/plan/')
     ? '/plan'
     : location.pathname.startsWith('/failure/')
       ? '/failure'
       : location.pathname.startsWith('/meta-models')
         ? '/meta-models'
-        : location.pathname;
+        : location.pathname.startsWith('/import') && section === 'value-score'
+          ? '/value-score'
+          : location.pathname.startsWith('/import') && section === 'resource-analysis'
+            ? '/resource-analysis'
+            : location.pathname.startsWith('/import') && section === 'test-zone'
+              ? '/test-zone'
+              : location.pathname;
   const isFailureDashboard = location.pathname === '/failure/dashboard';
   const isMetaModels = location.pathname.startsWith('/meta-models');
 
@@ -73,11 +80,19 @@ export default function AppLayout() {
           mode="horizontal"
           selectedKeys={[key]}
           items={[
-            { key: '/import', label: <Link to="/import">配置管理</Link> },
-            { key: '/contracts', label: <Link to="/contracts">合同管理</Link> },
-            { key: '/plan', label: <Link to="/plan">续保管理</Link> },
-            { key: '/failure', label: <Link to="/failure">故障率分析</Link> },
-            { key: '/meta-models', label: <Link to="/meta-models">元数据管理</Link> }
+            { key: '/meta-models', label: <Link to="/meta-models">元数据</Link> },
+            { key: '/value-score', label: <Link to="/import?section=value-score&tab=value_score_setup">价值分</Link> },
+            { key: '/resource-planning', label: <Link to="/resource-planning">资源规划</Link> },
+            {
+              key: '/ops-management',
+              label: '运维管理',
+              children: [
+                { key: '/plan', label: <Link to="/plan">续保管理</Link> },
+                { key: '/failure', label: <Link to="/failure">故障率</Link> }
+              ]
+            },
+            { key: '/resource-analysis', label: <Link to="/import?section=resource-analysis&tab=assets">资源分析</Link> },
+            { key: '/test-zone', label: <Link to="/import?section=test-zone&tab=servers">测试专区</Link> }
           ]}
           style={{ flex: 1, minWidth: 0 }}
         />
