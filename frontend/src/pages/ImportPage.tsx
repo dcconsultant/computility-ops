@@ -83,6 +83,7 @@ export default function ImportPage() {
   const [tcoLoading, setTcoLoading] = useState(false);
   const [performanceLoading, setPerformanceLoading] = useState(false);
   const [valueConfigVisible, setValueConfigVisible] = useState(false);
+  const [valueSceneTab, setValueSceneTab] = useState<'compute' | 'warm_storage' | 'hot_storage' | 'gpu'>('compute');
 
   async function reloadAll() {
     try {
@@ -177,21 +178,62 @@ export default function ImportPage() {
     const tcoItems = (tcoResult?.items || []) as any[];
     const tcoMap = new Map<string, any>();
     for (const t of tcoItems) tcoMap.set(t.config_type, t);
+    const packageMap = new Map<string, HostPackageConfig>();
+    for (const p of packages) packageMap.set(p.config_type, p);
+
+    const classifyScene = (pkg?: HostPackageConfig): 'compute' | 'warm_storage' | 'hot_storage' | 'gpu' => {
+      const scene = String(pkg?.scene_category || '').toLowerCase();
+      if (Number(pkg?.gpu_card_count || 0) > 0 || scene.includes('gpu')) return 'gpu';
+      if (scene.includes('warm') || scene.includes('温')) return 'warm_storage';
+      if (scene.includes('hot') || scene.includes('热')) return 'hot_storage';
+      return 'compute';
+    };
+
     return perfItems.map((p) => {
       const t = tcoMap.get(p.config_type) || {};
-      const availableCores = Number(p.available_cores || 0);
+      const pkg = packageMap.get(p.config_type);
+      const sceneType = classifyScene(pkg);
       const totalTCO = Number(t.total_tco_monthly || 0);
+      const availableCores = Number(p.available_cores || 0);
       const overallRatio = Number(p.overall_performance_ratio || 0);
-      const singleCoreMonthlyTCO = availableCores > 0 ? (totalTCO / availableCores) : 0;
-      const standardCoreMonthlyTCO = singleCoreMonthlyTCO * overallRatio;
-      const valueScoreV1 = standardCoreMonthlyTCO / 30;
+      const storageTB = Number(pkg?.storage_capacity_tb || 0);
+      const gpuCount = Number(pkg?.gpu_card_count || 0);
+
+      let unitTCO = 0;
+      let convertedUnitTCO = 0;
+      if (sceneType === 'gpu') {
+        unitTCO = gpuCount > 0 ? totalTCO / gpuCount : 0;
+        convertedUnitTCO = unitTCO * overallRatio;
+      } else if (sceneType === 'warm_storage' || sceneType === 'hot_storage') {
+        unitTCO = storageTB > 0 ? totalTCO / storageTB : 0;
+        convertedUnitTCO = unitTCO * overallRatio;
+      } else {
+        unitTCO = availableCores > 0 ? totalTCO / availableCores : 0;
+        convertedUnitTCO = unitTCO * overallRatio;
+      }
+
+      const valueScoreV1 = convertedUnitTCO / 30;
+
       return {
         ...p,
         ...t,
+        scene_type: sceneType,
+        scene_category: pkg?.scene_category,
+        capacity_storage_tb: storageTB,
+        count_gpu: gpuCount,
+        unit_tco: Number.isFinite(unitTCO) ? unitTCO : 0,
+        converted_unit_tco: Number.isFinite(convertedUnitTCO) ? convertedUnitTCO : 0,
         value_score_v1: Number.isFinite(valueScoreV1) ? valueScoreV1 : 0
       };
     });
-  }, [performanceResult, tcoResult]);
+  }, [performanceResult, tcoResult, packages]);
+
+  const sceneScoreRows = useMemo(() => ({
+    compute: mergedScoreRows.filter((r: any) => r.scene_type === 'compute'),
+    warm_storage: mergedScoreRows.filter((r: any) => r.scene_type === 'warm_storage'),
+    hot_storage: mergedScoreRows.filter((r: any) => r.scene_type === 'hot_storage'),
+    gpu: mergedScoreRows.filter((r: any) => r.scene_type === 'gpu')
+  }), [mergedScoreRows]);
 
   function makeUploadProps(kind: 'servers' | 'packages'): UploadProps {
     const importer = {
@@ -509,10 +551,23 @@ export default function ImportPage() {
                   }
                 }}>刷新</Button></Space>}>
                   {performanceResult?.alert_count ? <Alert type="warning" showIcon message={`检测到 ${performanceResult.alert_count} 条告警`} description={(performanceResult.items || []).flatMap((it: any) => (it.alerts || []).map((a: any) => `${a.config_type} | ${a.error_code} | ${a.field} | ${a.current_value} | ${a.suggestion}`)).slice(0, 10).join('；') || '请检查配置类型、性能跑分、可用核数/内存等数据'} style={{ marginBottom: 12 }} /> : null}
-                  <Table rowKey="config_type" dataSource={mergedScoreRows} scroll={{ x: 2600 }} pagination={withTotalPagination(10)} columns={[
+                  <Tabs
+                    activeKey={valueSceneTab}
+                    onChange={(k) => setValueSceneTab(k as any)}
+                    items={[
+                      { key: 'compute', label: `计算（${sceneScoreRows.compute.length}）` },
+                      { key: 'warm_storage', label: `温存储（${sceneScoreRows.warm_storage.length}）` },
+                      { key: 'hot_storage', label: `热存储（${sceneScoreRows.hot_storage.length}）` },
+                      { key: 'gpu', label: `GPU（${sceneScoreRows.gpu.length}）` }
+                    ]}
+                  />
+                  <Table rowKey="config_type" dataSource={(sceneScoreRows as any)[valueSceneTab] || []} scroll={{ x: 2800 }} pagination={withTotalPagination(10)} columns={[
                     { title: '配置类型', dataIndex: 'config_type', fixed: 'left', width: 160 },
+                    { title: '场景', dataIndex: 'scene_category', width: 120, render: (v: string) => v || '-' },
                     { title: 'CPU逻辑核数', dataIndex: 'cpu_logical_cores', render: (v: number) => formatInt(v) },
                     { title: '内存容量(GB)', dataIndex: 'memory_capacity_gb', render: (v: number) => formatFloat(v) },
+                    { title: '存储容量(TB)', dataIndex: 'capacity_storage_tb', render: (v: number) => formatFloat(v) },
+                    { title: 'GPU卡数', dataIndex: 'count_gpu', render: (v: number) => formatInt(v) },
                     { title: '不可用核数', dataIndex: 'unavailable_cores', render: (v: number) => formatInt(v) },
                     { title: '不可用内存(GB)', dataIndex: 'unavailable_memory_gb', render: (v: number) => formatFloat(v) },
                     { title: '性能跑分', dataIndex: 'performance_score', render: (v: number) => formatFloat(v) },
@@ -533,6 +588,16 @@ export default function ImportPage() {
                     { title: '服务器续保费/月', dataIndex: 'server_renewal_monthly', render: (v: number) => formatFloat(v) },
                     { title: '其他固定成本/月', dataIndex: 'other_fixed_cost_monthly', render: (v: number) => formatFloat(v) },
                     { title: '月TCO', dataIndex: 'total_tco_monthly', render: (v: number) => formatFloat(v) },
+                    {
+                      title: '单位月TCO',
+                      dataIndex: 'unit_tco',
+                      render: (v: number, row: any) => {
+                        if (row.scene_type === 'gpu') return `${formatFloat(v)} /GPU卡`;
+                        if (row.scene_type === 'warm_storage' || row.scene_type === 'hot_storage') return `${formatFloat(v)} /TB`;
+                        return `${formatFloat(v)} /核`;
+                      }
+                    },
+                    { title: '折算后单位月TCO', dataIndex: 'converted_unit_tco', render: (v: number) => formatFloat(v) },
                     { title: '价值分v1', dataIndex: 'value_score_v1', render: (v: number) => formatFloat(v) }
                   ]} />
                 </Card>
