@@ -1,0 +1,469 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"math"
+	"sort"
+	"strings"
+
+	"computility-ops/backend/internal/repository"
+)
+
+type ReconfigTargetConfig struct {
+	Mode                    string  `json:"mode,omitempty"`
+	ConfigType              string  `json:"config_type,omitempty"`
+	PerfBaseline            float64 `json:"perf_baseline"`
+	MemoryDatarateBaseline  float64 `json:"memory_datarate_baseline"`
+	MemoryCapacityBaseline  float64 `json:"memory_capacity_baseline"`
+	StorageCapacityBaseline float64 `json:"storage_capacity_baseline"`
+}
+
+type ReconfigScopeConfig struct {
+	PSAList     []string `json:"psa_list"`
+	ConfigTypes []string `json:"config_types"`
+	SNs         []string `json:"sns"`
+}
+
+type ReconfigPlanCalculateRequest struct {
+	Target         ReconfigTargetConfig `json:"target"`
+	Scope          ReconfigScopeConfig  `json:"scope"`
+	GoalValueScore float64              `json:"goal_value_score,omitempty"`
+}
+
+type ReconfigCandidateRow struct {
+	SN               string  `json:"sn"`
+	ConfigType       string  `json:"config_type"`
+	Rack             string  `json:"rack"`
+	Datacenter       string  `json:"datacenter"`
+	MemoryDatarate   float64 `json:"memory_datarate"`
+	PerfScore        float64 `json:"perf_score"`
+	MemoryCapacityGB float64 `json:"memory_capacity_gb"`
+	StorageCapacityTB float64 `json:"storage_capacity_tb"`
+	MemoryGapGB      float64 `json:"memory_gap_gb"`
+	StorageGapTB     float64 `json:"storage_gap_tb"`
+	Status           string  `json:"status"`
+	ValueScoreWarn   bool    `json:"value_score_warn,omitempty"`
+}
+
+type ReconfigActionRow struct {
+	TargetSN    string `json:"target_sn"`
+	GapType     string `json:"gap_type"`
+	GapQty      string `json:"gap_qty"`
+	Source      string `json:"source"`
+	PartDetails string `json:"part_details"`
+	CrossIDC    string `json:"cross_idc"`
+	Action      string `json:"action"`
+	RuleHit     string `json:"rule_hit"`
+}
+
+type ReconfigPlanCalculateResponse struct {
+	TargetResolved ReconfigTargetConfig   `json:"target_resolved"`
+	Candidates     []ReconfigCandidateRow `json:"candidates"`
+	Actions        []ReconfigActionRow    `json:"actions"`
+	Summary        map[string]any         `json:"summary"`
+}
+
+type ReconfigService struct {
+	metaRepo    repository.MetaRepo
+	datasetRepo repository.DatasetRepo
+}
+
+func NewReconfigService(metaRepo repository.MetaRepo, datasetRepo repository.DatasetRepo) *ReconfigService {
+	return &ReconfigService{metaRepo: metaRepo, datasetRepo: datasetRepo}
+}
+
+func (s *ReconfigService) CalculatePlan(ctx context.Context, req ReconfigPlanCalculateRequest) (ReconfigPlanCalculateResponse, error) {
+	servers, racks, memories, disks, configs, err := s.loadMetaRecords(ctx)
+	if err != nil {
+		return ReconfigPlanCalculateResponse{}, err
+	}
+	perfRows, err := s.datasetRepo.ListValueScorePerformanceParams(ctx)
+	if err != nil {
+		return ReconfigPlanCalculateResponse{}, err
+	}
+	perfByConfig := map[string]float64{}
+	for _, x := range perfRows {
+		k := strings.TrimSpace(x.ConfigType)
+		if k == "" {
+			continue
+		}
+		perfByConfig[k] = x.PerformanceScore
+	}
+
+	rackIDC := map[string]string{}
+	for _, r := range racks {
+		rackNo := strings.TrimSpace(pick(r, "sn", "rack", "机柜编号"))
+		if rackNo == "" {
+			continue
+		}
+		rackIDC[rackNo] = strings.TrimSpace(pick(r, "datacenter", "idc", "机房"))
+	}
+
+	target := req.Target
+	if strings.TrimSpace(target.ConfigType) != "" {
+		cfgType := strings.TrimSpace(target.ConfigType)
+		if target.PerfBaseline <= 0 {
+			target.PerfBaseline = perfByConfig[cfgType]
+		}
+		if target.MemoryCapacityBaseline <= 0 || target.StorageCapacityBaseline <= 0 {
+			for _, c := range configs {
+				if strings.TrimSpace(pick(c, "config_type", "配置类型")) == cfgType {
+					if target.MemoryCapacityBaseline <= 0 {
+						target.MemoryCapacityBaseline = pickNum(c, "capacity_memory_gb", "内存容量(GB)")
+					}
+					if target.StorageCapacityBaseline <= 0 {
+						target.StorageCapacityBaseline = pickNum(c, "capacity_storage_tb", "存储容量(TB)")
+					}
+					break
+				}
+			}
+		}
+		if target.MemoryDatarateBaseline <= 0 {
+			var sampleSN string
+			for _, sv := range servers {
+				if strings.TrimSpace(pick(sv, "config_type", "配置类型")) == cfgType {
+					sampleSN = strings.TrimSpace(pick(sv, "sn", "SN"))
+					break
+				}
+			}
+			if sampleSN != "" {
+				for _, mem := range memories {
+					if strings.TrimSpace(pick(mem, "sn_server", "服务器SN")) == sampleSN {
+						target.MemoryDatarateBaseline = pickNum(mem, "datarate", "数据传输率(TM/s)", "数据传输率(MT/s)")
+						break
+					}
+				}
+			}
+		}
+	}
+
+	snFilter := map[string]struct{}{}
+	for _, sn := range req.Scope.SNs {
+		s := strings.TrimSpace(sn)
+		if s != "" {
+			snFilter[s] = struct{}{}
+		}
+	}
+	cfgFilter := map[string]struct{}{}
+	for _, c := range req.Scope.ConfigTypes {
+		k := strings.TrimSpace(c)
+		if k != "" {
+			cfgFilter[k] = struct{}{}
+		}
+	}
+
+	filteredServers := make([]map[string]any, 0)
+	for _, sv := range servers {
+		psa := strings.TrimSpace(pick(sv, "psa", "PSA"))
+		belong := strings.TrimSpace(pick(sv, "belong", "归属"))
+		cfgType := strings.TrimSpace(pick(sv, "config_type", "配置类型"))
+		sn := strings.TrimSpace(pick(sv, "sn", "SN"))
+
+		if belong != "" && belong != "ai_data_engineering" {
+			continue
+		}
+		if len(req.Scope.PSAList) > 0 {
+			hit := false
+			for _, p := range req.Scope.PSAList {
+				if strings.Contains(psa, strings.TrimSpace(p)) {
+					hit = true
+					break
+				}
+			}
+			if !hit {
+				continue
+			}
+		}
+		if len(cfgFilter) > 0 {
+			if _, ok := cfgFilter[cfgType]; !ok {
+				continue
+			}
+		}
+		if len(snFilter) > 0 {
+			if _, ok := snFilter[sn]; !ok {
+				continue
+			}
+		}
+		filteredServers = append(filteredServers, sv)
+	}
+
+	candidates := make([]ReconfigCandidateRow, 0, len(filteredServers))
+	for _, sv := range filteredServers {
+		sn := strings.TrimSpace(pick(sv, "sn", "SN"))
+		cfgType := strings.TrimSpace(pick(sv, "config_type", "配置类型"))
+		rack := strings.TrimSpace(pick(sv, "rack", "机柜"))
+		idc := strings.TrimSpace(pick(sv, "idc", "机房"))
+		if idc == "" {
+			idc = rackIDC[rack]
+		}
+
+		hostMems := filterBySN(memories, sn)
+		hostDisks := filterBySN(disks, sn)
+		memRate := 0.0
+		if len(hostMems) > 0 {
+			memRate = pickNum(hostMems[0], "datarate", "数据传输率(TM/s)", "数据传输率(MT/s)")
+		}
+		perf := perfByConfig[cfgType]
+		memCap := sumNum(hostMems, "capacity", "容量")
+		storageTB := sumNum(hostDisks, "capacity", "容量") / 1024.0
+		memGap := math.Max(0, target.MemoryCapacityBaseline-memCap)
+		storageGap := math.Max(0, target.StorageCapacityBaseline-storageTB)
+
+		status := "候选"
+		if memRate < target.MemoryDatarateBaseline {
+			status = "内存带宽不足"
+		} else if perf < target.PerfBaseline {
+			status = "性能不足"
+		}
+
+		warn := req.GoalValueScore > 0 && perf < req.GoalValueScore
+		candidates = append(candidates, ReconfigCandidateRow{
+			SN:                sn,
+			ConfigType:        cfgType,
+			Rack:              rack,
+			Datacenter:        idc,
+			MemoryDatarate:    round2(memRate),
+			PerfScore:         round2(perf),
+			MemoryCapacityGB:  round2(memCap),
+			StorageCapacityTB: round2(storageTB),
+			MemoryGapGB:       round2(memGap),
+			StorageGapTB:      round2(storageGap),
+			Status:            status,
+			ValueScoreWarn:    warn,
+		})
+	}
+
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].SN < candidates[j].SN })
+	actions := s.buildActions(candidates, filteredServers, memories, disks, rackIDC)
+
+	return ReconfigPlanCalculateResponse{
+		TargetResolved: target,
+		Candidates:     candidates,
+		Actions:        actions,
+		Summary: map[string]any{
+			"scope_server_count": len(filteredServers),
+			"candidate_count":    len(candidates),
+			"action_count":       len(actions),
+		},
+	}, nil
+}
+
+func (s *ReconfigService) loadMetaRecords(ctx context.Context) (servers, racks, memories, disks, configs []map[string]any, err error) {
+	modelCodes := []string{"server", "rack", "memory", "disk", "config_type"}
+	data := map[string][]map[string]any{}
+	for _, code := range modelCodes {
+		m, e := s.metaRepo.GetModelByCode(ctx, code)
+		if e != nil {
+			return nil, nil, nil, nil, nil, fmt.Errorf("读取模型失败(%s): %w", code, e)
+		}
+		records, e := s.metaRepo.ListRecords(ctx, m.ID)
+		if e != nil {
+			return nil, nil, nil, nil, nil, fmt.Errorf("读取模型记录失败(%s): %w", code, e)
+		}
+		rows := make([]map[string]any, 0, len(records))
+		for _, r := range records {
+			rows = append(rows, r.Data)
+		}
+		data[code] = rows
+	}
+	return data["server"], data["rack"], data["memory"], data["disk"], data["config_type"], nil
+}
+
+func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filteredServers []map[string]any, memories, disks []map[string]any, rackIDC map[string]string) []ReconfigActionRow {
+	memoryInventory := make([]map[string]any, 0)
+	for _, m := range memories {
+		if strings.TrimSpace(pick(m, "sn_server", "服务器SN")) != "" {
+			continue
+		}
+		rack := strings.TrimSpace(pick(m, "rack", "机柜"))
+		if strings.Contains(strings.ToUpper(rack), "SPR") {
+			memoryInventory = append(memoryInventory, m)
+		}
+	}
+	diskInventory := make([]map[string]any, 0)
+	for _, d := range disks {
+		if strings.TrimSpace(pick(d, "sn_server", "服务器SN")) != "" {
+			continue
+		}
+		rack := strings.TrimSpace(pick(d, "rack", "机柜"))
+		if strings.Contains(strings.ToUpper(rack), "SPR") {
+			diskInventory = append(diskInventory, d)
+		}
+	}
+
+	actions := make([]ReconfigActionRow, 0)
+	for _, c := range candidates {
+		if c.Status != "候选" || (c.MemoryGapGB <= 0 && c.StorageGapTB <= 0) {
+			continue
+		}
+		hostMems := filterBySN(memories, c.SN)
+		hostDisks := filterBySN(disks, c.SN)
+		memSpec := map[string]any{}
+		diskSpec := map[string]any{}
+		if len(hostMems) > 0 {
+			memSpec = hostMems[0]
+		}
+		if len(hostDisks) > 0 {
+			diskSpec = hostDisks[0]
+		}
+		memUnit := math.Max(1, pickNum(memSpec, "capacity", "容量"))
+		diskUnitTB := math.Max(0.1, pickNum(diskSpec, "capacity", "容量")/1024)
+		needMemCount := int(math.Ceil(c.MemoryGapGB / memUnit))
+		needDiskCount := int(math.Ceil(c.StorageGapTB / diskUnitTB))
+
+		if needMemCount > 0 {
+			matched := make([]map[string]any, 0)
+			for _, m := range memoryInventory {
+				if strings.TrimSpace(pick(m, "brand", "厂商")) != strings.TrimSpace(pick(memSpec, "brand", "厂商")) {
+					continue
+				}
+				if strings.TrimSpace(pick(m, "model", "型号")) != strings.TrimSpace(pick(memSpec, "model", "型号")) {
+					continue
+				}
+				if pickNum(m, "capacity", "容量") != pickNum(memSpec, "capacity", "容量") {
+					continue
+				}
+				if pickNum(m, "datarate", "数据传输率(TM/s)", "数据传输率(MT/s)") != pickNum(memSpec, "datarate", "数据传输率(TM/s)", "数据传输率(MT/s)") {
+					continue
+				}
+				matched = append(matched, m)
+				if len(matched) >= needMemCount {
+					break
+				}
+			}
+			srcRack := ""
+			srcIDC := ""
+			if len(matched) > 0 {
+				srcRack = strings.TrimSpace(pick(matched[0], "rack", "机柜"))
+				srcIDC = strings.TrimSpace(rackIDC[srcRack])
+			}
+			parts := "规格匹配库存不足"
+			if len(matched) > 0 {
+				sns := make([]string, 0, len(matched))
+				for _, x := range matched {
+					sns = append(sns, strings.TrimSpace(pick(x, "sn", "序列号")))
+				}
+				parts = strings.Join(sns, ", ")
+			}
+			actions = append(actions, ReconfigActionRow{
+				TargetSN:    c.SN,
+				GapType:     "内存",
+				GapQty:      fmt.Sprintf("%d 条", needMemCount),
+				Source:      ternary(len(matched) > 0, fmt.Sprintf("库房（%s）", srcRack), "库存不足（待拆配/调拨）"),
+				PartDetails: parts,
+				CrossIDC:    ternary(srcIDC != "" && c.Datacenter != "" && srcIDC != c.Datacenter, "是", "否"),
+				Action:      ternary(len(matched) > 0, "改配", "调拨"),
+				RuleHit:     "内存规格一致（厂商/型号/容量/速率）+ 优先库房资源",
+			})
+		}
+
+		if needDiskCount > 0 {
+			matched := make([]map[string]any, 0)
+			for _, d := range diskInventory {
+				if strings.TrimSpace(pick(d, "brand", "厂商")) != strings.TrimSpace(pick(diskSpec, "brand", "厂商")) {
+					continue
+				}
+				if strings.TrimSpace(pick(d, "model", "型号")) != strings.TrimSpace(pick(diskSpec, "model", "型号")) {
+					continue
+				}
+				if pickNum(d, "capacity", "容量") != pickNum(diskSpec, "capacity", "容量") {
+					continue
+				}
+				if strings.TrimSpace(pick(d, "application_category", "应用分类")) != strings.TrimSpace(pick(diskSpec, "application_category", "应用分类")) {
+					continue
+				}
+				matched = append(matched, d)
+				if len(matched) >= needDiskCount {
+					break
+				}
+			}
+			srcRack := ""
+			srcIDC := ""
+			if len(matched) > 0 {
+				srcRack = strings.TrimSpace(pick(matched[0], "rack", "机柜"))
+				srcIDC = strings.TrimSpace(rackIDC[srcRack])
+			}
+			parts := "规格匹配库存不足"
+			if len(matched) > 0 {
+				sns := make([]string, 0, len(matched))
+				for _, x := range matched {
+					sns = append(sns, strings.TrimSpace(pick(x, "sn", "序列号")))
+				}
+				parts = strings.Join(sns, ", ")
+			}
+			actions = append(actions, ReconfigActionRow{
+				TargetSN:    c.SN,
+				GapType:     "硬盘",
+				GapQty:      fmt.Sprintf("%d 块", needDiskCount),
+				Source:      ternary(len(matched) > 0, fmt.Sprintf("库房（%s）", srcRack), "库存不足（待拆配/调拨）"),
+				PartDetails: parts,
+				CrossIDC:    ternary(srcIDC != "" && c.Datacenter != "" && srcIDC != c.Datacenter, "是", "否"),
+				Action:      ternary(len(matched) > 0, "改配", "调拨"),
+				RuleHit:     "硬盘规格一致（厂商/型号/容量/应用分类）+ 优先库房资源",
+			})
+		}
+	}
+	return actions
+}
+
+func filterBySN(rows []map[string]any, sn string) []map[string]any {
+	out := make([]map[string]any, 0)
+	for _, r := range rows {
+		if strings.TrimSpace(pick(r, "sn_server", "服务器SN")) == sn {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func sumNum(rows []map[string]any, keys ...string) float64 {
+	s := 0.0
+	for _, r := range rows {
+		s += pickNum(r, keys...)
+	}
+	return s
+}
+
+func pick(row map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if row == nil {
+			continue
+		}
+		if v, ok := row[k]; ok && v != nil {
+			x := strings.TrimSpace(fmt.Sprintf("%v", v))
+			if x != "" {
+				return x
+			}
+		}
+	}
+	return ""
+}
+
+func pickNum(row map[string]any, keys ...string) float64 {
+	for _, k := range keys {
+		if row == nil {
+			continue
+		}
+		if v, ok := row[k]; ok && v != nil {
+			s := strings.TrimSpace(fmt.Sprintf("%v", v))
+			if s == "" {
+				continue
+			}
+			var n float64
+			if _, err := fmt.Sscanf(s, "%f", &n); err == nil {
+				return n
+			}
+		}
+	}
+	return 0
+}
+
+func round2(v float64) float64 { return math.Round(v*100) / 100 }
+
+func ternary[T any](cond bool, a, b T) T {
+	if cond {
+		return a
+	}
+	return b
+}

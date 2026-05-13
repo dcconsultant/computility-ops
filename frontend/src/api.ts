@@ -179,6 +179,11 @@ export async function calculateValueScorePerformance() {
   return data;
 }
 
+export async function calculateReconfigPlan(payload: any) {
+  const { data } = await http.post<ApiResp<any>>('/reconfig/plan/calculate', payload);
+  return data;
+}
+
 export async function importValueScoreOriginalValues(file: File) {
   const form = new FormData();
   form.append('file', file);

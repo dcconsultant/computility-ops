@@ -18,6 +18,7 @@ type Handlers struct {
 	System              *handler.SystemHandler
 	ValueScoreSetup     *handler.ValueScoreSetupHandler
 	MetaData            *handler.MetaHandler
+	ReconfigMgmt        *handler.ReconfigHandler
 	StorageDriver       string
 	ReplacementPlanning *rpapi.Handler
 	ReconfigPlanning    *rcapi.Handler
@@ -115,6 +116,7 @@ func NewRouter(h Handlers) *gin.Engine {
 
 		v1.GET("/ops/decisions/replacement", h.ReplacementPlanning.ListSuggestions)
 		v1.GET("/ops/decisions/reconfig", h.ReconfigPlanning.ListSuggestions)
+		v1.POST("/reconfig/plan/calculate", h.ReconfigMgmt.CalculatePlan)
 		v1.POST("/meta/models", h.MetaData.CreateModel)
 		v1.GET("/meta/models", h.MetaData.ListModels)
 		v1.GET("/meta/models/:model_id", h.MetaData.GetModel)
