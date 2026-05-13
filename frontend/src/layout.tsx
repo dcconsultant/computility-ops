@@ -24,15 +24,17 @@ export default function AppLayout() {
     ? '/plan'
     : location.pathname.startsWith('/failure/')
       ? '/failure'
-      : location.pathname.startsWith('/meta-models')
-        ? '/meta-models'
-        : location.pathname.startsWith('/import') && section === 'value-score'
-          ? '/value-score'
-          : location.pathname.startsWith('/import') && section === 'resource-analysis'
-            ? '/resource-analysis'
-            : location.pathname.startsWith('/import') && section === 'test-zone'
-              ? '/test-zone'
-              : location.pathname;
+      : location.pathname.startsWith('/reconfig/')
+        ? '/reconfig'
+        : location.pathname.startsWith('/meta-models')
+          ? '/meta-models'
+          : location.pathname.startsWith('/import') && section === 'value-score'
+            ? '/value-score'
+            : location.pathname.startsWith('/import') && section === 'resource-analysis'
+              ? '/resource-analysis'
+              : location.pathname.startsWith('/import') && section === 'test-zone'
+                ? '/test-zone'
+                : location.pathname;
   const isFailureDashboard = location.pathname === '/failure/dashboard';
   const isMetaModels = location.pathname.startsWith('/meta-models');
 
@@ -88,7 +90,8 @@ export default function AppLayout() {
               label: '运维管理',
               children: [
                 { key: '/plan', label: <Link to="/plan">续保管理</Link> },
-                { key: '/failure', label: <Link to="/failure">故障率</Link> }
+                { key: '/failure', label: <Link to="/failure">故障率</Link> },
+                { key: '/reconfig', label: <Link to="/reconfig">改配管理</Link> }
               ]
             },
             { key: '/resource-analysis', label: <Link to="/import?section=resource-analysis&tab=assets">资源分析</Link> },

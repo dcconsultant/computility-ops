@@ -1,0 +1,524 @@
+import { useMemo, useState } from 'react';
+import { Alert, Button, Card, Input, Select, Space, Table, Tabs, Tag, Typography, message } from 'antd';
+import { calculateValueScorePerformance, listMetaModels, listMetaRecords } from '../api';
+import { ensureApiOk, parseApiError } from '../error';
+import type { MetaModel, MetaRecord } from '../types';
+
+const { Text } = Typography;
+
+interface TargetConfig {
+  mode: 'existing' | 'new';
+  configType: string;
+  perfBaseline: number;
+  memoryDatarateBaseline: number;
+  memoryCapacityBaseline: number;
+  storageCapacityBaseline: number;
+}
+
+interface ScopeConfig {
+  psaList: string[];
+  configTypes: string[];
+  snInput: string;
+}
+
+interface CandidateRow {
+  sn: string;
+  configType: string;
+  rack: string;
+  datacenter: string;
+  memoryDatarate: number;
+  perfScore: number;
+  memoryCapacityGb: number;
+  storageCapacityTb: number;
+  memoryGapGb: number;
+  storageGapTb: number;
+  status: '候选' | '内存带宽不足' | '性能不足';
+}
+
+interface ActionRow {
+  targetSn: string;
+  gapType: string;
+  gapQty: string;
+  source: string;
+  partDetails: string;
+  crossIdc: '是' | '否';
+  action: '拆配' | '改配' | '调拨';
+  ruleHit: string;
+}
+
+function pick(obj: any, keys: string[], fallback: any = '') {
+  for (const k of keys) {
+    if (obj?.[k] !== undefined && obj?.[k] !== null && obj?.[k] !== '') return obj[k];
+  }
+  return fallback;
+}
+
+function toNum(v: any, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function parseSNList(raw: string): string[] {
+  return raw
+    .split(/\s+/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, 1000);
+}
+
+export default function ReconfigManagementPage() {
+  const [loading, setLoading] = useState(false);
+  const [models, setModels] = useState<MetaModel[]>([]);
+  const [serverRows, setServerRows] = useState<MetaRecord[]>([]);
+  const [rackRows, setRackRows] = useState<MetaRecord[]>([]);
+  const [memoryRows, setMemoryRows] = useState<MetaRecord[]>([]);
+  const [diskRows, setDiskRows] = useState<MetaRecord[]>([]);
+  const [configRows, setConfigRows] = useState<MetaRecord[]>([]);
+  const [perfByConfig, setPerfByConfig] = useState<Record<string, number>>({});
+
+  const [target, setTarget] = useState<TargetConfig>({
+    mode: 'existing',
+    configType: '',
+    perfBaseline: 0,
+    memoryDatarateBaseline: 0,
+    memoryCapacityBaseline: 0,
+    storageCapacityBaseline: 0
+  });
+  const [scope, setScope] = useState<ScopeConfig>({
+    psaList: ['/server-decomission', '/cn-decommission', '/reuse'],
+    configTypes: [],
+    snInput: ''
+  });
+
+  const [candidates, setCandidates] = useState<CandidateRow[]>([]);
+  const [actions, setActions] = useState<ActionRow[]>([]);
+
+  const rackIdcMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const r of rackRows) {
+      const d = r.data || {};
+      const rackNo = String(pick(d, ['sn', 'rack', '机柜编号'], '')).trim();
+      if (!rackNo) continue;
+      m[rackNo] = String(pick(d, ['datacenter', 'idc', '机房'], '')).trim();
+    }
+    return m;
+  }, [rackRows]);
+
+  const filteredServers = useMemo(() => {
+    const snSet = new Set(parseSNList(scope.snInput));
+    return serverRows.filter((r) => {
+      const d = r.data || {};
+      const psa = String(pick(d, ['psa', 'PSA'], '')).trim();
+      const belong = String(pick(d, ['belong', '归属'], '')).trim();
+      const configType = String(pick(d, ['config_type', '配置类型'], '')).trim();
+      const sn = String(pick(d, ['sn', 'SN'], '')).trim();
+
+      if (belong && belong !== 'ai_data_engineering') return false;
+      if (scope.psaList.length && !scope.psaList.some((p) => psa.includes(p))) return false;
+      if (scope.configTypes.length && !scope.configTypes.includes(configType)) return false;
+      if (snSet.size && !snSet.has(sn)) return false;
+      return true;
+    });
+  }, [serverRows, scope]);
+
+  const configTypeOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of filteredServers) {
+      const t = String(pick(r.data, ['config_type', '配置类型'], '')).trim();
+      if (t) s.add(t);
+    }
+    return Array.from(s).sort();
+  }, [filteredServers]);
+
+  async function loadAll() {
+    setLoading(true);
+    try {
+      const modelResp = ensureApiOk(await listMetaModels());
+      const allModels = modelResp.data.list || [];
+      setModels(allModels);
+
+      const modelMap: Record<string, MetaModel | undefined> = {
+        server: allModels.find((m) => m.model_code === 'server'),
+        rack: allModels.find((m) => m.model_code === 'rack'),
+        memory: allModels.find((m) => m.model_code === 'memory'),
+        disk: allModels.find((m) => m.model_code === 'disk'),
+        config_type: allModels.find((m) => m.model_code === 'config_type')
+      };
+
+      const missing = Object.entries(modelMap).filter(([, v]) => !v).map(([k]) => k);
+      if (missing.length) {
+        message.warning(`缺少模型：${missing.join(', ')}，部分能力不可用`);
+      }
+
+      const [server, rack, memory, disk, configType, perf] = await Promise.all([
+        modelMap.server ? listMetaRecords(modelMap.server.id) : Promise.resolve({ code: 0, message: 'ok', data: { model: null, fields: [], list: [], total: 0 } } as any),
+        modelMap.rack ? listMetaRecords(modelMap.rack.id) : Promise.resolve({ code: 0, message: 'ok', data: { model: null, fields: [], list: [], total: 0 } } as any),
+        modelMap.memory ? listMetaRecords(modelMap.memory.id) : Promise.resolve({ code: 0, message: 'ok', data: { model: null, fields: [], list: [], total: 0 } } as any),
+        modelMap.disk ? listMetaRecords(modelMap.disk.id) : Promise.resolve({ code: 0, message: 'ok', data: { model: null, fields: [], list: [], total: 0 } } as any),
+        modelMap.config_type ? listMetaRecords(modelMap.config_type.id) : Promise.resolve({ code: 0, message: 'ok', data: { model: null, fields: [], list: [], total: 0 } } as any),
+        calculateValueScorePerformance()
+      ]);
+
+      setServerRows((ensureApiOk(server) as any).data.list || []);
+      setRackRows((ensureApiOk(rack) as any).data.list || []);
+      setMemoryRows((ensureApiOk(memory) as any).data.list || []);
+      setDiskRows((ensureApiOk(disk) as any).data.list || []);
+      setConfigRows((ensureApiOk(configType) as any).data.list || []);
+
+      const perfResult = (ensureApiOk(perf) as any).data;
+      const perfMap: Record<string, number> = {};
+      for (const it of perfResult.items || []) {
+        perfMap[String(it.config_type || '').trim()] = Number(it.performance_score || 0);
+      }
+      setPerfByConfig(perfMap);
+      message.success('改配管理基础数据已加载');
+    } catch (e) {
+      message.error(parseApiError(e, '加载基础数据失败'));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function fillFromConfigType(configType: string) {
+    setTarget((prev) => ({ ...prev, configType }));
+    if (!configType) return;
+
+    const server = filteredServers.find((r) => String(pick(r.data, ['config_type', '配置类型'], '')).trim() === configType);
+    const serverSN = server ? String(pick(server.data, ['sn', 'SN'], '')).trim() : '';
+
+    const firstMem = memoryRows.find((m) => String(pick(m.data, ['sn_server', '服务器SN'], '')).trim() === serverSN);
+    const memoryDatarate = toNum(pick(firstMem?.data, ['datarate', '数据传输率(TM/s)', '数据传输率(MT/s)'], 0));
+
+    const pack = configRows.find((r) => String(pick(r.data, ['config_type', '配置类型'], '')).trim() === configType);
+    const memoryGb = toNum(pick(pack?.data, ['capacity_memory_gb', '内存容量(GB)'], 0));
+    const storageTb = toNum(pick(pack?.data, ['capacity_storage_tb', '存储容量(TB)'], 0));
+    const perf = toNum(perfByConfig[configType], 0);
+
+    setTarget((prev) => ({
+      ...prev,
+      configType,
+      memoryDatarateBaseline: memoryDatarate,
+      memoryCapacityBaseline: memoryGb,
+      storageCapacityBaseline: storageTb,
+      perfBaseline: perf
+    }));
+  }
+
+  function computePlan() {
+    const perfBaseline = target.perfBaseline;
+    const memRateBaseline = target.memoryDatarateBaseline;
+    const memCapBaseline = target.memoryCapacityBaseline;
+    const storageBaseline = target.storageCapacityBaseline;
+
+    if (!memRateBaseline && !perfBaseline && !memCapBaseline && !storageBaseline) {
+      message.warning('请先设置目标配置基线');
+      return;
+    }
+
+    const candidateRows: CandidateRow[] = [];
+
+    for (const s of filteredServers) {
+      const d = s.data || {};
+      const sn = String(pick(d, ['sn', 'SN'], '')).trim();
+      const configType = String(pick(d, ['config_type', '配置类型'], '')).trim();
+      const rack = String(pick(d, ['rack', '机柜'], '')).trim();
+      const datacenter = String(pick(d, ['idc', '机房'], rackIdcMap[rack] || '')).trim();
+
+      const hostMems = memoryRows.filter((m) => String(pick(m.data, ['sn_server', '服务器SN'], '')).trim() === sn);
+      const hostDisks = diskRows.filter((x) => String(pick(x.data, ['sn_server', '服务器SN'], '')).trim() === sn);
+      const firstMem = hostMems[0]?.data || {};
+
+      const memRate = toNum(pick(firstMem, ['datarate', '数据传输率(TM/s)', '数据传输率(MT/s)'], 0));
+      const perfScore = toNum(perfByConfig[configType], 0);
+
+      const memCapacity = hostMems.reduce((sum, m) => sum + toNum(pick(m.data, ['capacity', '容量'], 0)), 0);
+      const diskCapacityGB = hostDisks.reduce((sum, x) => sum + toNum(pick(x.data, ['capacity', '容量'], 0)), 0);
+      const storageTb = diskCapacityGB / 1024;
+
+      const memoryGap = Math.max(0, memCapBaseline - memCapacity);
+      const storageGap = Math.max(0, storageBaseline - storageTb);
+
+      let status: CandidateRow['status'] = '候选';
+      if (memRate < memRateBaseline) status = '内存带宽不足';
+      else if (perfScore < perfBaseline) status = '性能不足';
+
+      candidateRows.push({
+        sn,
+        configType,
+        rack,
+        datacenter,
+        memoryDatarate: memRate,
+        perfScore,
+        memoryCapacityGb: memCapacity,
+        storageCapacityTb: Number(storageTb.toFixed(2)),
+        memoryGapGb: Number(memoryGap.toFixed(2)),
+        storageGapTb: Number(storageGap.toFixed(2)),
+        status
+      });
+    }
+
+    setCandidates(candidateRows);
+
+    const rackOfServer = (sn: string) => {
+      const row = serverRows.find((s) => String(pick(s.data, ['sn', 'SN'], '')).trim() === sn);
+      return String(pick(row?.data, ['rack', '机柜'], '')).trim();
+    };
+
+    const memoryInventory = memoryRows.filter((m) => {
+      const snServer = String(pick(m.data, ['sn_server', '服务器SN'], '')).trim();
+      const rack = String(pick(m.data, ['rack', '机柜'], '')).trim();
+      return !snServer && rack.includes('SPR');
+    });
+
+    const diskInventory = diskRows.filter((x) => {
+      const snServer = String(pick(x.data, ['sn_server', '服务器SN'], '')).trim();
+      const rack = String(pick(x.data, ['rack', '机柜'], '')).trim();
+      return !snServer && rack.includes('SPR');
+    });
+
+    const out: ActionRow[] = [];
+
+    for (const c of candidateRows.filter((x) => x.status === '候选' && (x.memoryGapGb > 0 || x.storageGapTb > 0))) {
+      const hostMems = memoryRows.filter((m) => String(pick(m.data, ['sn_server', '服务器SN'], '')).trim() === c.sn);
+      const hostDisks = diskRows.filter((x) => String(pick(x.data, ['sn_server', '服务器SN'], '')).trim() === c.sn);
+      const memSpec = hostMems[0]?.data || {};
+      const diskSpec = hostDisks[0]?.data || {};
+
+      const memUnit = Math.max(1, toNum(pick(memSpec, ['capacity', '容量'], 0), 1));
+      const diskUnitTb = Math.max(0.1, toNum(pick(diskSpec, ['capacity', '容量'], 0), 1024) / 1024);
+      const needMemCount = Math.ceil(c.memoryGapGb / memUnit);
+      const needDiskCount = Math.ceil(c.storageGapTb / diskUnitTb);
+
+      if (needMemCount > 0) {
+        const matched = memoryInventory
+          .filter((m) => {
+            const d = m.data || {};
+            return String(pick(d, ['brand', '厂商'], '')).trim() === String(pick(memSpec, ['brand', '厂商'], '')).trim()
+              && String(pick(d, ['model', '型号'], '')).trim() === String(pick(memSpec, ['model', '型号'], '')).trim()
+              && toNum(pick(d, ['capacity', '容量'], 0)) === toNum(pick(memSpec, ['capacity', '容量'], 0))
+              && toNum(pick(d, ['datarate', '数据传输率(TM/s)', '数据传输率(MT/s)'], 0)) === toNum(pick(memSpec, ['datarate', '数据传输率(TM/s)', '数据传输率(MT/s)'], 0));
+          })
+          .slice(0, needMemCount);
+
+        const srcRack = String(pick(matched[0]?.data, ['rack', '机柜'], '')).trim();
+        const srcIdc = rackIdcMap[srcRack] || '';
+        out.push({
+          targetSn: c.sn,
+          gapType: '内存',
+          gapQty: `${needMemCount} 条`,
+          source: matched.length ? `库房（${srcRack || '-'}）` : '库存不足（待拆配/调拨）',
+          partDetails: matched.length ? matched.map((m) => String(pick(m.data, ['sn', '序列号'], '-'))).join(', ') : '规格匹配库存不足',
+          crossIdc: srcIdc && c.datacenter && srcIdc !== c.datacenter ? '是' : '否',
+          action: matched.length ? '改配' : '调拨',
+          ruleHit: '内存规格一致（厂商/型号/容量/速率）+ 优先库房资源'
+        });
+      }
+
+      if (needDiskCount > 0) {
+        const matched = diskInventory
+          .filter((x) => {
+            const d = x.data || {};
+            return String(pick(d, ['brand', '厂商'], '')).trim() === String(pick(diskSpec, ['brand', '厂商'], '')).trim()
+              && String(pick(d, ['model', '型号'], '')).trim() === String(pick(diskSpec, ['model', '型号'], '')).trim()
+              && toNum(pick(d, ['capacity', '容量'], 0)) === toNum(pick(diskSpec, ['capacity', '容量'], 0))
+              && String(pick(d, ['application_category', '应用分类'], '')).trim() === String(pick(diskSpec, ['application_category', '应用分类'], '')).trim();
+          })
+          .slice(0, needDiskCount);
+
+        const srcRack = String(pick(matched[0]?.data, ['rack', '机柜'], '')).trim();
+        const srcIdc = rackIdcMap[srcRack] || '';
+        out.push({
+          targetSn: c.sn,
+          gapType: '硬盘',
+          gapQty: `${needDiskCount} 块`,
+          source: matched.length ? `库房（${srcRack || '-'}）` : '库存不足（待拆配/调拨）',
+          partDetails: matched.length ? matched.map((m) => String(pick(m.data, ['sn', '序列号'], '-'))).join(', ') : '规格匹配库存不足',
+          crossIdc: srcIdc && c.datacenter && srcIdc !== c.datacenter ? '是' : '否',
+          action: matched.length ? '改配' : '调拨',
+          ruleHit: '硬盘规格一致（厂商/型号/容量/应用分类）+ 优先库房资源'
+        });
+      }
+
+      const hostRack = rackOfServer(c.sn);
+      if (!hostRack.includes('SPR') && (needMemCount > 0 || needDiskCount > 0)) {
+        out.push({
+          targetSn: c.sn,
+          gapType: '执行提醒',
+          gapQty: '-',
+          source: '目标主机机框保留',
+          partDetails: '本次按改配处理，不按拆配报废机框',
+          crossIdc: '否',
+          action: '改配',
+          ruleHit: '命中术语定义：拆掉部分部件机框保留仍为改配'
+        });
+      }
+    }
+
+    setActions(out);
+    message.success(`计算完成：候选 ${candidateRows.length} 台，执行项 ${out.length} 条`);
+  }
+
+  return (
+    <Space direction="vertical" style={{ width: '100%' }} size="middle">
+      <Card title="改配管理（首版）" extra={<Button loading={loading} onClick={loadAll}>加载基础数据</Button>}>
+        <Alert
+          type="info"
+          showIcon
+          message="依据《02030202-改配管理》文档实现首版：目标配置、范围筛选、候选识别、执行清单。"
+          description="当前数据来源：元数据模型（server/rack/memory/disk/config_type）+ 价值分性能跑分。"
+        />
+      </Card>
+
+      <Card title="目标配置（6.1）">
+        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          <Space wrap>
+            <Text>套餐模式</Text>
+            <Select
+              value={target.mode}
+              style={{ width: 140 }}
+              options={[{ value: 'existing', label: '既有套餐' }, { value: 'new', label: '新套餐' }]}
+              onChange={(v) => setTarget({ ...target, mode: v })}
+            />
+            <Text>配置类型</Text>
+            <Select
+              value={target.configType}
+              style={{ width: 240 }}
+              placeholder="请选择配置类型"
+              options={configTypeOptions.map((x) => ({ value: x, label: x }))}
+              onChange={fillFromConfigType}
+              showSearch
+              optionFilterProp="label"
+            />
+          </Space>
+          <Space wrap>
+            <Text>性能基线(E/s)</Text>
+            <Input style={{ width: 140 }} value={String(target.perfBaseline || '')} onChange={(e) => setTarget({ ...target, perfBaseline: toNum(e.target.value) })} />
+            <Text>内存速率基线(MT/s)</Text>
+            <Input style={{ width: 140 }} value={String(target.memoryDatarateBaseline || '')} onChange={(e) => setTarget({ ...target, memoryDatarateBaseline: toNum(e.target.value) })} />
+            <Text>内存容量基线(GB)</Text>
+            <Input style={{ width: 140 }} value={String(target.memoryCapacityBaseline || '')} onChange={(e) => setTarget({ ...target, memoryCapacityBaseline: toNum(e.target.value) })} />
+            <Text>存储容量基线(TB)</Text>
+            <Input style={{ width: 140 }} value={String(target.storageCapacityBaseline || '')} onChange={(e) => setTarget({ ...target, storageCapacityBaseline: toNum(e.target.value) })} />
+          </Space>
+        </Space>
+      </Card>
+
+      <Card title="范围配置（6.2）" extra={<Button type="primary" onClick={computePlan}>计算改配方案</Button>}>
+        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          <Space wrap>
+            <Text>PSA（可多选）</Text>
+            <Select
+              mode="tags"
+              style={{ width: 520 }}
+              value={scope.psaList}
+              onChange={(v) => setScope({ ...scope, psaList: v as string[] })}
+              options={['/server-decomission', '/cn-decommission', '/reuse'].map((x) => ({ value: x, label: x }))}
+            />
+          </Space>
+          <Space wrap>
+            <Text>配置类型（默认全选）</Text>
+            <Select
+              mode="multiple"
+              style={{ width: 520 }}
+              placeholder="不选=全选"
+              value={scope.configTypes}
+              onChange={(v) => setScope({ ...scope, configTypes: v as string[] })}
+              options={configTypeOptions.map((x) => ({ value: x, label: x }))}
+              showSearch
+              optionFilterProp="label"
+            />
+          </Space>
+          <Space wrap>
+            <Text>SN筛选（空格分隔，最多1000）</Text>
+            <Input.TextArea
+              rows={2}
+              style={{ width: 720 }}
+              value={scope.snInput}
+              onChange={(e) => setScope({ ...scope, snInput: e.target.value })}
+              placeholder="如：SN001 SN002 SN003"
+            />
+          </Space>
+          <Text type="secondary">范围命中：{filteredServers.length} 台</Text>
+        </Space>
+      </Card>
+
+      <Tabs
+        items={[
+          {
+            key: 'candidate',
+            label: `改配候选清单（${candidates.length}）`,
+            children: (
+              <Table
+                rowKey={(r) => `${r.sn}-${r.status}`}
+                size="small"
+                pagination={{ pageSize: 20 }}
+                dataSource={candidates}
+                columns={[
+                  { title: 'SN', dataIndex: 'sn', width: 180, fixed: 'left' as const },
+                  { title: '配置类型', dataIndex: 'configType', width: 160 },
+                  { title: '机房', dataIndex: 'datacenter', width: 140 },
+                  { title: '内存速率', dataIndex: 'memoryDatarate', width: 110 },
+                  { title: '性能跑分', dataIndex: 'perfScore', width: 110 },
+                  { title: '当前内存(GB)', dataIndex: 'memoryCapacityGb', width: 120 },
+                  { title: '当前存储(TB)', dataIndex: 'storageCapacityTb', width: 120 },
+                  { title: '内存缺口(GB)', dataIndex: 'memoryGapGb', width: 120 },
+                  { title: '存储缺口(TB)', dataIndex: 'storageGapTb', width: 120 },
+                  {
+                    title: '状态', dataIndex: 'status', width: 120, render: (v: CandidateRow['status']) => {
+                      if (v === '候选') return <Tag color="green">候选</Tag>;
+                      if (v === '内存带宽不足') return <Tag color="orange">内存带宽不足</Tag>;
+                      return <Tag color="red">性能不足</Tag>;
+                    }
+                  }
+                ]}
+                scroll={{ x: 1500 }}
+              />
+            )
+          },
+          {
+            key: 'actions',
+            label: `执行清单（${actions.length}）`,
+            children: (
+              <Table
+                rowKey={(r) => `${r.targetSn}-${r.gapType}-${r.partDetails}`}
+                size="small"
+                pagination={{ pageSize: 20 }}
+                dataSource={actions}
+                columns={[
+                  { title: '目标SN', dataIndex: 'targetSn', width: 180, fixed: 'left' as const },
+                  { title: '缺口类型', dataIndex: 'gapType', width: 120 },
+                  { title: '缺口数量', dataIndex: 'gapQty', width: 100 },
+                  { title: '推荐来源', dataIndex: 'source', width: 180 },
+                  { title: '配件明细', dataIndex: 'partDetails', width: 260 },
+                  { title: '跨机房搬迁', dataIndex: 'crossIdc', width: 120 },
+                  { title: '执行动作', dataIndex: 'action', width: 100 },
+                  { title: '规则命中说明', dataIndex: 'ruleHit', width: 320 }
+                ]}
+                scroll={{ x: 1500 }}
+              />
+            )
+          },
+          {
+            key: 'meta',
+            label: '依赖模型状态',
+            children: (
+              <Table
+                rowKey={(r) => r.id}
+                size="small"
+                pagination={false}
+                dataSource={models.filter((m) => ['server', 'rack', 'memory', 'disk', 'config_type'].includes(m.model_code))}
+                columns={[
+                  { title: '模型编码', dataIndex: 'model_code', width: 140 },
+                  { title: '模型名称', dataIndex: 'model_name', width: 160 },
+                  { title: '状态', dataIndex: 'status', width: 100 },
+                  { title: '版本', dataIndex: 'current_version', width: 90 },
+                  { title: '更新时间', dataIndex: 'updated_at' }
+                ]}
+              />
+            )
+          }
+        ]}
+      />
+    </Space>
+  );
+}
