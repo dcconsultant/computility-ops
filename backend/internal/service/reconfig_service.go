@@ -271,6 +271,26 @@ func (s *ReconfigService) loadMetaRecords(ctx context.Context) (servers, racks, 
 }
 
 func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filteredServers []map[string]any, memories, disks []map[string]any, rackIDC map[string]string) []ReconfigActionRow {
+	serverRack := map[string]string{}
+	serverIDC := map[string]string{}
+	for _, sv := range filteredServers {
+		sn := strings.TrimSpace(pick(sv, "sn", "SN"))
+		rack := strings.TrimSpace(pick(sv, "rack", "机柜"))
+		idc := strings.TrimSpace(pick(sv, "idc", "机房"))
+		if idc == "" {
+			idc = strings.TrimSpace(rackIDC[rack])
+		}
+		if sn != "" {
+			serverRack[sn] = rack
+			serverIDC[sn] = idc
+		}
+	}
+
+	candidateStatus := map[string]string{}
+	for _, c := range candidates {
+		candidateStatus[c.SN] = c.Status
+	}
+
 	memoryInventory := make([]map[string]any, 0)
 	for _, m := range memories {
 		if strings.TrimSpace(pick(m, "sn_server", "服务器SN")) != "" {
@@ -332,30 +352,45 @@ func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filter
 					break
 				}
 			}
-			srcRack := ""
-			srcIDC := ""
-			if len(matched) > 0 {
-				srcRack = strings.TrimSpace(pick(matched[0], "rack", "机柜"))
-				srcIDC = strings.TrimSpace(rackIDC[srcRack])
-			}
-			parts := "规格匹配库存不足"
-			if len(matched) > 0 {
+
+			if len(matched) >= needMemCount {
+				srcRack := strings.TrimSpace(pick(matched[0], "rack", "机柜"))
+				srcIDC := strings.TrimSpace(rackIDC[srcRack])
 				sns := make([]string, 0, len(matched))
 				for _, x := range matched {
 					sns = append(sns, strings.TrimSpace(pick(x, "sn", "序列号")))
 				}
-				parts = strings.Join(sns, ", ")
+				actions = append(actions, ReconfigActionRow{
+					TargetSN:    c.SN,
+					GapType:     "内存",
+					GapQty:      fmt.Sprintf("%d 条", needMemCount),
+					Source:      fmt.Sprintf("库房（机房:%s 机柜:%s）", srcIDC, srcRack),
+					PartDetails: strings.Join(sns, ", "),
+					CrossIDC:    ternary(srcIDC != "" && c.Datacenter != "" && srcIDC != c.Datacenter, "是", "否"),
+					Action:      "改配",
+					RuleHit:     "内存规格一致（厂商/型号/容量/速率）+ 优先库房资源",
+				})
+			} else {
+				donor := s.pickMemoryDonor(memories, memSpec, c.SN, needMemCount, candidateStatus, serverRack, serverIDC)
+				crossIDC := "否"
+				if donor.anyIDC != "" && c.Datacenter != "" && donor.anyIDC != c.Datacenter {
+					crossIDC = "是"
+				}
+				partDetails := donor.details
+				if donor.missingCount > 0 {
+					partDetails = fmt.Sprintf("%s；仍缺 %d 条", donor.details, donor.missingCount)
+				}
+				actions = append(actions, ReconfigActionRow{
+					TargetSN:    c.SN,
+					GapType:     "内存",
+					GapQty:      fmt.Sprintf("%d 条", needMemCount),
+					Source:      donor.source,
+					PartDetails: partDetails,
+					CrossIDC:    crossIDC,
+					Action:      "调拨",
+					RuleHit:     "库房不足后按优先级从主机侧调拨（内存不从内存带宽不足主机取件）",
+				})
 			}
-			actions = append(actions, ReconfigActionRow{
-				TargetSN:    c.SN,
-				GapType:     "内存",
-				GapQty:      fmt.Sprintf("%d 条", needMemCount),
-				Source:      ternary(len(matched) > 0, fmt.Sprintf("库房（%s）", srcRack), "库存不足（待拆配/调拨）"),
-				PartDetails: parts,
-				CrossIDC:    ternary(srcIDC != "" && c.Datacenter != "" && srcIDC != c.Datacenter, "是", "否"),
-				Action:      ternary(len(matched) > 0, "改配", "调拨"),
-				RuleHit:     "内存规格一致（厂商/型号/容量/速率）+ 优先库房资源",
-			})
 		}
 
 		if needDiskCount > 0 {
@@ -378,33 +413,197 @@ func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filter
 					break
 				}
 			}
-			srcRack := ""
-			srcIDC := ""
-			if len(matched) > 0 {
-				srcRack = strings.TrimSpace(pick(matched[0], "rack", "机柜"))
-				srcIDC = strings.TrimSpace(rackIDC[srcRack])
-			}
-			parts := "规格匹配库存不足"
-			if len(matched) > 0 {
+
+			if len(matched) >= needDiskCount {
+				srcRack := strings.TrimSpace(pick(matched[0], "rack", "机柜"))
+				srcIDC := strings.TrimSpace(rackIDC[srcRack])
 				sns := make([]string, 0, len(matched))
 				for _, x := range matched {
 					sns = append(sns, strings.TrimSpace(pick(x, "sn", "序列号")))
 				}
-				parts = strings.Join(sns, ", ")
+				actions = append(actions, ReconfigActionRow{
+					TargetSN:    c.SN,
+					GapType:     "硬盘",
+					GapQty:      fmt.Sprintf("%d 块", needDiskCount),
+					Source:      fmt.Sprintf("库房（机房:%s 机柜:%s）", srcIDC, srcRack),
+					PartDetails: strings.Join(sns, ", "),
+					CrossIDC:    ternary(srcIDC != "" && c.Datacenter != "" && srcIDC != c.Datacenter, "是", "否"),
+					Action:      "改配",
+					RuleHit:     "硬盘规格一致（厂商/型号/容量/应用分类）+ 优先库房资源",
+				})
+			} else {
+				donor := s.pickDiskDonor(disks, diskSpec, c.SN, needDiskCount, candidateStatus, serverRack, serverIDC)
+				crossIDC := "否"
+				if donor.anyIDC != "" && c.Datacenter != "" && donor.anyIDC != c.Datacenter {
+					crossIDC = "是"
+				}
+				partDetails := donor.details
+				if donor.missingCount > 0 {
+					partDetails = fmt.Sprintf("%s；仍缺 %d 块", donor.details, donor.missingCount)
+				}
+				actions = append(actions, ReconfigActionRow{
+					TargetSN:    c.SN,
+					GapType:     "硬盘",
+					GapQty:      fmt.Sprintf("%d 块", needDiskCount),
+					Source:      donor.source,
+					PartDetails: partDetails,
+					CrossIDC:    crossIDC,
+					Action:      "调拨",
+					RuleHit:     "库房不足后按优先级从主机侧调拨",
+				})
 			}
-			actions = append(actions, ReconfigActionRow{
-				TargetSN:    c.SN,
-				GapType:     "硬盘",
-				GapQty:      fmt.Sprintf("%d 块", needDiskCount),
-				Source:      ternary(len(matched) > 0, fmt.Sprintf("库房（%s）", srcRack), "库存不足（待拆配/调拨）"),
-				PartDetails: parts,
-				CrossIDC:    ternary(srcIDC != "" && c.Datacenter != "" && srcIDC != c.Datacenter, "是", "否"),
-				Action:      ternary(len(matched) > 0, "改配", "调拨"),
-				RuleHit:     "硬盘规格一致（厂商/型号/容量/应用分类）+ 优先库房资源",
-			})
 		}
 	}
 	return actions
+}
+
+type donorPickResult struct {
+	source      string
+	details     string
+	anyIDC      string
+	missingCount int
+}
+
+func (s *ReconfigService) pickMemoryDonor(memories []map[string]any, memSpec map[string]any, targetSN string, need int, candidateStatus map[string]string, serverRack, serverIDC map[string]string) donorPickResult {
+	return pickDonorCommon(memories, targetSN, need, candidateStatus, serverRack, serverIDC,
+		func(m map[string]any) bool {
+			if strings.TrimSpace(pick(m, "brand", "厂商")) != strings.TrimSpace(pick(memSpec, "brand", "厂商")) {
+				return false
+			}
+			if strings.TrimSpace(pick(m, "model", "型号")) != strings.TrimSpace(pick(memSpec, "model", "型号")) {
+				return false
+			}
+			if pickNum(m, "capacity", "容量") != pickNum(memSpec, "capacity", "容量") {
+				return false
+			}
+			if pickNum(m, "datarate", "数据传输率(TM/s)", "数据传输率(MT/s)") != pickNum(memSpec, "datarate", "数据传输率(TM/s)", "数据传输率(MT/s)") {
+				return false
+			}
+			return true
+		},
+		func(status string) bool {
+			return status != "内存带宽不足"
+		},
+	)
+}
+
+func (s *ReconfigService) pickDiskDonor(disks []map[string]any, diskSpec map[string]any, targetSN string, need int, candidateStatus map[string]string, serverRack, serverIDC map[string]string) donorPickResult {
+	return pickDonorCommon(disks, targetSN, need, candidateStatus, serverRack, serverIDC,
+		func(d map[string]any) bool {
+			if strings.TrimSpace(pick(d, "brand", "厂商")) != strings.TrimSpace(pick(diskSpec, "brand", "厂商")) {
+				return false
+			}
+			if strings.TrimSpace(pick(d, "model", "型号")) != strings.TrimSpace(pick(diskSpec, "model", "型号")) {
+				return false
+			}
+			if pickNum(d, "capacity", "容量") != pickNum(diskSpec, "capacity", "容量") {
+				return false
+			}
+			if strings.TrimSpace(pick(d, "application_category", "应用分类")) != strings.TrimSpace(pick(diskSpec, "application_category", "应用分类")) {
+				return false
+			}
+			return true
+		},
+		func(status string) bool { return true },
+	)
+}
+
+func pickDonorCommon(rows []map[string]any, targetSN string, need int, candidateStatus map[string]string, serverRack, serverIDC map[string]string, specMatch func(map[string]any) bool, allowStatus func(string) bool) donorPickResult {
+	type part struct {
+		partSN   string
+		donorSN  string
+		donorRack string
+		donorIDC string
+		priority int
+	}
+	parts := make([]part, 0)
+	for _, r := range rows {
+		donorSN := strings.TrimSpace(pick(r, "sn_server", "服务器SN"))
+		if donorSN == "" || donorSN == targetSN {
+			continue
+		}
+		if !specMatch(r) {
+			continue
+		}
+		status := candidateStatus[donorSN]
+		if !allowStatus(status) {
+			continue
+		}
+		priority := 4
+		switch status {
+		case "内存带宽不足":
+			priority = 1
+		case "性能不足":
+			priority = 2
+		case "候选":
+			priority = 3
+		}
+		parts = append(parts, part{
+			partSN:   strings.TrimSpace(pick(r, "sn", "序列号")),
+			donorSN:  donorSN,
+			donorRack: ternary(serverRack[donorSN] != "", serverRack[donorSN], strings.TrimSpace(pick(r, "rack", "机柜"))),
+			donorIDC: serverIDC[donorSN],
+			priority: priority,
+		})
+	}
+	sort.Slice(parts, func(i, j int) bool {
+		if parts[i].priority != parts[j].priority {
+			return parts[i].priority < parts[j].priority
+		}
+		if parts[i].donorIDC != parts[j].donorIDC {
+			return parts[i].donorIDC < parts[j].donorIDC
+		}
+		if parts[i].donorRack != parts[j].donorRack {
+			return parts[i].donorRack < parts[j].donorRack
+		}
+		return parts[i].donorSN < parts[j].donorSN
+	})
+
+	picked := parts
+	if len(picked) > need {
+		picked = picked[:need]
+	}
+	if len(picked) == 0 {
+		return donorPickResult{
+			source:      "无可调拨来源（待人工补货或放宽规则）",
+			details:     "规格匹配库存不足，且未找到可调拨主机",
+			missingCount: need,
+		}
+	}
+	groups := map[string]struct{}{}
+	details := make([]string, 0, len(picked))
+	anyIDC := ""
+	for _, p := range picked {
+		groups[fmt.Sprintf("%s|%s|%s", p.donorSN, p.donorIDC, p.donorRack)] = struct{}{}
+		details = append(details, fmt.Sprintf("%s(来源SN:%s 机房:%s 机柜:%s)", p.partSN, p.donorSN, p.donorIDC, p.donorRack))
+		if anyIDC == "" {
+			anyIDC = p.donorIDC
+		}
+	}
+	sourceList := make([]string, 0, len(groups))
+	for g := range groups {
+		sourceList = append(sourceList, g)
+	}
+	sort.Strings(sourceList)
+	for i, x := range sourceList {
+		arr := strings.Split(x, "|")
+		if len(arr) == 3 {
+			sourceList[i] = fmt.Sprintf("SN:%s 机房:%s 机柜:%s", arr[0], arr[1], arr[2])
+		}
+	}
+	return donorPickResult{
+		source:      "主机调拨（" + strings.Join(sourceList, "；") + "）",
+		details:     strings.Join(details, ", "),
+		anyIDC:      anyIDC,
+		missingCount: maxIntReconfig(0, need-len(picked)),
+	}
+}
+
+func maxIntReconfig(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func filterBySN(rows []map[string]any, sn string) []map[string]any {
