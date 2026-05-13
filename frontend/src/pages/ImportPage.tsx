@@ -456,19 +456,19 @@ export default function ImportPage() {
             children: (
               <Space direction="vertical" size="middle" style={{ width: '100%' }}>
                 <Card>
-                  <Space style={{ width: '100%', justifyContent: 'space-between' }} align="center" wrap>
-                    <Typography.Title level={5} style={{ margin: 0 }}>价值分管理</Typography.Title>
-                    <Space wrap>
-                      <Tabs
-                        activeKey={valueSceneTab}
-                        onChange={(k) => setValueSceneTab(k as any)}
-                        items={[
-                          { key: 'compute', label: `计算（${sceneScoreRows.compute.length}）` },
-                          { key: 'warm_storage', label: `温存储（${sceneScoreRows.warm_storage.length}）` },
-                          { key: 'hot_storage', label: `热存储（${sceneScoreRows.hot_storage.length}）` },
-                          { key: 'gpu', label: `GPU（${sceneScoreRows.gpu.length}）` }
-                        ]}
-                      />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
+                    <Tabs
+                      activeKey={valueSceneTab}
+                      onChange={(k) => setValueSceneTab(k as any)}
+                      items={[
+                        { key: 'compute', label: `计算（${sceneScoreRows.compute.length}）` },
+                        { key: 'warm_storage', label: `温存储（${sceneScoreRows.warm_storage.length}）` },
+                        { key: 'hot_storage', label: `热存储（${sceneScoreRows.hot_storage.length}）` },
+                        { key: 'gpu', label: `GPU（${sceneScoreRows.gpu.length}）` }
+                      ]}
+                      style={{ flex: '0 0 auto' }}
+                    />
+                    <Space style={{ marginLeft: 'auto' }}>
                       <Button onClick={() => setValueConfigVisible((v) => !v)}>参数配置</Button>
                       <Button onClick={exportValueScoreTCO}>导出Excel</Button>
                       <Button loading={performanceLoading || tcoLoading} onClick={async () => {
@@ -487,7 +487,7 @@ export default function ImportPage() {
                         }
                       }}>刷新</Button>
                     </Space>
-                  </Space>
+                  </div>
                 </Card>
                 {valueConfigVisible ? <>
                 <Row gutter={[16, 16]}>
