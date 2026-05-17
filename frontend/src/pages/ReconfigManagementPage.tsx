@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Alert, Button, Card, Input, Progress, Select, Space, Table, Tabs, Tag, Typography, message } from 'antd';
-import { calculateValueScorePerformance, getReconfigPlanProgress, getReconfigPlanResult, listMetaModels, listMetaRecords, startReconfigPlan } from '../api';
+import { Alert, Button, Card, Descriptions, Drawer, Input, Progress, Select, Space, Table, Tabs, Tag, Typography, message } from 'antd';
+import { calculateValueScorePerformance, getReconfigPlanProgress, getReconfigPlanResult, getSavedReconfigPlan, listMetaModels, listMetaRecords, listSavedReconfigPlans, startReconfigPlan } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
 import type { MetaModel, MetaRecord } from '../types';
 
@@ -95,6 +95,10 @@ export default function ReconfigManagementPage() {
   const [runningJobId, setRunningJobId] = useState<string>('');
   const [progress, setProgress] = useState<any>(null);
   const [planWarnings, setPlanWarnings] = useState<string[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyList, setHistoryList] = useState<any[]>([]);
+  const [selectedHistory, setSelectedHistory] = useState<any>(null);
 
   const filteredServers = useMemo(() => {
     const snSet = new Set(parseSNList(scope.snInput));
@@ -193,6 +197,43 @@ export default function ReconfigManagementPage() {
     }));
   }
 
+  async function loadHistoryPlans() {
+    setHistoryLoading(true);
+    try {
+      const resp = ensureApiOk(await listSavedReconfigPlans());
+      setHistoryList(resp.data?.list || []);
+    } catch (e) {
+      message.error(parseApiError(e, '加载历史方案失败'));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  async function openHistoryPlan(planId: string) {
+    if (!planId) return;
+    setHistoryLoading(true);
+    try {
+      const resp = ensureApiOk(await getSavedReconfigPlan(planId));
+      setSelectedHistory(resp.data || null);
+      const rows = resp.data?.actions || [];
+      setActions(rows.map((x: any) => ({
+        targetSn: x.target_sn,
+        gapType: x.gap_type,
+        gapQty: x.gap_qty,
+        source: x.source,
+        partDetails: x.part_details,
+        crossIdc: x.cross_idc,
+        action: x.action,
+        ruleHit: x.rule_hit
+      })));
+      message.success(`已加载历史方案 ${planId}`);
+    } catch (e) {
+      message.error(parseApiError(e, '读取历史方案失败'));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
   async function computePlan() {
     try {
       const payload = {
@@ -278,7 +319,15 @@ export default function ReconfigManagementPage() {
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="middle">
-      <Card title="改配管理（首版）" extra={<Button loading={loading} onClick={loadAll}>加载基础数据</Button>}>
+      <Card
+        title="改配管理（首版）"
+        extra={(
+          <Space>
+            <Button onClick={async () => { setHistoryOpen(true); await loadHistoryPlans(); }}>历史方案</Button>
+            <Button loading={loading} onClick={loadAll}>加载基础数据</Button>
+          </Space>
+        )}
+      >
         <Alert
           type="info"
           showIcon
@@ -408,6 +457,49 @@ export default function ReconfigManagementPage() {
           description={planWarnings.join('；')}
         />
       ) : null}
+
+      <Drawer
+        title="改配管理 - 历史方案列表"
+        width={980}
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          <Button loading={historyLoading} onClick={loadHistoryPlans}>刷新列表</Button>
+          <Table
+            rowKey={(r) => r.plan_id}
+            loading={historyLoading}
+            size="small"
+            dataSource={historyList}
+            pagination={{ pageSize: 8 }}
+            columns={[
+              { title: '方案ID', dataIndex: 'plan_id', width: 280 },
+              { title: '创建时间', dataIndex: 'created_at', width: 180 },
+              { title: '范围服务器', dataIndex: 'scope_server_count', width: 100 },
+              { title: '成功服务器', dataIndex: 'success_server_count', width: 100 },
+              { title: '成功逻辑核', dataIndex: 'success_core_count', width: 100 },
+              {
+                title: '操作', width: 100, render: (_: any, r: any) => (
+                  <Button type="link" onClick={() => openHistoryPlan(r.plan_id)}>加载</Button>
+                )
+              }
+            ]}
+          />
+          {selectedHistory ? (
+            <Card size="small" title="历史方案摘要">
+              <Descriptions size="small" column={2}>
+                <Descriptions.Item label="方案ID">{selectedHistory.plan_id}</Descriptions.Item>
+                <Descriptions.Item label="创建时间">{selectedHistory.created_at}</Descriptions.Item>
+                <Descriptions.Item label="范围服务器">{selectedHistory.scope_server_count}</Descriptions.Item>
+                <Descriptions.Item label="成功服务器">{selectedHistory.success_server_count}</Descriptions.Item>
+                <Descriptions.Item label="成功逻辑核">{selectedHistory.success_core_count}</Descriptions.Item>
+                <Descriptions.Item label="改配服务器数">{selectedHistory.reconfig_server_count}</Descriptions.Item>
+                <Descriptions.Item label="拆配服务器数">{selectedHistory.dismantle_server_count}</Descriptions.Item>
+              </Descriptions>
+            </Card>
+          ) : null}
+        </Space>
+      </Drawer>
 
       <Tabs
         items={[
