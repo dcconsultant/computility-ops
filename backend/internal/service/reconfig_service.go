@@ -95,6 +95,9 @@ func (s *ReconfigService) CalculatePlanWithProgress(ctx context.Context, req Rec
 	if err != nil {
 		return ReconfigPlanCalculateResponse{}, err
 	}
+	if err := validateReconfigInputData(servers, racks, memories, configs); err != nil {
+		return ReconfigPlanCalculateResponse{}, err
+	}
 	perfRows, err := s.datasetRepo.ListValueScorePerformanceParams(ctx)
 	if err != nil {
 		return ReconfigPlanCalculateResponse{}, err
@@ -321,6 +324,14 @@ func (s *ReconfigService) CalculatePlanWithProgress(ctx context.Context, req Rec
 		onProgress(ReconfigPlanProgress{Stage: "done", Percent: 100, Message: "计算完成", DonePackages: donePackages, TotalPackages: totalPackages, DoneServers: doneServers, TotalServers: len(filteredServers), DoneCores: round2(doneCores), TotalCores: round2(totalCores)})
 	}
 
+	warnings := make([]string, 0)
+	if len(filteredServers) == 0 {
+		warnings = append(warnings, "范围命中0台服务器，请检查PSA/配置类型/SN筛选条件")
+	}
+	if len(candidates) == 0 && len(filteredServers) > 0 {
+		warnings = append(warnings, "候选清单为空，请检查配置类型映射、内存速率/性能基线与原始数据")
+	}
+
 	return ReconfigPlanCalculateResponse{
 		TargetResolved: target,
 		Candidates:     candidates,
@@ -329,6 +340,7 @@ func (s *ReconfigService) CalculatePlanWithProgress(ctx context.Context, req Rec
 			"scope_server_count": len(filteredServers),
 			"candidate_count":    len(candidates),
 			"action_count":       len(actions),
+			"warnings":           warnings,
 		},
 	}, nil
 }
@@ -754,6 +766,49 @@ func effectiveMemoryDatarate(hostMems []map[string]any) float64 {
 		}
 	}
 	return minRate
+}
+
+func validateReconfigInputData(servers, racks, memories, configs []map[string]any) error {
+	if len(servers) == 0 {
+		return fmt.Errorf("服务器模型无数据：请先导入server模型记录")
+	}
+	if len(memories) == 0 {
+		return fmt.Errorf("内存模型无数据：请先导入memory模型记录")
+	}
+	if len(configs) == 0 {
+		return fmt.Errorf("套餐模型无数据：请先导入config_type模型记录")
+	}
+	if len(racks) == 0 {
+		return fmt.Errorf("机柜模型无数据：请先导入rack模型记录")
+	}
+	if !hasAnyFieldValue(servers, "sn", "SN") {
+		return fmt.Errorf("服务器模型缺少SN字段有效值（支持字段：sn/SN）")
+	}
+	if !hasAnyFieldValue(servers, "config_type", "配置类型") {
+		return fmt.Errorf("服务器模型缺少配置类型字段有效值（支持字段：config_type/配置类型）")
+	}
+	if !hasAnyFieldValue(memories, "sn_server", "服务器SN") {
+		return fmt.Errorf("内存模型缺少服务器SN字段有效值（支持字段：sn_server/服务器SN）")
+	}
+	if !hasAnyFieldValue(memories, "capacity", "容量") {
+		return fmt.Errorf("内存模型缺少容量字段有效值（支持字段：capacity/容量）")
+	}
+	if !hasAnyFieldValue(configs, "config_type", "配置类型") {
+		return fmt.Errorf("套餐模型缺少配置类型字段有效值（支持字段：config_type/配置类型）")
+	}
+	if !hasAnyFieldValue(configs, "logical_cores", "逻辑核") {
+		return fmt.Errorf("套餐模型缺少逻辑核字段有效值（支持字段：logical_cores/逻辑核）")
+	}
+	return nil
+}
+
+func hasAnyFieldValue(rows []map[string]any, keys ...string) bool {
+	for _, r := range rows {
+		if strings.TrimSpace(pick(r, keys...)) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func round2(v float64) float64 { return math.Round(v*100) / 100 }

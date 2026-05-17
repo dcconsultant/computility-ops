@@ -94,6 +94,7 @@ export default function ReconfigManagementPage() {
   const [actions, setActions] = useState<ActionRow[]>([]);
   const [runningJobId, setRunningJobId] = useState<string>('');
   const [progress, setProgress] = useState<any>(null);
+  const [planWarnings, setPlanWarnings] = useState<string[]>([]);
 
   const filteredServers = useMemo(() => {
     const snSet = new Set(parseSNList(scope.snInput));
@@ -264,11 +265,13 @@ export default function ReconfigManagementPage() {
           action: x.action,
           ruleHit: x.rule_hit
         })));
+        setPlanWarnings(Array.isArray(data.summary?.warnings) ? data.summary.warnings : []);
         message.success(`计算完成：候选 ${Number(data.summary?.candidate_count || 0)} 台，执行项 ${Number(data.summary?.action_count || 0)} 条`);
         break;
       }
     } catch (e) {
       setRunningJobId('');
+      setPlanWarnings([]);
       message.error(parseApiError(e, '计算改配方案失败'));
     }
   }
@@ -396,6 +399,15 @@ export default function ReconfigManagementPage() {
           ) : null}
         </Space>
       </Card>
+
+      {planWarnings.length > 0 ? (
+        <Alert
+          type="warning"
+          showIcon
+          message="数据告警"
+          description={planWarnings.join('；')}
+        />
+      ) : null}
 
       <Tabs
         items={[
