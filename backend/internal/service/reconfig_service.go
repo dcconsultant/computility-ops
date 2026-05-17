@@ -201,10 +201,7 @@ func (s *ReconfigService) CalculatePlan(ctx context.Context, req ReconfigPlanCal
 
 		hostMems := filterBySN(memories, sn)
 		hostDisks := filterBySN(disks, sn)
-		memRate := 0.0
-		if len(hostMems) > 0 {
-			memRate = pickNum(hostMems[0], "datarate", "数据传输率(TM/s)", "数据传输率(MT/s)")
-		}
+		memRate := effectiveMemoryDatarate(hostMems)
 		perf := perfByConfig[cfgType]
 		memCap := sumNum(hostMems, "capacity", "容量")
 		storageTB := sumNum(hostDisks, "capacity", "容量") / 1024.0
@@ -319,6 +316,9 @@ func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filter
 		if strings.TrimSpace(pick(m, "sn_server", "服务器SN")) != "" {
 			continue
 		}
+		if !isPartAvailable(m) {
+			continue
+		}
 		rack := strings.TrimSpace(pick(m, "rack", "机柜"))
 		if strings.Contains(strings.ToUpper(rack), "SPR") {
 			memoryInventory = append(memoryInventory, m)
@@ -327,6 +327,9 @@ func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filter
 	diskInventory := make([]map[string]any, 0)
 	for _, d := range disks {
 		if strings.TrimSpace(pick(d, "sn_server", "服务器SN")) != "" {
+			continue
+		}
+		if !isPartAvailable(d) {
 			continue
 		}
 		rack := strings.TrimSpace(pick(d, "rack", "机柜"))
@@ -679,6 +682,34 @@ func pickNum(row map[string]any, keys ...string) float64 {
 		}
 	}
 	return 0
+}
+
+func effectiveMemoryDatarate(hostMems []map[string]any) float64 {
+	if len(hostMems) == 0 {
+		return 0
+	}
+	minRate := 0.0
+	for i, m := range hostMems {
+		rate := pickNum(m, "datarate", "数据传输率(TM/s)", "数据传输率(MT/s)")
+		if i == 0 || (rate > 0 && rate < minRate) || minRate <= 0 {
+			minRate = rate
+		}
+	}
+	return minRate
+}
+
+func isPartAvailable(row map[string]any) bool {
+	status := strings.ToLower(strings.TrimSpace(pick(row, "status", "状态")))
+	if status == "" {
+		return true
+	}
+	blocked := []string{"报废", "损坏", "故障", "不可用", "retired", "broken", "fault", "unavailable"}
+	for _, b := range blocked {
+		if strings.Contains(status, b) {
+			return false
+		}
+	}
+	return true
 }
 
 func round2(v float64) float64 { return math.Round(v*100) / 100 }
