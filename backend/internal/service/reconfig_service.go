@@ -216,6 +216,8 @@ func (s *ReconfigService) CalculatePlanWithProgress(ctx context.Context, req Rec
 		}
 		coreByConfig[cfg] = pickNum(c, "logical_cores", "逻辑核")
 	}
+	memoryByServerSN := groupByServerSN(memories)
+	diskByServerSN := groupByServerSN(disks)
 	packageTotalByCore := map[string]int{}
 	totalCores := 0.0
 	for _, sv := range filteredServers {
@@ -244,8 +246,8 @@ func (s *ReconfigService) CalculatePlanWithProgress(ctx context.Context, req Rec
 			idc = rackIDC[rack]
 		}
 
-		hostMems := filterBySN(memories, sn)
-		hostDisks := filterBySN(disks, sn)
+		hostMems := memoryByServerSN[sn]
+		hostDisks := diskByServerSN[sn]
 		memRate := effectiveMemoryDatarate(hostMems)
 		perf := perfByConfig[cfgType]
 		memCap := sumNum(hostMems, "capacity", "容量")
@@ -319,7 +321,7 @@ func (s *ReconfigService) CalculatePlanWithProgress(ctx context.Context, req Rec
 	if onProgress != nil {
 		onProgress(ReconfigPlanProgress{Stage: "action", Percent: 70, Message: "生成执行清单中", DonePackages: donePackages, TotalPackages: totalPackages, DoneServers: doneServers, TotalServers: len(filteredServers), DoneCores: round2(doneCores), TotalCores: round2(totalCores)})
 	}
-	actions := s.buildActions(candidates, filteredServers, memories, disks, rackIDC)
+	actions := s.buildActions(candidates, filteredServers, memories, disks, rackIDC, memoryByServerSN, diskByServerSN)
 	if onProgress != nil {
 		onProgress(ReconfigPlanProgress{Stage: "done", Percent: 100, Message: "计算完成", DonePackages: donePackages, TotalPackages: totalPackages, DoneServers: doneServers, TotalServers: len(filteredServers), DoneCores: round2(doneCores), TotalCores: round2(totalCores)})
 	}
@@ -366,7 +368,7 @@ func (s *ReconfigService) loadMetaRecords(ctx context.Context) (servers, racks, 
 	return data["server"], data["rack"], data["memory"], data["disk"], data["config_type"], nil
 }
 
-func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filteredServers []map[string]any, memories, disks []map[string]any, rackIDC map[string]string) []ReconfigActionRow {
+func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filteredServers []map[string]any, memories, disks []map[string]any, rackIDC map[string]string, memoryByServerSN, diskByServerSN map[string][]map[string]any) []ReconfigActionRow {
 	serverRack := map[string]string{}
 	serverIDC := map[string]string{}
 	for _, sv := range filteredServers {
@@ -413,8 +415,8 @@ func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filter
 		if c.Status != "候选" || (c.MemoryGapGB <= 0 && c.StorageGapTB <= 0) {
 			continue
 		}
-		hostMems := filterBySN(memories, c.SN)
-		hostDisks := filterBySN(disks, c.SN)
+		hostMems := memoryByServerSN[c.SN]
+		hostDisks := diskByServerSN[c.SN]
 		memSpec := map[string]any{}
 		diskSpec := map[string]any{}
 		if len(hostMems) > 0 {
@@ -702,12 +704,14 @@ func maxIntReconfig(a, b int) int {
 	return b
 }
 
-func filterBySN(rows []map[string]any, sn string) []map[string]any {
-	out := make([]map[string]any, 0)
+func groupByServerSN(rows []map[string]any) map[string][]map[string]any {
+	out := make(map[string][]map[string]any, 1024)
 	for _, r := range rows {
-		if strings.TrimSpace(pick(r, "sn_server", "服务器SN")) == sn {
-			out = append(out, r)
+		sn := strings.TrimSpace(pick(r, "sn_server", "服务器SN"))
+		if sn == "" {
+			continue
 		}
+		out[sn] = append(out[sn], r)
 	}
 	return out
 }
