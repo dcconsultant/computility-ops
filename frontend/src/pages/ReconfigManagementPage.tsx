@@ -7,12 +7,13 @@ import type { MetaModel, MetaRecord } from '../types';
 const { Text } = Typography;
 
 interface TargetConfig {
-  mode: 'existing' | 'new';
+  mode: 'existing' | 'maximize';
   configType: string;
   perfBaseline: number;
   memoryDatarateBaseline: number;
   memoryCapacityBaseline: number;
   storageCapacityBaseline: number;
+  memoryCpuRatio: number;
 }
 
 interface ScopeConfig {
@@ -80,7 +81,8 @@ export default function ReconfigManagementPage() {
     perfBaseline: 0,
     memoryDatarateBaseline: 0,
     memoryCapacityBaseline: 0,
-    storageCapacityBaseline: 0
+    storageCapacityBaseline: 0,
+    memoryCpuRatio: 6
   });
   const [scope, setScope] = useState<ScopeConfig>({
     psaInput: '/server-decommission/cn-decommission/reuse',
@@ -197,7 +199,8 @@ export default function ReconfigManagementPage() {
           perf_baseline: target.perfBaseline,
           memory_datarate_baseline: target.memoryDatarateBaseline,
           memory_capacity_baseline: target.memoryCapacityBaseline,
-          storage_capacity_baseline: target.storageCapacityBaseline
+          storage_capacity_baseline: target.storageCapacityBaseline,
+          memory_cpu_ratio: target.memoryCpuRatio
         },
         scope: {
           psa_list: scope.psaInput.split(',').map((x) => x.trim()).filter(Boolean),
@@ -260,9 +263,9 @@ export default function ReconfigManagementPage() {
             <Text>套餐模式</Text>
             <Select
               value={target.mode}
-              style={{ width: 140 }}
-              options={[{ value: 'existing', label: '既有套餐' }, { value: 'new', label: '新套餐' }]}
-              onChange={(v) => setTarget({ ...target, mode: v })}
+              style={{ width: 160 }}
+              options={[{ value: 'existing', label: '指定套餐' }, { value: 'maximize', label: '最大化利用' }]}
+              onChange={(v) => setTarget({ ...target, mode: v as TargetConfig['mode'] })}
             />
             <Text>配置类型</Text>
             <Select
@@ -273,17 +276,44 @@ export default function ReconfigManagementPage() {
               onChange={fillFromConfigType}
               showSearch
               optionFilterProp="label"
+              disabled={target.mode === 'maximize'}
             />
           </Space>
           <Space wrap>
             <Text>性能基线(E/s)</Text>
-            <Input style={{ width: 140 }} value={String(target.perfBaseline || '')} onChange={(e) => setTarget({ ...target, perfBaseline: toNum(e.target.value) })} />
+            <Input
+              style={{ width: 140 }}
+              value={String(target.perfBaseline || '')}
+              disabled={target.mode === 'maximize'}
+              onChange={(e) => setTarget({ ...target, perfBaseline: toNum(e.target.value) })}
+            />
             <Text>内存速率基线(MT/s)</Text>
-            <Input style={{ width: 140 }} value={String(target.memoryDatarateBaseline || '')} onChange={(e) => setTarget({ ...target, memoryDatarateBaseline: toNum(e.target.value) })} />
+            <Input
+              style={{ width: 140 }}
+              value={String(target.memoryDatarateBaseline || '')}
+              disabled={target.mode === 'maximize'}
+              onChange={(e) => setTarget({ ...target, memoryDatarateBaseline: toNum(e.target.value) })}
+            />
             <Text>内存容量基线(GB)</Text>
-            <Input style={{ width: 140 }} value={String(target.memoryCapacityBaseline || '')} onChange={(e) => setTarget({ ...target, memoryCapacityBaseline: toNum(e.target.value) })} />
+            <Input
+              style={{ width: 140 }}
+              value={String(target.memoryCapacityBaseline || '')}
+              disabled={target.mode === 'maximize'}
+              onChange={(e) => setTarget({ ...target, memoryCapacityBaseline: toNum(e.target.value) })}
+            />
             <Text>存储容量基线(TB)</Text>
-            <Input style={{ width: 140 }} value={String(target.storageCapacityBaseline || '')} onChange={(e) => setTarget({ ...target, storageCapacityBaseline: toNum(e.target.value) })} />
+            <Input
+              style={{ width: 140 }}
+              value={String(target.storageCapacityBaseline || '')}
+              disabled={target.mode === 'maximize'}
+              onChange={(e) => setTarget({ ...target, storageCapacityBaseline: toNum(e.target.value) })}
+            />
+            <Text>内存CPU比</Text>
+            <Input
+              style={{ width: 120 }}
+              value={String(target.memoryCpuRatio || '')}
+              onChange={(e) => setTarget({ ...target, memoryCpuRatio: toNum(e.target.value, 6) })}
+            />
           </Space>
         </Space>
       </Card>

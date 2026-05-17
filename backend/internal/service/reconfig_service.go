@@ -17,6 +17,7 @@ type ReconfigTargetConfig struct {
 	MemoryDatarateBaseline  float64 `json:"memory_datarate_baseline"`
 	MemoryCapacityBaseline  float64 `json:"memory_capacity_baseline"`
 	StorageCapacityBaseline float64 `json:"storage_capacity_baseline"`
+	MemoryCPURatio          float64 `json:"memory_cpu_ratio,omitempty"`
 }
 
 type ReconfigScopeConfig struct {
@@ -207,14 +208,36 @@ func (s *ReconfigService) CalculatePlan(ctx context.Context, req ReconfigPlanCal
 		perf := perfByConfig[cfgType]
 		memCap := sumNum(hostMems, "capacity", "容量")
 		storageTB := sumNum(hostDisks, "capacity", "容量") / 1024.0
-		memGap := math.Max(0, target.MemoryCapacityBaseline-memCap)
-		storageGap := math.Max(0, target.StorageCapacityBaseline-storageTB)
+
+		memBaseline := target.MemoryCapacityBaseline
+		storageBaseline := target.StorageCapacityBaseline
+		if strings.EqualFold(strings.TrimSpace(target.Mode), "maximize") {
+			ratio := target.MemoryCPURatio
+			if ratio <= 0 {
+				ratio = 6
+			}
+			logicalCores := 0.0
+			for _, c := range configs {
+				if strings.TrimSpace(pick(c, "config_type", "配置类型")) == cfgType {
+					logicalCores = pickNum(c, "logical_cores", "逻辑核")
+					break
+				}
+			}
+			if logicalCores > 0 {
+				memBaseline = logicalCores * ratio
+			}
+			storageBaseline = 0
+		}
+		memGap := math.Max(0, memBaseline-memCap)
+		storageGap := math.Max(0, storageBaseline-storageTB)
 
 		status := "候选"
-		if memRate < target.MemoryDatarateBaseline {
-			status = "内存带宽不足"
-		} else if perf < target.PerfBaseline {
-			status = "性能不足"
+		if !strings.EqualFold(strings.TrimSpace(target.Mode), "maximize") {
+			if memRate < target.MemoryDatarateBaseline {
+				status = "内存带宽不足"
+			} else if perf < target.PerfBaseline {
+				status = "性能不足"
+			}
 		}
 
 		warn := req.GoalValueScore > 0 && perf < req.GoalValueScore
