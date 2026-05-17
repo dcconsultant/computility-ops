@@ -316,9 +316,6 @@ func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filter
 		if strings.TrimSpace(pick(m, "sn_server", "服务器SN")) != "" {
 			continue
 		}
-		if !isPartAvailable(m) {
-			continue
-		}
 		rack := strings.TrimSpace(pick(m, "rack", "机柜"))
 		if strings.Contains(strings.ToUpper(rack), "SPR") {
 			memoryInventory = append(memoryInventory, m)
@@ -327,9 +324,6 @@ func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filter
 	diskInventory := make([]map[string]any, 0)
 	for _, d := range disks {
 		if strings.TrimSpace(pick(d, "sn_server", "服务器SN")) != "" {
-			continue
-		}
-		if !isPartAvailable(d) {
 			continue
 		}
 		rack := strings.TrimSpace(pick(d, "rack", "机柜"))
@@ -696,20 +690,6 @@ func effectiveMemoryDatarate(hostMems []map[string]any) float64 {
 		}
 	}
 	return minRate
-}
-
-func isPartAvailable(row map[string]any) bool {
-	status := strings.ToLower(strings.TrimSpace(pick(row, "status", "状态")))
-	if status == "" {
-		return true
-	}
-	blocked := []string{"报废", "损坏", "故障", "不可用", "retired", "broken", "fault", "unavailable"}
-	for _, b := range blocked {
-		if strings.Contains(status, b) {
-			return false
-		}
-	}
-	return true
 }
 
 func round2(v float64) float64 { return math.Round(v*100) / 100 }
