@@ -2,7 +2,11 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,13 +22,26 @@ type ReconfigHandler struct {
 }
 
 type reconfigPlanJob struct {
-	JobID      string                                `json:"job_id"`
-	Status     string                                `json:"status"`
-	Progress   service.ReconfigPlanProgress          `json:"progress"`
+	JobID      string                                 `json:"job_id"`
+	Status     string                                 `json:"status"`
+	Progress   service.ReconfigPlanProgress           `json:"progress"`
 	Result     *service.ReconfigPlanCalculateResponse `json:"result,omitempty"`
-	Error      string                                `json:"error,omitempty"`
-	StartedAt  time.Time                             `json:"started_at"`
-	FinishedAt *time.Time                            `json:"finished_at,omitempty"`
+	Error      string                                 `json:"error,omitempty"`
+	StartedAt  time.Time                              `json:"started_at"`
+	FinishedAt *time.Time                             `json:"finished_at,omitempty"`
+}
+
+type reconfigPlanSnapshot struct {
+	PlanID               string                         `json:"plan_id"`
+	CreatedAt            time.Time                      `json:"created_at"`
+	Target               service.ReconfigTargetConfig   `json:"target"`
+	ScopeServerCount     int                            `json:"scope_server_count"`
+	SuccessServerCount   int                            `json:"success_server_count"`
+	SuccessCoreCount     float64                        `json:"success_core_count"`
+	ReconfigServerCount  int                            `json:"reconfig_server_count"`
+	DismantleServerCount int                            `json:"dismantle_server_count"`
+	Hosts                []map[string]any               `json:"hosts"`
+	Actions              []service.ReconfigActionRow    `json:"actions"`
 }
 
 func NewReconfigHandler(svc *service.ReconfigService) *ReconfigHandler {
@@ -109,6 +126,7 @@ func (h *ReconfigHandler) StartPlan(c *gin.Context) {
 			j.Progress.Stage = "done"
 			j.Progress.Percent = 100
 			j.Progress.Message = "计算完成"
+			_ = saveReconfigPlanSnapshot(jobID, req.Target, out)
 		}
 	}()
 
@@ -147,4 +165,89 @@ func (h *ReconfigHandler) GetPlanResult(c *gin.Context) {
 		return
 	}
 	ok(c, gin.H{"job_id": jobID, "status": job.Status, "result": job.Result})
+}
+
+func saveReconfigPlanSnapshot(jobID string, target service.ReconfigTargetConfig, out service.ReconfigPlanCalculateResponse) error {
+	summary := out.Summary
+	scopeCnt := toInt(summary["scope_server_count"])
+	successServerCnt := toInt(summary["success_server_count"])
+	successCoreCnt := toFloat(summary["success_core_count"])
+
+	hosts := make([]map[string]any, 0)
+	reconfigSet := map[string]struct{}{}
+	dismantleSet := map[string]struct{}{}
+	for _, a := range out.Actions {
+		hosts = append(hosts, map[string]any{
+			"target_sn": a.TargetSN,
+			"gap_type": a.GapType,
+			"gap_qty": a.GapQty,
+			"part_details": a.PartDetails,
+		})
+		if strings.Contains(a.Source, "SN:") {
+			parts := strings.Split(a.Source, "SN:")
+			for i := 1; i < len(parts); i++ {
+				sn := strings.Fields(parts[i])[0]
+				if sn != "" {
+					dismantleSet[sn] = struct{}{}
+				}
+			}
+		}
+		reconfigSet[a.TargetSN] = struct{}{}
+	}
+
+	snapshot := reconfigPlanSnapshot{
+		PlanID:               fmt.Sprintf("%s-%d", jobID, time.Now().Unix()),
+		CreatedAt:            time.Now(),
+		Target:               target,
+		ScopeServerCount:     scopeCnt,
+		SuccessServerCount:   successServerCnt,
+		SuccessCoreCount:     successCoreCnt,
+		ReconfigServerCount:  len(reconfigSet),
+		DismantleServerCount: len(dismantleSet),
+		Hosts:                hosts,
+		Actions:              out.Actions,
+	}
+
+	base := filepath.Join("backend", "logs", "reconfig-plans")
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		return err
+	}
+	payload, err := json.MarshalIndent(snapshot, "", "  ")
+	if err != nil {
+		return err
+	}
+	filename := filepath.Join(base, fmt.Sprintf("%s.json", snapshot.PlanID))
+	return os.WriteFile(filename, payload, 0o644)
+}
+
+func toInt(v any) int {
+	switch x := v.(type) {
+	case int:
+		return x
+	case int64:
+		return int(x)
+	case float64:
+		return int(x)
+	case string:
+		n, _ := strconv.Atoi(strings.TrimSpace(x))
+		return n
+	default:
+		return 0
+	}
+}
+
+func toFloat(v any) float64 {
+	switch x := v.(type) {
+	case float64:
+		return x
+	case int:
+		return float64(x)
+	case int64:
+		return float64(x)
+	case string:
+		n, _ := strconv.ParseFloat(strings.TrimSpace(x), 64)
+		return n
+	default:
+		return 0
+	}
 }

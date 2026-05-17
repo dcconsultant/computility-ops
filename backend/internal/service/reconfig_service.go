@@ -321,9 +321,18 @@ func (s *ReconfigService) CalculatePlanWithProgress(ctx context.Context, req Rec
 	if onProgress != nil {
 		onProgress(ReconfigPlanProgress{Stage: "action", Percent: 70, Message: "生成执行清单中", DonePackages: donePackages, TotalPackages: totalPackages, DoneServers: doneServers, TotalServers: len(filteredServers), DoneCores: round2(doneCores), TotalCores: round2(totalCores)})
 	}
-	actions := s.buildActions(candidates, filteredServers, memories, disks, rackIDC, memoryByServerSN, diskByServerSN)
+	actions, successSN := s.buildActions(candidates, filteredServers, memories, disks, rackIDC, memoryByServerSN, diskByServerSN)
 	if onProgress != nil {
 		onProgress(ReconfigPlanProgress{Stage: "done", Percent: 100, Message: "计算完成", DonePackages: donePackages, TotalPackages: totalPackages, DoneServers: doneServers, TotalServers: len(filteredServers), DoneCores: round2(doneCores), TotalCores: round2(totalCores)})
+	}
+
+	successServerCount := 0
+	successCoreCount := 0.0
+	for _, c := range candidates {
+		if successSN[c.SN] {
+			successServerCount++
+			successCoreCount += coreByConfig[c.ConfigType]
+		}
 	}
 
 	warnings := make([]string, 0)
@@ -339,10 +348,12 @@ func (s *ReconfigService) CalculatePlanWithProgress(ctx context.Context, req Rec
 		Candidates:     candidates,
 		Actions:        actions,
 		Summary: map[string]any{
-			"scope_server_count": len(filteredServers),
-			"candidate_count":    len(candidates),
-			"action_count":       len(actions),
-			"warnings":           warnings,
+			"scope_server_count":   len(filteredServers),
+			"candidate_count":      len(candidates),
+			"action_count":         len(actions),
+			"success_server_count": successServerCount,
+			"success_core_count":   round2(successCoreCount),
+			"warnings":             warnings,
 		},
 	}, nil
 }
@@ -368,7 +379,7 @@ func (s *ReconfigService) loadMetaRecords(ctx context.Context) (servers, racks, 
 	return data["server"], data["rack"], data["memory"], data["disk"], data["config_type"], nil
 }
 
-func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filteredServers []map[string]any, memories, disks []map[string]any, rackIDC map[string]string, memoryByServerSN, diskByServerSN map[string][]map[string]any) []ReconfigActionRow {
+func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filteredServers []map[string]any, memories, disks []map[string]any, rackIDC map[string]string, memoryByServerSN, diskByServerSN map[string][]map[string]any) ([]ReconfigActionRow, map[string]bool) {
 	serverRack := map[string]string{}
 	serverIDC := map[string]string{}
 	for _, sv := range filteredServers {
@@ -411,6 +422,7 @@ func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filter
 	}
 
 	actions := make([]ReconfigActionRow, 0)
+	successSN := map[string]bool{}
 	for _, c := range candidates {
 		if c.Status != "候选" || (c.MemoryGapGB <= 0 && c.StorageGapTB <= 0) {
 			continue
@@ -425,11 +437,12 @@ func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filter
 		if len(hostDisks) > 0 {
 			diskSpec = hostDisks[0]
 		}
-		memUnit := math.Max(1, pickNum(memSpec, "capacity", "容量"))
+		memUnit := preferredMemoryUnitGB(memSpec, memoryInventory)
 		diskUnitTB := math.Max(0.1, pickNum(diskSpec, "capacity", "容量")/1024)
-		needMemCount := int(math.Ceil(c.MemoryGapGB / memUnit))
+		needMemCount := roundUpToEven(c.MemoryGapGB / memUnit)
 		needDiskCount := int(math.Ceil(c.StorageGapTB / diskUnitTB))
 
+		memFulfilled := needMemCount <= 0
 		if needMemCount > 0 {
 			matched := make([]map[string]any, 0)
 			for _, m := range memoryInventory {
@@ -452,6 +465,7 @@ func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filter
 			}
 
 			if len(matched) >= needMemCount {
+				memFulfilled = true
 				srcRack := strings.TrimSpace(pick(matched[0], "rack", "机柜"))
 				srcIDC := strings.TrimSpace(rackIDC[srcRack])
 				sns := make([]string, 0, len(matched))
@@ -470,6 +484,9 @@ func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filter
 				})
 			} else {
 				donor := s.pickMemoryDonor(memories, memSpec, c.SN, needMemCount, candidateStatus, serverRack, serverIDC)
+				if donor.missingCount == 0 {
+					memFulfilled = true
+				}
 				crossIDC := "否"
 				if donor.anyIDC != "" && c.Datacenter != "" && donor.anyIDC != c.Datacenter {
 					crossIDC = "是"
@@ -551,8 +568,11 @@ func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filter
 				})
 			}
 		}
+		if memFulfilled {
+			successSN[c.SN] = true
+		}
 	}
-	return actions
+	return actions, successSN
 }
 
 type donorPickResult struct {
@@ -702,6 +722,29 @@ func maxIntReconfig(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func roundUpToEven(v float64) int {
+	if v <= 0 {
+		return 0
+	}
+	n := int(math.Ceil(v))
+	if n%2 != 0 {
+		n++
+	}
+	return n
+}
+
+func preferredMemoryUnitGB(memSpec map[string]any, memoryInventory []map[string]any) float64 {
+	if x := pickNum(memSpec, "capacity", "容量"); x > 0 {
+		return x
+	}
+	for _, m := range memoryInventory {
+		if x := pickNum(m, "capacity", "容量"); x > 0 {
+			return x
+		}
+	}
+	return 1
 }
 
 func groupByServerSN(rows []map[string]any) map[string][]map[string]any {
