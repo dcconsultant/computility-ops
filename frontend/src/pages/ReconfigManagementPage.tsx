@@ -76,7 +76,7 @@ export default function ReconfigManagementPage() {
   const [perfByConfig, setPerfByConfig] = useState<Record<string, number>>({});
 
   const [target, setTarget] = useState<TargetConfig>({
-    mode: 'existing',
+    mode: 'maximize',
     configType: '',
     perfBaseline: 0,
     memoryDatarateBaseline: 0,
@@ -185,6 +185,7 @@ export default function ReconfigManagementPage() {
     const pack = configRows.find((r) => String(pick(r.data, ['config_type', '配置类型'], '')).trim() === configType);
     const memoryGb = toNum(pick(pack?.data, ['capacity_memory_gb', '内存容量(GB)'], 0));
     const storageTb = toNum(pick(pack?.data, ['capacity_storage_tb', '存储容量(TB)'], 0));
+    const logicalCores = toNum(pick(pack?.data, ['logical_cores', '逻辑核'], 0));
     const perf = toNum(perfByConfig[configType], 0);
 
     setTarget((prev) => ({
@@ -193,7 +194,8 @@ export default function ReconfigManagementPage() {
       memoryDatarateBaseline: memoryDatarate,
       memoryCapacityBaseline: memoryGb,
       storageCapacityBaseline: storageTb,
-      perfBaseline: perf
+      perfBaseline: perf,
+      memoryCpuRatio: logicalCores > 0 ? Number((memoryGb / logicalCores).toFixed(2)) : prev.memoryCpuRatio
     }));
   }
 
@@ -344,7 +346,19 @@ export default function ReconfigManagementPage() {
               value={target.mode}
               style={{ width: 160 }}
               options={[{ value: 'existing', label: '指定套餐' }, { value: 'maximize', label: '最大化利用' }]}
-              onChange={(v) => setTarget({ ...target, mode: v as TargetConfig['mode'] })}
+              onChange={(v) => {
+                const nextMode = v as TargetConfig['mode'];
+                if (nextMode === 'maximize') {
+                  setTarget({ ...target, mode: nextMode, memoryCpuRatio: target.memoryCpuRatio > 0 ? target.memoryCpuRatio : 6 });
+                  return;
+                }
+                if (target.configType) {
+                  fillFromConfigType(target.configType);
+                  setTarget((prev) => ({ ...prev, mode: nextMode }));
+                  return;
+                }
+                setTarget({ ...target, mode: nextMode });
+              }}
             />
             <Text>配置类型</Text>
             <Select
