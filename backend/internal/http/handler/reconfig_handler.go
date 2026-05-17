@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -165,6 +166,62 @@ func (h *ReconfigHandler) GetPlanResult(c *gin.Context) {
 		return
 	}
 	ok(c, gin.H{"job_id": jobID, "status": job.Status, "result": job.Result})
+}
+
+func (h *ReconfigHandler) ListSavedPlans(c *gin.Context) {
+	c.Set("audit_action", "reconfig.plan.saved.list")
+	base := filepath.Join("backend", "logs", "reconfig-plans")
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		if os.IsNotExist(err) {
+			ok(c, gin.H{"list": []any{}, "total": 0})
+			return
+		}
+		fail(c, 50001, "读取改配方案列表失败")
+		return
+	}
+	list := make([]reconfigPlanSnapshot, 0)
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		payload, readErr := os.ReadFile(filepath.Join(base, e.Name()))
+		if readErr != nil {
+			continue
+		}
+		var row reconfigPlanSnapshot
+		if jsonErr := json.Unmarshal(payload, &row); jsonErr != nil {
+			continue
+		}
+		list = append(list, row)
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].CreatedAt.After(list[j].CreatedAt) })
+	ok(c, gin.H{"list": list, "total": len(list)})
+}
+
+func (h *ReconfigHandler) GetSavedPlan(c *gin.Context) {
+	c.Set("audit_action", "reconfig.plan.saved.get")
+	planID := strings.TrimSpace(c.Param("plan_id"))
+	if planID == "" {
+		fail(c, 40001, "plan_id不能为空")
+		return
+	}
+	filename := filepath.Join("backend", "logs", "reconfig-plans", fmt.Sprintf("%s.json", planID))
+	payload, err := os.ReadFile(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fail(c, 40401, "方案不存在")
+			return
+		}
+		fail(c, 50001, "读取改配方案失败")
+		return
+	}
+	var row reconfigPlanSnapshot
+	if err := json.Unmarshal(payload, &row); err != nil {
+		fail(c, 50001, "方案内容损坏")
+		return
+	}
+	ok(c, row)
 }
 
 func saveReconfigPlanSnapshot(jobID string, target service.ReconfigTargetConfig, out service.ReconfigPlanCalculateResponse) error {

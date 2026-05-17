@@ -199,6 +199,16 @@ export async function getReconfigPlanResult(jobId: string) {
   return data;
 }
 
+export async function listSavedReconfigPlans() {
+  const { data } = await http.get<ApiResp<{ list: any[]; total: number }>>('/reconfig/plans');
+  return data;
+}
+
+export async function getSavedReconfigPlan(planId: string) {
+  const { data } = await http.get<ApiResp<any>>(`/reconfig/plans/${planId}`);
+  return data;
+}
+
 export async function importValueScoreOriginalValues(file: File) {
   const form = new FormData();
   form.append('file', file);

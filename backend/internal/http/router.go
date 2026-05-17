@@ -120,6 +120,8 @@ func NewRouter(h Handlers) *gin.Engine {
 		v1.POST("/reconfig/plan/start", h.ReconfigMgmt.StartPlan)
 		v1.GET("/reconfig/plan/progress/:job_id", h.ReconfigMgmt.GetPlanProgress)
 		v1.GET("/reconfig/plan/result/:job_id", h.ReconfigMgmt.GetPlanResult)
+		v1.GET("/reconfig/plans", h.ReconfigMgmt.ListSavedPlans)
+		v1.GET("/reconfig/plans/:plan_id", h.ReconfigMgmt.GetSavedPlan)
 		v1.POST("/meta/models", h.MetaData.CreateModel)
 		v1.GET("/meta/models", h.MetaData.ListModels)
 		v1.GET("/meta/models/:model_id", h.MetaData.GetModel)
