@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Alert, Button, Card, Input, Select, Space, Table, Tabs, Tag, Typography, message } from 'antd';
-import { calculateReconfigPlan, calculateValueScorePerformance, listMetaModels, listMetaRecords } from '../api';
+import { Alert, Button, Card, Input, Progress, Select, Space, Table, Tabs, Tag, Typography, message } from 'antd';
+import { calculateValueScorePerformance, getReconfigPlanProgress, getReconfigPlanResult, listMetaModels, listMetaRecords, startReconfigPlan } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
 import type { MetaModel, MetaRecord } from '../types';
 
@@ -92,6 +92,8 @@ export default function ReconfigManagementPage() {
 
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
   const [actions, setActions] = useState<ActionRow[]>([]);
+  const [runningJobId, setRunningJobId] = useState<string>('');
+  const [progress, setProgress] = useState<any>(null);
 
   const filteredServers = useMemo(() => {
     const snSet = new Set(parseSNList(scope.snInput));
@@ -208,40 +210,65 @@ export default function ReconfigManagementPage() {
           sn_input: scope.snInput
         }
       };
-      const resp = ensureApiOk(await calculateReconfigPlan(payload));
-      const data = resp.data || {};
-      setTarget((prev) => ({
-        ...prev,
-        perfBaseline: Number(data.target_resolved?.perf_baseline || prev.perfBaseline),
-        memoryDatarateBaseline: Number(data.target_resolved?.memory_datarate_baseline || prev.memoryDatarateBaseline),
-        memoryCapacityBaseline: Number(data.target_resolved?.memory_capacity_baseline || prev.memoryCapacityBaseline),
-        storageCapacityBaseline: Number(data.target_resolved?.storage_capacity_baseline || prev.storageCapacityBaseline)
-      }));
-      setCandidates((data.candidates || []).map((x: any) => ({
-        sn: x.sn,
-        configType: x.config_type,
-        rack: x.rack,
-        datacenter: x.datacenter,
-        memoryDatarate: Number(x.memory_datarate || 0),
-        perfScore: Number(x.perf_score || 0),
-        memoryCapacityGb: Number(x.memory_capacity_gb || 0),
-        storageCapacityTb: Number(x.storage_capacity_tb || 0),
-        memoryGapGb: Number(x.memory_gap_gb || 0),
-        storageGapTb: Number(x.storage_gap_tb || 0),
-        status: x.status
-      })));
-      setActions((data.actions || []).map((x: any) => ({
-        targetSn: x.target_sn,
-        gapType: x.gap_type,
-        gapQty: x.gap_qty,
-        source: x.source,
-        partDetails: x.part_details,
-        crossIdc: x.cross_idc,
-        action: x.action,
-        ruleHit: x.rule_hit
-      })));
-      message.success(`计算完成：候选 ${Number(data.summary?.candidate_count || 0)} 台，执行项 ${Number(data.summary?.action_count || 0)} 条`);
+      const startResp = ensureApiOk(await startReconfigPlan(payload));
+      const jobId = String(startResp.data?.job_id || '');
+      if (!jobId) throw new Error('任务启动失败：缺少 job_id');
+      setRunningJobId(jobId);
+      setProgress({ stage: 'queued', percent: 0, done_packages: 0, total_packages: 0, done_servers: 0, total_servers: 0, done_cores: 0, total_cores: 0 });
+      message.info('改配任务已启动，可切换页面，后台会继续执行');
+
+      // 轮询任务进度
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const progResp = ensureApiOk(await getReconfigPlanProgress(jobId));
+        const pd = progResp.data || {};
+        setProgress(pd.progress || null);
+        const status = String(pd.status || 'running');
+        if (status === 'running') {
+          await new Promise((resolve) => window.setTimeout(resolve, 1000));
+          continue;
+        }
+        if (status === 'failed') {
+          throw new Error(String(pd.error || '计算失败'));
+        }
+
+        const resultResp = ensureApiOk(await getReconfigPlanResult(jobId));
+        const data = resultResp.data?.result || {};
+        setTarget((prev) => ({
+          ...prev,
+          perfBaseline: Number(data.target_resolved?.perf_baseline || prev.perfBaseline),
+          memoryDatarateBaseline: Number(data.target_resolved?.memory_datarate_baseline || prev.memoryDatarateBaseline),
+          memoryCapacityBaseline: Number(data.target_resolved?.memory_capacity_baseline || prev.memoryCapacityBaseline),
+          storageCapacityBaseline: Number(data.target_resolved?.storage_capacity_baseline || prev.storageCapacityBaseline)
+        }));
+        setCandidates((data.candidates || []).map((x: any) => ({
+          sn: x.sn,
+          configType: x.config_type,
+          rack: x.rack,
+          datacenter: x.datacenter,
+          memoryDatarate: Number(x.memory_datarate || 0),
+          perfScore: Number(x.perf_score || 0),
+          memoryCapacityGb: Number(x.memory_capacity_gb || 0),
+          storageCapacityTb: Number(x.storage_capacity_tb || 0),
+          memoryGapGb: Number(x.memory_gap_gb || 0),
+          storageGapTb: Number(x.storage_gap_tb || 0),
+          status: x.status
+        })));
+        setActions((data.actions || []).map((x: any) => ({
+          targetSn: x.target_sn,
+          gapType: x.gap_type,
+          gapQty: x.gap_qty,
+          source: x.source,
+          partDetails: x.part_details,
+          crossIdc: x.cross_idc,
+          action: x.action,
+          ruleHit: x.rule_hit
+        })));
+        message.success(`计算完成：候选 ${Number(data.summary?.candidate_count || 0)} 台，执行项 ${Number(data.summary?.action_count || 0)} 条`);
+        break;
+      }
     } catch (e) {
+      setRunningJobId('');
       message.error(parseApiError(e, '计算改配方案失败'));
     }
   }
@@ -318,7 +345,7 @@ export default function ReconfigManagementPage() {
         </Space>
       </Card>
 
-      <Card title="范围配置（6.2）" extra={<Button type="primary" onClick={computePlan}>计算改配方案</Button>}>
+      <Card title="范围配置（6.2）" extra={<Button type="primary" loading={!!runningJobId} onClick={computePlan}>计算改配方案</Button>}>
         <Space direction="vertical" style={{ width: '100%' }} size={12}>
           <Space wrap>
             <Text>PSA（单值；多个用英文逗号分隔）</Text>
@@ -353,6 +380,20 @@ export default function ReconfigManagementPage() {
             />
           </Space>
           <Text type="secondary">范围命中：{filteredServers.length} 台</Text>
+          {runningJobId && progress ? (
+            <Card size="small" style={{ marginTop: 8, width: 760 }}>
+              <Space direction="vertical" style={{ width: '100%' }} size={6}>
+                <Text strong>任务执行中：{runningJobId}</Text>
+                <Text type="secondary">阶段：{progress.stage || '-'} {progress.message ? `｜${progress.message}` : ''}</Text>
+                <Progress percent={Number(progress.percent || 0)} status="active" />
+                <Space wrap>
+                  <Tag color="blue">套餐进度：{Number(progress.done_packages || 0)}/{Number(progress.total_packages || 0)}</Tag>
+                  <Tag color="green">主机进度：{Number(progress.done_servers || 0)}/{Number(progress.total_servers || 0)}</Tag>
+                  <Tag color="purple">逻辑核进度：{Number(progress.done_cores || 0)}/{Number(progress.total_cores || 0)}</Tag>
+                </Space>
+              </Space>
+            </Card>
+          ) : null}
         </Space>
       </Card>
 

@@ -58,6 +58,18 @@ type ReconfigActionRow struct {
 	RuleHit     string `json:"rule_hit"`
 }
 
+type ReconfigPlanProgress struct {
+	Stage        string  `json:"stage"`
+	Percent      float64 `json:"percent"`
+	Message      string  `json:"message,omitempty"`
+	DonePackages int     `json:"done_packages"`
+	TotalPackages int    `json:"total_packages"`
+	DoneServers  int     `json:"done_servers"`
+	TotalServers int     `json:"total_servers"`
+	DoneCores    float64 `json:"done_cores"`
+	TotalCores   float64 `json:"total_cores"`
+}
+
 type ReconfigPlanCalculateResponse struct {
 	TargetResolved ReconfigTargetConfig   `json:"target_resolved"`
 	Candidates     []ReconfigCandidateRow `json:"candidates"`
@@ -75,6 +87,10 @@ func NewReconfigService(metaRepo repository.MetaRepo, datasetRepo repository.Dat
 }
 
 func (s *ReconfigService) CalculatePlan(ctx context.Context, req ReconfigPlanCalculateRequest) (ReconfigPlanCalculateResponse, error) {
+	return s.CalculatePlanWithProgress(ctx, req, nil)
+}
+
+func (s *ReconfigService) CalculatePlanWithProgress(ctx context.Context, req ReconfigPlanCalculateRequest, onProgress func(ReconfigPlanProgress)) (ReconfigPlanCalculateResponse, error) {
 	servers, racks, memories, disks, configs, err := s.loadMetaRecords(ctx)
 	if err != nil {
 		return ReconfigPlanCalculateResponse{}, err
@@ -189,6 +205,32 @@ func (s *ReconfigService) CalculatePlan(ctx context.Context, req ReconfigPlanCal
 		filteredServers = append(filteredServers, sv)
 	}
 
+	coreByConfig := map[string]float64{}
+	for _, c := range configs {
+		cfg := strings.TrimSpace(pick(c, "config_type", "配置类型"))
+		if cfg == "" {
+			continue
+		}
+		coreByConfig[cfg] = pickNum(c, "logical_cores", "逻辑核")
+	}
+	packageTotalByCore := map[string]int{}
+	totalCores := 0.0
+	for _, sv := range filteredServers {
+		cfg := strings.TrimSpace(pick(sv, "config_type", "配置类型"))
+		core := coreByConfig[cfg]
+		key := fmt.Sprintf("%.0f", core)
+		packageTotalByCore[key]++
+		totalCores += core
+	}
+	totalPackages := len(packageTotalByCore)
+	if onProgress != nil {
+		onProgress(ReconfigPlanProgress{Stage: "candidate", Percent: 5, Message: "开始生成候选", TotalPackages: totalPackages, TotalServers: len(filteredServers), TotalCores: totalCores})
+	}
+	packageDoneByCore := map[string]int{}
+	donePackages := 0
+	doneServers := 0
+	doneCores := 0.0
+
 	candidates := make([]ReconfigCandidateRow, 0, len(filteredServers))
 	for _, sv := range filteredServers {
 		sn := strings.TrimSpace(pick(sv, "sn", "SN"))
@@ -238,6 +280,22 @@ func (s *ReconfigService) CalculatePlan(ctx context.Context, req ReconfigPlanCal
 		}
 
 		warn := req.GoalValueScore > 0 && perf < req.GoalValueScore
+		doneServers++
+		doneCores += coreByConfig[cfgType]
+		coreKey := fmt.Sprintf("%.0f", coreByConfig[cfgType])
+		if packageTotalByCore[coreKey] > 0 {
+			packageDoneByCore[coreKey]++
+			if packageDoneByCore[coreKey] == packageTotalByCore[coreKey] {
+				donePackages++
+			}
+		}
+		if onProgress != nil && (doneServers%20 == 0 || doneServers == len(filteredServers)) {
+			percent := 5.0
+			if len(filteredServers) > 0 {
+				percent = 5 + float64(doneServers)*55/float64(len(filteredServers))
+			}
+			onProgress(ReconfigPlanProgress{Stage: "candidate", Percent: percent, Message: "候选生成中", DonePackages: donePackages, TotalPackages: totalPackages, DoneServers: doneServers, TotalServers: len(filteredServers), DoneCores: round2(doneCores), TotalCores: round2(totalCores)})
+		}
 		candidates = append(candidates, ReconfigCandidateRow{
 			SN:                sn,
 			ConfigType:        cfgType,
@@ -255,7 +313,13 @@ func (s *ReconfigService) CalculatePlan(ctx context.Context, req ReconfigPlanCal
 	}
 
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].SN < candidates[j].SN })
+	if onProgress != nil {
+		onProgress(ReconfigPlanProgress{Stage: "action", Percent: 70, Message: "生成执行清单中", DonePackages: donePackages, TotalPackages: totalPackages, DoneServers: doneServers, TotalServers: len(filteredServers), DoneCores: round2(doneCores), TotalCores: round2(totalCores)})
+	}
 	actions := s.buildActions(candidates, filteredServers, memories, disks, rackIDC)
+	if onProgress != nil {
+		onProgress(ReconfigPlanProgress{Stage: "done", Percent: 100, Message: "计算完成", DonePackages: donePackages, TotalPackages: totalPackages, DoneServers: doneServers, TotalServers: len(filteredServers), DoneCores: round2(doneCores), TotalCores: round2(totalCores)})
+	}
 
 	return ReconfigPlanCalculateResponse{
 		TargetResolved: target,

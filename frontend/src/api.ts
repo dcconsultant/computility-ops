@@ -184,6 +184,21 @@ export async function calculateReconfigPlan(payload: any) {
   return data;
 }
 
+export async function startReconfigPlan(payload: any) {
+  const { data } = await http.post<ApiResp<{ job_id: string; status: string }>>('/reconfig/plan/start', payload);
+  return data;
+}
+
+export async function getReconfigPlanProgress(jobId: string) {
+  const { data } = await http.get<ApiResp<any>>(`/reconfig/plan/progress/${jobId}`);
+  return data;
+}
+
+export async function getReconfigPlanResult(jobId: string) {
+  const { data } = await http.get<ApiResp<any>>(`/reconfig/plan/result/${jobId}`);
+  return data;
+}
+
 export async function importValueScoreOriginalValues(file: File) {
   const form = new FormData();
   form.append('file', file);
