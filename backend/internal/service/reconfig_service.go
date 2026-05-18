@@ -59,15 +59,18 @@ type ReconfigActionRow struct {
 }
 
 type ReconfigPlanProgress struct {
-	Stage        string  `json:"stage"`
-	Percent      float64 `json:"percent"`
-	Message      string  `json:"message,omitempty"`
-	DonePackages int     `json:"done_packages"`
-	TotalPackages int    `json:"total_packages"`
-	DoneServers  int     `json:"done_servers"`
-	TotalServers int     `json:"total_servers"`
-	DoneCores    float64 `json:"done_cores"`
-	TotalCores   float64 `json:"total_cores"`
+	Stage          string  `json:"stage"`
+	Percent        float64 `json:"percent"`
+	Message        string  `json:"message,omitempty"`
+	DonePackages   int     `json:"done_packages"`
+	TotalPackages  int     `json:"total_packages"`
+	DoneServers    int     `json:"done_servers"`
+	TotalServers   int     `json:"total_servers"`
+	DoneCores      float64 `json:"done_cores"`
+	TotalCores     float64 `json:"total_cores"`
+	DoneTargets    int     `json:"done_targets"`
+	TotalTargets   int     `json:"total_targets"`
+	SuccessTargets int     `json:"success_targets"`
 }
 
 type ReconfigPlanCalculateResponse struct {
@@ -318,12 +321,27 @@ func (s *ReconfigService) CalculatePlanWithProgress(ctx context.Context, req Rec
 	}
 
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].SN < candidates[j].SN })
-	if onProgress != nil {
-		onProgress(ReconfigPlanProgress{Stage: "action", Percent: 70, Message: "生成执行清单中", DonePackages: donePackages, TotalPackages: totalPackages, DoneServers: doneServers, TotalServers: len(filteredServers), DoneCores: round2(doneCores), TotalCores: round2(totalCores)})
+	plannedTargets := 0
+	for _, c := range candidates {
+		if c.Status == "候选" && (c.MemoryGapGB > 0 || c.StorageGapTB > 0) {
+			plannedTargets++
+		}
 	}
-	actions, successSN := s.buildActions(candidates, filteredServers, memories, disks, rackIDC, memoryByServerSN, diskByServerSN)
 	if onProgress != nil {
-		onProgress(ReconfigPlanProgress{Stage: "done", Percent: 100, Message: "计算完成", DonePackages: donePackages, TotalPackages: totalPackages, DoneServers: doneServers, TotalServers: len(filteredServers), DoneCores: round2(doneCores), TotalCores: round2(totalCores)})
+		onProgress(ReconfigPlanProgress{Stage: "action", Percent: 70, Message: "生成执行清单中", DonePackages: donePackages, TotalPackages: totalPackages, DoneServers: doneServers, TotalServers: len(filteredServers), DoneCores: round2(doneCores), TotalCores: round2(totalCores), DoneTargets: 0, TotalTargets: plannedTargets, SuccessTargets: 0})
+	}
+	actions, successSN := s.buildActions(candidates, filteredServers, memories, disks, rackIDC, memoryByServerSN, diskByServerSN, func(done, total, success int) {
+		if onProgress == nil {
+			return
+		}
+		percent := 70.0
+		if total > 0 {
+			percent = 70 + float64(done)*28/float64(total)
+		}
+		onProgress(ReconfigPlanProgress{Stage: "action", Percent: percent, Message: fmt.Sprintf("生成执行清单中（%d/%d）", done, total), DonePackages: donePackages, TotalPackages: totalPackages, DoneServers: doneServers, TotalServers: len(filteredServers), DoneCores: round2(doneCores), TotalCores: round2(totalCores), DoneTargets: done, TotalTargets: total, SuccessTargets: success})
+	})
+	if onProgress != nil {
+		onProgress(ReconfigPlanProgress{Stage: "done", Percent: 100, Message: "计算完成", DonePackages: donePackages, TotalPackages: totalPackages, DoneServers: doneServers, TotalServers: len(filteredServers), DoneCores: round2(doneCores), TotalCores: round2(totalCores), DoneTargets: plannedTargets, TotalTargets: plannedTargets, SuccessTargets: len(successSN)})
 	}
 
 	successServerCount := 0
@@ -403,7 +421,7 @@ func (s *ReconfigService) loadMetaRecords(ctx context.Context) (servers, racks, 
 	return data["server"], data["rack"], data["memory"], data["disk"], data["config_type"], nil
 }
 
-func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filteredServers []map[string]any, memories, disks []map[string]any, rackIDC map[string]string, memoryByServerSN, diskByServerSN map[string][]map[string]any) ([]ReconfigActionRow, map[string]bool) {
+func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filteredServers []map[string]any, memories, disks []map[string]any, rackIDC map[string]string, memoryByServerSN, diskByServerSN map[string][]map[string]any, onProgress func(done, total, success int)) ([]ReconfigActionRow, map[string]bool) {
 	serverRack := map[string]string{}
 	serverIDC := map[string]string{}
 	for _, sv := range filteredServers {
@@ -462,11 +480,21 @@ func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filter
 		return candidates[i].SN < candidates[j].SN
 	})
 
+	totalTargets := 0
+	for _, c := range candidates {
+		if c.Status == "候选" && (c.MemoryGapGB > 0 || c.StorageGapTB > 0) {
+			totalTargets++
+		}
+	}
+	doneTargets := 0
+	successTargets := 0
+
 	for _, c := range candidates {
 		if c.Status != "候选" || (c.MemoryGapGB <= 0 && c.StorageGapTB <= 0) {
 			continue
 		}
 		plannedSN[c.SN] = struct{}{}
+		doneTargets++
 
 		hostMems := memoryByServerSN[c.SN]
 		hostDisks := diskByServerSN[c.SN]
@@ -578,8 +606,12 @@ func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filter
 
 		if memFulfilled && diskFulfilled {
 			successSN[c.SN] = true
+			successTargets++
 			actions = append(actions, tempActions...)
 			for _, psn := range tempUsed { if psn != "" { usedPartSN[psn] = struct{}{} } }
+		}
+		if onProgress != nil && (doneTargets%20 == 0 || doneTargets == totalTargets) {
+			onProgress(doneTargets, totalTargets, successTargets)
 		}
 	}
 

@@ -456,6 +456,8 @@ export default function ReconfigManagementPage() {
                   <Tag color="blue">套餐进度：{Number(progress.done_packages || 0)}/{Number(progress.total_packages || 0)}</Tag>
                   <Tag color="green">主机进度：{Number(progress.done_servers || 0)}/{Number(progress.total_servers || 0)}</Tag>
                   <Tag color="purple">逻辑核进度：{Number(progress.done_cores || 0)}/{Number(progress.total_cores || 0)}</Tag>
+                  <Tag color="gold">清单目标进度：{Number(progress.done_targets || 0)}/{Number(progress.total_targets || 0)}</Tag>
+                  <Tag color="cyan">清单阶段成功数：{Number(progress.success_targets || 0)}</Tag>
                 </Space>
               </Space>
             </Card>
