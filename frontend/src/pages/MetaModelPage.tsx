@@ -65,6 +65,7 @@ export default function MetaModelPage() {
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importUniqueMode, setImportUniqueMode] = useState<'strict' | 'off'>('strict');
+  const [importStrategy, setImportStrategy] = useState<'append' | 'overwrite_all'>('append');
   const [importResultOpen, setImportResultOpen] = useState(false);
   const [importSummary, setImportSummary] = useState<{ total: number; success: number; failed: number; processed?: number; status?: string }>({ total: 0, success: 0, failed: 0 });
   const [importErrors, setImportErrors] = useState<Array<{ row: number; key?: string; error: string }>>([]);
@@ -447,7 +448,11 @@ export default function MetaModelPage() {
     if (!selectedModel) return false;
     try {
       setImporting(true);
-      const start = ensureApiOk(await importMetaRecords(selectedModel.id, file, importUniqueMode));
+      if (importStrategy === 'overwrite_all') {
+        const okCover = window.confirm('将执行【全量覆盖】：当前模型已有记录会被新文件整体替换，是否继续？');
+        if (!okCover) return false;
+      }
+      const start = ensureApiOk(await importMetaRecords(selectedModel.id, file, importUniqueMode, importStrategy));
       const jobId = start.data.job_id;
       setImportJobId(jobId);
       setImportResultOpen(true);
@@ -562,6 +567,15 @@ export default function MetaModelPage() {
                   options={[
                     { label: '唯一校验: strict（默认，重复唯一字段会拦截并报错）', value: 'strict' },
                     { label: '唯一校验: off（不校验唯一字段，可能导入重复数据）', value: 'off' }
+                  ]}
+                />
+                <Select
+                  value={importStrategy}
+                  onChange={(v) => setImportStrategy(v as 'append' | 'overwrite_all')}
+                  style={{ width: 260 }}
+                  options={[
+                    { label: '导入策略: append（追加导入）', value: 'append' },
+                    { label: '导入策略: overwrite_all（全量覆盖）', value: 'overwrite_all' }
                   ]}
                 />
                 <Upload beforeUpload={(file) => onImportRecords(file as File)} showUploadList={false} disabled={!selectedModel || selectedModel.status !== 'published'}>

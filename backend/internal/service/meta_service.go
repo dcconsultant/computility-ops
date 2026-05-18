@@ -655,16 +655,57 @@ func (s *MetaService) ImportRecordsBatch(ctx context.Context, modelID string, ro
 }
 
 func (s *MetaService) ImportRecordsBatchWithMode(ctx context.Context, modelID string, rows []map[string]any, mode string) (ImportRecordsResult, error) {
-	modelID = strings.TrimSpace(modelID)
-	m, fields, err := s.GetModel(ctx, modelID)
+	_, prepared, result, err := s.prepareImportRows(ctx, modelID, rows, mode, true)
 	if err != nil {
 		return ImportRecordsResult{}, err
 	}
+	if len(prepared) == 0 {
+		return result, nil
+	}
+	if err := s.repo.CreateRecordsBatch(ctx, prepared); err != nil {
+		return ImportRecordsResult{}, err
+	}
+	result.Success += len(prepared)
+	return result, nil
+}
+
+func (s *MetaService) ReplaceAllRecordsBatchWithMode(ctx context.Context, modelID string, rows []map[string]any, mode string) (ImportRecordsResult, error) {
+	existing, prepared, result, err := s.prepareImportRows(ctx, modelID, rows, mode, false)
+	if err != nil {
+		return ImportRecordsResult{}, err
+	}
+	if result.Failed > 0 {
+		return result, nil
+	}
+	for _, rec := range existing {
+		if err := s.repo.DeleteRecord(ctx, modelID, rec.ID); err != nil {
+			return ImportRecordsResult{}, err
+		}
+	}
+	if len(prepared) > 0 {
+		if err := s.repo.CreateRecordsBatch(ctx, prepared); err != nil {
+			return ImportRecordsResult{}, err
+		}
+	}
+	result.Success = len(prepared)
+	return result, nil
+}
+
+func (s *MetaService) prepareImportRows(ctx context.Context, modelID string, rows []map[string]any, mode string, checkExistingUnique bool) ([]domain.MetaRecord, []domain.MetaRecord, ImportRecordsResult, error) {
+	modelID = strings.TrimSpace(modelID)
+	m, fields, err := s.GetModel(ctx, modelID)
+	if err != nil {
+		return nil, nil, ImportRecordsResult{}, err
+	}
 	if m.Status != domain.MetaModelStatusPublished {
-		return ImportRecordsResult{}, fmt.Errorf("model is not published")
+		return nil, nil, ImportRecordsResult{}, fmt.Errorf("model is not published")
+	}
+	existing, err := s.repo.ListRecords(ctx, modelID)
+	if err != nil {
+		return nil, nil, ImportRecordsResult{}, err
 	}
 	result := ImportRecordsResult{Total: len(rows), Errors: make([]map[string]any, 0)}
-	batch := make([]domain.MetaRecord, 0, 2000)
+	prepared := make([]domain.MetaRecord, 0, len(rows))
 
 	useMode := strings.ToLower(strings.TrimSpace(mode))
 	if useMode == "" {
@@ -682,11 +723,7 @@ func (s *MetaService) ImportRecordsBatchWithMode(ctx context.Context, modelID st
 				seenInImport[f.FieldCode] = map[string]int{}
 			}
 		}
-		if len(uniqueFields) > 0 {
-			existing, listErr := s.repo.ListRecords(ctx, modelID)
-			if listErr != nil {
-				return ImportRecordsResult{}, listErr
-			}
+		if checkExistingUnique && len(uniqueFields) > 0 {
 			for _, rec := range existing {
 				for _, uf := range uniqueFields {
 					if v, ok := rec.Data[uf.FieldCode]; ok {
@@ -700,17 +737,6 @@ func (s *MetaService) ImportRecordsBatchWithMode(ctx context.Context, modelID st
 		}
 	}
 
-	flush := func() error {
-		if len(batch) == 0 {
-			return nil
-		}
-		if err := s.repo.CreateRecordsBatch(ctx, batch); err != nil {
-			return err
-		}
-		result.Success += len(batch)
-		batch = batch[:0]
-		return nil
-	}
 	for i, row := range rows {
 		data, e := validateRecordData(row, fields)
 		if e != nil {
@@ -757,17 +783,9 @@ func (s *MetaService) ImportRecordsBatchWithMode(ctx context.Context, modelID st
 			}
 		}
 		now := time.Now()
-		batch = append(batch, domain.MetaRecord{ID: fmt.Sprintf("%d", now.UnixNano()) + fmt.Sprintf("%d", i), ModelID: modelID, Data: data, CreatedAt: now, UpdatedAt: now})
-		if len(batch) >= 2000 {
-			if err := flush(); err != nil {
-				return ImportRecordsResult{}, err
-			}
-		}
+		prepared = append(prepared, domain.MetaRecord{ID: fmt.Sprintf("%d", now.UnixNano()) + fmt.Sprintf("%d", i), ModelID: modelID, Data: data, CreatedAt: now, UpdatedAt: now})
 	}
-	if err := flush(); err != nil {
-		return ImportRecordsResult{}, err
-	}
-	return result, nil
+	return existing, prepared, result, nil
 }
 
 func (s *MetaService) CreateImportJob(ctx context.Context, job domain.MetaImportJob) error {

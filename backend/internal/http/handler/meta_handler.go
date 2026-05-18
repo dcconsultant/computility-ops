@@ -538,15 +538,19 @@ func (h *MetaHandler) ImportRecords(c *gin.Context) {
 	if importUniqueMode != "off" && importUniqueMode != "strict" {
 		importUniqueMode = ""
 	}
+	importStrategy := strings.ToLower(strings.TrimSpace(c.PostForm("import_strategy")))
+	if importStrategy != "overwrite_all" {
+		importStrategy = "append"
+	}
 	primaryFieldCode := ""
 	if len(fields) > 0 {
 		primaryFieldCode = strings.TrimSpace(fields[0].FieldCode)
 	}
-	go h.runImportJob(ctx, jobID, c.Param("model_id"), xf, sheet, fieldMap, primaryFieldCode, importUniqueMode)
+	go h.runImportJob(ctx, jobID, c.Param("model_id"), xf, sheet, fieldMap, primaryFieldCode, importUniqueMode, importStrategy)
 	ok(c, gin.H{"job_id": jobID, "status": "running", "total": total})
 }
 
-func (h *MetaHandler) runImportJob(ctx context.Context, jobID, modelID string, xf *excelize.File, sheet string, fieldMap map[int]domain.MetaField, primaryFieldCode, importUniqueMode string) {
+func (h *MetaHandler) runImportJob(ctx context.Context, jobID, modelID string, xf *excelize.File, sheet string, fieldMap map[int]domain.MetaField, primaryFieldCode, importUniqueMode, importStrategy string) {
 	iter, err := xf.Rows(sheet)
 	if err != nil {
 		h.failJob(ctx, jobID, "读取Excel失败")
@@ -558,6 +562,63 @@ func (h *MetaHandler) runImportJob(ctx context.Context, jobID, modelID string, x
 		return
 	}
 	_, _ = iter.Columns()
+
+	if importStrategy == "overwrite_all" {
+		rows := make([]map[string]any, 0, 4096)
+		chunkKeys := make([]string, 0, 4096)
+		for iter.Next() {
+			cols, colErr := iter.Columns()
+			if colErr != nil {
+				h.failJob(ctx, jobID, "读取Excel失败")
+				return
+			}
+			data := map[string]any{}
+			for ci, fv := range cols {
+				if field, ok := fieldMap[ci]; ok {
+					data[field.FieldCode] = strings.TrimSpace(fv)
+				}
+			}
+			displayKey := ""
+			if len(cols) > 0 {
+				displayKey = strings.TrimSpace(cols[0])
+			}
+			if displayKey == "" && primaryFieldCode != "" {
+				displayKey = strings.TrimSpace(fmt.Sprintf("%v", data[primaryFieldCode]))
+			}
+			rows = append(rows, data)
+			chunkKeys = append(chunkKeys, displayKey)
+		}
+		res, err := h.service.ReplaceAllRecordsBatchWithMode(ctx, modelID, rows, importUniqueMode)
+		if err != nil {
+			h.failJob(ctx, jobID, err.Error())
+			return
+		}
+		job, err := h.service.GetImportJob(ctx, jobID)
+		if err != nil {
+			return
+		}
+		for _, e := range res.Errors {
+			rowNo, _ := strconv.Atoi(fmt.Sprintf("%v", e["row"]))
+			errorIndex := rowNo - 2
+			if errorIndex >= 0 && errorIndex < len(chunkKeys) {
+				e["key"] = chunkKeys[errorIndex]
+			} else {
+				e["key"] = ""
+			}
+			job.Errors = append(job.Errors, e)
+		}
+		job.Processed = job.Total
+		job.Success = res.Success
+		job.Failed = res.Failed
+		now := time.Now()
+		job.Status = "done"
+		job.FinishedAt = &now
+		if res.Failed > 0 {
+			job.Message = "全量覆盖预检未通过，未执行覆盖"
+		}
+		_ = h.service.UpdateImportJob(ctx, job)
+		return
+	}
 
 	chunkSize := 2000
 	chunk := make([]map[string]any, 0, chunkSize)
