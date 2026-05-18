@@ -343,6 +343,14 @@ func (s *ReconfigService) CalculatePlanWithProgress(ctx context.Context, req Rec
 		warnings = append(warnings, "候选清单为空，请检查配置类型映射、内存速率/性能基线与原始数据")
 	}
 
+	successServerSNs := make([]string, 0, len(successSN))
+	for sn, ok := range successSN {
+		if ok {
+			successServerSNs = append(successServerSNs, sn)
+		}
+	}
+	sort.Strings(successServerSNs)
+
 	return ReconfigPlanCalculateResponse{
 		TargetResolved: target,
 		Candidates:     candidates,
@@ -353,6 +361,7 @@ func (s *ReconfigService) CalculatePlanWithProgress(ctx context.Context, req Rec
 			"action_count":         len(actions),
 			"success_server_count": successServerCount,
 			"success_core_count":   round2(successCoreCount),
+			"success_server_sns":   successServerSNs,
 			"warnings":             warnings,
 		},
 	}, nil

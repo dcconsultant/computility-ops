@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"computility-ops/backend/internal/service"
 	"github.com/gin-gonic/gin"
@@ -33,16 +34,17 @@ type reconfigPlanJob struct {
 }
 
 type reconfigPlanSnapshot struct {
-	PlanID               string                         `json:"plan_id"`
-	CreatedAt            time.Time                      `json:"created_at"`
-	Target               service.ReconfigTargetConfig   `json:"target"`
-	ScopeServerCount     int                            `json:"scope_server_count"`
-	SuccessServerCount   int                            `json:"success_server_count"`
-	SuccessCoreCount     float64                        `json:"success_core_count"`
-	ReconfigServerCount  int                            `json:"reconfig_server_count"`
-	DismantleServerCount int                            `json:"dismantle_server_count"`
-	Hosts                []map[string]any               `json:"hosts"`
-	Actions              []service.ReconfigActionRow    `json:"actions"`
+	PlanID               string                      `json:"plan_id"`
+	CreatedAt            time.Time                   `json:"created_at"`
+	Target               service.ReconfigTargetConfig `json:"target"`
+	ScopeServerCount     int                         `json:"scope_server_count"`
+	SuccessServerCount   int                         `json:"success_server_count"`
+	SuccessCoreCount     float64                     `json:"success_core_count"`
+	ReconfigServerCount  int                         `json:"reconfig_server_count"`
+	DismantleServerCount int                         `json:"dismantle_server_count"`
+	ReconfigFee          int                         `json:"reconfig_fee"`
+	Hosts                []map[string]any            `json:"hosts"`
+	Actions              []service.ReconfigActionRow `json:"actions"`
 }
 
 func NewReconfigHandler(svc *service.ReconfigService) *ReconfigHandler {
@@ -231,8 +233,18 @@ func saveReconfigPlanSnapshot(jobID string, target service.ReconfigTargetConfig,
 	successCoreCnt := toFloat(summary["success_core_count"])
 
 	hosts := make([]map[string]any, 0)
-	reconfigSet := map[string]struct{}{}
-	dismantleSet := map[string]struct{}{}
+	targetSet := map[string]struct{}{}
+	donorSet := map[string]struct{}{}
+	successSet := map[string]struct{}{}
+	if arr, ok := summary["success_server_sns"].([]any); ok {
+		for _, it := range arr {
+			sn := strings.TrimSpace(fmt.Sprintf("%v", it))
+			if sn != "" {
+				successSet[sn] = struct{}{}
+			}
+		}
+	}
+
 	for _, a := range out.Actions {
 		hosts = append(hosts, map[string]any{
 			"target_sn": a.TargetSN,
@@ -240,17 +252,27 @@ func saveReconfigPlanSnapshot(jobID string, target service.ReconfigTargetConfig,
 			"gap_qty": a.GapQty,
 			"part_details": a.PartDetails,
 		})
-		if strings.Contains(a.Source, "SN:") {
-			parts := strings.Split(a.Source, "SN:")
-			for i := 1; i < len(parts); i++ {
-				sn := strings.Fields(parts[i])[0]
-				if sn != "" {
-					dismantleSet[sn] = struct{}{}
-				}
-			}
+		if sn := strings.TrimSpace(a.TargetSN); sn != "" {
+			targetSet[sn] = struct{}{}
 		}
-		reconfigSet[a.TargetSN] = struct{}{}
+		for _, sn := range extractSourceSNs(a.Source) {
+			donorSet[sn] = struct{}{}
+		}
 	}
+
+	dismantleSet := map[string]struct{}{}
+	for sn := range donorSet {
+		if _, inbound := targetSet[sn]; inbound {
+			continue
+		}
+		if _, success := successSet[sn]; success {
+			continue
+		}
+		dismantleSet[sn] = struct{}{}
+	}
+	reconfigServerCount := len(targetSet)
+	dismantleServerCount := len(dismantleSet)
+	reconfigFee := (reconfigServerCount + dismantleServerCount) * 70
 
 	snapshot := reconfigPlanSnapshot{
 		PlanID:               fmt.Sprintf("%s-%d", jobID, time.Now().Unix()),
@@ -259,8 +281,9 @@ func saveReconfigPlanSnapshot(jobID string, target service.ReconfigTargetConfig,
 		ScopeServerCount:     scopeCnt,
 		SuccessServerCount:   successServerCnt,
 		SuccessCoreCount:     successCoreCnt,
-		ReconfigServerCount:  len(reconfigSet),
-		DismantleServerCount: len(dismantleSet),
+		ReconfigServerCount:  reconfigServerCount,
+		DismantleServerCount: dismantleServerCount,
+		ReconfigFee:          reconfigFee,
 		Hosts:                hosts,
 		Actions:              out.Actions,
 	}
@@ -291,6 +314,37 @@ func toInt(v any) int {
 	default:
 		return 0
 	}
+}
+
+func extractSourceSNs(source string) []string {
+	if !strings.Contains(source, "SN:") {
+		return nil
+	}
+	parts := strings.Split(source, "SN:")
+	out := make([]string, 0, len(parts)-1)
+	seen := map[string]struct{}{}
+	for i := 1; i < len(parts); i++ {
+		raw := strings.TrimSpace(parts[i])
+		if raw == "" {
+			continue
+		}
+		tokens := strings.Fields(raw)
+		if len(tokens) == 0 {
+			continue
+		}
+		sn := strings.TrimFunc(tokens[0], func(r rune) bool {
+			return unicode.IsPunct(r) || unicode.IsSpace(r)
+		})
+		if sn == "" {
+			continue
+		}
+		if _, ok := seen[sn]; ok {
+			continue
+		}
+		seen[sn] = struct{}{}
+		out = append(out, sn)
+	}
+	return out
 }
 
 func toFloat(v any) float64 {
