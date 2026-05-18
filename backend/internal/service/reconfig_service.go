@@ -80,6 +80,15 @@ type ReconfigPlanCalculateResponse struct {
 	Summary        map[string]any         `json:"summary"`
 }
 
+type ReconfigFailureReport struct {
+	TotalFailed        int            `json:"total_failed"`
+	MemoryInsufficient int            `json:"memory_insufficient"`
+	DiskInsufficient   int            `json:"disk_insufficient"`
+	BothInsufficient   int            `json:"both_insufficient"`
+	ByConfigType       map[string]int `json:"by_config_type"`
+	ByDatacenter       map[string]int `json:"by_datacenter"`
+}
+
 type ReconfigService struct {
 	metaRepo    repository.MetaRepo
 	datasetRepo repository.DatasetRepo
@@ -330,7 +339,7 @@ func (s *ReconfigService) CalculatePlanWithProgress(ctx context.Context, req Rec
 	if onProgress != nil {
 		onProgress(ReconfigPlanProgress{Stage: "action", Percent: 70, Message: "生成执行清单中", DonePackages: donePackages, TotalPackages: totalPackages, DoneServers: doneServers, TotalServers: len(filteredServers), DoneCores: round2(doneCores), TotalCores: round2(totalCores), DoneTargets: 0, TotalTargets: plannedTargets, SuccessTargets: 0})
 	}
-	actions, successSN := s.buildActions(candidates, filteredServers, memories, disks, rackIDC, memoryByServerSN, diskByServerSN, func(done, total, success int) {
+	actions, successSN, failureReport := s.buildActions(candidates, filteredServers, memories, disks, rackIDC, memoryByServerSN, diskByServerSN, func(done, total, success int) {
 		if onProgress == nil {
 			return
 		}
@@ -395,6 +404,7 @@ func (s *ReconfigService) CalculatePlanWithProgress(ctx context.Context, req Rec
 			"planned_reconfig_count":  plannedReconfigCount,
 			"success_reconfig_count":  successReconfigCount,
 			"resource_efficiency":     resourceEfficiency,
+			"failure_report":          failureReport,
 			"warnings":                warnings,
 		},
 	}, nil
@@ -421,7 +431,7 @@ func (s *ReconfigService) loadMetaRecords(ctx context.Context) (servers, racks, 
 	return data["server"], data["rack"], data["memory"], data["disk"], data["config_type"], nil
 }
 
-func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filteredServers []map[string]any, memories, disks []map[string]any, rackIDC map[string]string, memoryByServerSN, diskByServerSN map[string][]map[string]any, onProgress func(done, total, success int)) ([]ReconfigActionRow, map[string]bool) {
+func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filteredServers []map[string]any, memories, disks []map[string]any, rackIDC map[string]string, memoryByServerSN, diskByServerSN map[string][]map[string]any, onProgress func(done, total, success int)) ([]ReconfigActionRow, map[string]bool, ReconfigFailureReport) {
 	serverRack := map[string]string{}
 	serverIDC := map[string]string{}
 	for _, sv := range filteredServers {
@@ -467,6 +477,7 @@ func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filter
 	actions := make([]ReconfigActionRow, 0)
 	successSN := map[string]bool{}
 	plannedSN := map[string]struct{}{}
+	failureReport := ReconfigFailureReport{ByConfigType: map[string]int{}, ByDatacenter: map[string]int{}}
 
 	sort.SliceStable(candidates, func(i, j int) bool {
 		if candidates[i].PerfScore != candidates[j].PerfScore {
@@ -609,13 +620,30 @@ func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filter
 			successTargets++
 			actions = append(actions, tempActions...)
 			for _, psn := range tempUsed { if psn != "" { usedPartSN[psn] = struct{}{} } }
+		} else {
+			failureReport.TotalFailed++
+			if !memFulfilled && !diskFulfilled {
+				failureReport.BothInsufficient++
+			} else if !memFulfilled {
+				failureReport.MemoryInsufficient++
+			} else if !diskFulfilled {
+				failureReport.DiskInsufficient++
+			}
+			if c.ConfigType != "" {
+				failureReport.ByConfigType[c.ConfigType]++
+			}
+			idc := c.Datacenter
+			if idc == "" {
+				idc = "未知"
+			}
+			failureReport.ByDatacenter[idc]++
 		}
 		if onProgress != nil && (doneTargets%20 == 0 || doneTargets == totalTargets) {
 			onProgress(doneTargets, totalTargets, successTargets)
 		}
 	}
 
-	return actions, successSN
+	return actions, successSN, failureReport
 }
 
 type donorPickResult struct {

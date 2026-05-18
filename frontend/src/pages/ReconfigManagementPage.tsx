@@ -95,6 +95,7 @@ export default function ReconfigManagementPage() {
   const [runningJobId, setRunningJobId] = useState<string>('');
   const [progress, setProgress] = useState<any>(null);
   const [planWarnings, setPlanWarnings] = useState<string[]>([]);
+  const [failureReport, setFailureReport] = useState<any>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyList, setHistoryList] = useState<any[]>([]);
@@ -309,6 +310,7 @@ export default function ReconfigManagementPage() {
           ruleHit: x.rule_hit
         })));
         setPlanWarnings(Array.isArray(data.summary?.warnings) ? data.summary.warnings : []);
+        setFailureReport(data.summary?.failure_report || null);
         message.success(`计算完成：候选 ${Number(data.summary?.candidate_count || 0)} 台，执行项 ${Number(data.summary?.action_count || 0)} 条`);
         break;
       }
@@ -526,6 +528,41 @@ export default function ReconfigManagementPage() {
           ) : null}
         </Space>
       </Drawer>
+
+      {failureReport ? (
+        <Card title="改配失败原因报表" size="small">
+          <Space wrap>
+            <Tag color="red">失败总数：{Number(failureReport.total_failed || 0)}</Tag>
+            <Tag color="orange">仅内存不足：{Number(failureReport.memory_insufficient || 0)}</Tag>
+            <Tag color="gold">仅硬盘不足：{Number(failureReport.disk_insufficient || 0)}</Tag>
+            <Tag color="purple">内存+硬盘都不足：{Number(failureReport.both_insufficient || 0)}</Tag>
+          </Space>
+          <Space align="start" size={16} style={{ marginTop: 12, width: '100%' }}>
+            <Table
+              size="small"
+              pagination={false}
+              style={{ minWidth: 360 }}
+              rowKey={(r: any) => `cfg-${r.key}`}
+              dataSource={Object.entries(failureReport.by_config_type || {}).map(([key, count]) => ({ key, count: Number(count) })).sort((a, b) => b.count - a.count).slice(0, 10)}
+              columns={[
+                { title: '配置类型', dataIndex: 'key' },
+                { title: '失败台数', dataIndex: 'count', width: 100 }
+              ]}
+            />
+            <Table
+              size="small"
+              pagination={false}
+              style={{ minWidth: 300 }}
+              rowKey={(r: any) => `idc-${r.key}`}
+              dataSource={Object.entries(failureReport.by_datacenter || {}).map(([key, count]) => ({ key, count: Number(count) })).sort((a, b) => b.count - a.count)}
+              columns={[
+                { title: '机房', dataIndex: 'key' },
+                { title: '失败台数', dataIndex: 'count', width: 100 }
+              ]}
+            />
+          </Space>
+        </Card>
+      ) : null}
 
       <Tabs
         items={[
