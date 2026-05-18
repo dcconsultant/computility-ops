@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Alert, Button, Card, Descriptions, Drawer, Input, Progress, Select, Space, Table, Tabs, Tag, Typography, message } from 'antd';
-import { calculateValueScorePerformance, getReconfigPlanProgress, getReconfigPlanResult, getSavedReconfigPlan, listMetaModels, listMetaRecords, listSavedReconfigPlans, startReconfigPlan } from '../api';
+import { calculateValueScorePerformance, exportReconfigActionsByJob, exportReconfigActionsByPlan, getReconfigPlanProgress, getReconfigPlanResult, getSavedReconfigPlan, listMetaModels, listMetaRecords, listSavedReconfigPlans, startReconfigPlan } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
 import type { MetaModel, MetaRecord } from '../types';
 
@@ -100,6 +100,7 @@ export default function ReconfigManagementPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyList, setHistoryList] = useState<any[]>([]);
   const [selectedHistory, setSelectedHistory] = useState<any>(null);
+  const [latestDoneJobId, setLatestDoneJobId] = useState<string>('');
 
   const filteredServers = useMemo(() => {
     const snSet = new Set(parseSNList(scope.snInput));
@@ -311,6 +312,7 @@ export default function ReconfigManagementPage() {
         })));
         setPlanWarnings(Array.isArray(data.summary?.warnings) ? data.summary.warnings : []);
         setFailureReport(data.summary?.failure_report || null);
+        setLatestDoneJobId(jobId);
         message.success(`计算完成：候选 ${Number(data.summary?.candidate_count || 0)} 台，执行项 ${Number(data.summary?.action_count || 0)} 条`);
         break;
       }
@@ -510,7 +512,11 @@ export default function ReconfigManagementPage() {
             ]}
           />
           {selectedHistory ? (
-            <Card size="small" title="历史方案摘要">
+            <Card
+              size="small"
+              title="历史方案摘要"
+              extra={<Button onClick={() => exportReconfigActionsByPlan(selectedHistory.plan_id)}>导出该历史执行清单Excel</Button>}
+            >
               <Descriptions size="small" column={2}>
                 <Descriptions.Item label="方案ID">{selectedHistory.plan_id}</Descriptions.Item>
                 <Descriptions.Item label="创建时间">{selectedHistory.created_at}</Descriptions.Item>
@@ -601,23 +607,34 @@ export default function ReconfigManagementPage() {
             key: 'actions',
             label: `执行清单（${actions.length}）`,
             children: (
-              <Table
-                rowKey={(r) => `${r.targetSn}-${r.gapType}-${r.partDetails}`}
-                size="small"
-                pagination={{ pageSize: 20 }}
-                dataSource={actions}
-                columns={[
-                  { title: '目标SN', dataIndex: 'targetSn', width: 180, fixed: 'left' as const },
-                  { title: '缺口类型', dataIndex: 'gapType', width: 120 },
-                  { title: '缺口数量', dataIndex: 'gapQty', width: 100 },
-                  { title: '推荐来源', dataIndex: 'source', width: 180 },
-                  { title: '配件明细', dataIndex: 'partDetails', width: 260 },
-                  { title: '跨机房搬迁', dataIndex: 'crossIdc', width: 120 },
-                  { title: '执行动作', dataIndex: 'action', width: 100 },
-                  { title: '规则命中说明', dataIndex: 'ruleHit', width: 320 }
-                ]}
-                scroll={{ x: 1500 }}
-              />
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Space>
+                  <Button
+                    disabled={!latestDoneJobId}
+                    onClick={() => latestDoneJobId ? exportReconfigActionsByJob(latestDoneJobId) : null}
+                  >
+                    导出执行清单Excel
+                  </Button>
+                  {!latestDoneJobId ? <Text type="secondary">请先完成一次改配计算后再导出</Text> : null}
+                </Space>
+                <Table
+                  rowKey={(r) => `${r.targetSn}-${r.gapType}-${r.partDetails}`}
+                  size="small"
+                  pagination={{ pageSize: 20 }}
+                  dataSource={actions}
+                  columns={[
+                    { title: '目标SN', dataIndex: 'targetSn', width: 180, fixed: 'left' as const },
+                    { title: '缺口类型', dataIndex: 'gapType', width: 120 },
+                    { title: '缺口数量', dataIndex: 'gapQty', width: 100 },
+                    { title: '推荐来源', dataIndex: 'source', width: 180 },
+                    { title: '配件明细', dataIndex: 'partDetails', width: 260 },
+                    { title: '跨机房搬迁', dataIndex: 'crossIdc', width: 120 },
+                    { title: '执行动作', dataIndex: 'action', width: 100 },
+                    { title: '规则命中说明', dataIndex: 'ruleHit', width: 320 }
+                  ]}
+                  scroll={{ x: 1500 }}
+                />
+              </Space>
             )
           },
           {

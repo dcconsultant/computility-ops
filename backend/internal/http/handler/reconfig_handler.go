@@ -13,6 +13,8 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/xuri/excelize/v2"
+
 	"computility-ops/backend/internal/service"
 	"github.com/gin-gonic/gin"
 )
@@ -34,20 +36,20 @@ type reconfigPlanJob struct {
 }
 
 type reconfigPlanSnapshot struct {
-	PlanID               string                      `json:"plan_id"`
-	CreatedAt            time.Time                   `json:"created_at"`
+	PlanID               string                       `json:"plan_id"`
+	CreatedAt            time.Time                    `json:"created_at"`
 	Target               service.ReconfigTargetConfig `json:"target"`
-	ScopeServerCount     int                         `json:"scope_server_count"`
-	SuccessServerCount   int                         `json:"success_server_count"`
-	SuccessCoreCount     float64                     `json:"success_core_count"`
-	ReconfigServerCount  int                         `json:"reconfig_server_count"`
-	DismantleServerCount int                         `json:"dismantle_server_count"`
-	PlannedReconfigCount int                         `json:"planned_reconfig_count"`
-	SuccessReconfigCount int                         `json:"success_reconfig_count"`
-	ResourceEfficiency   float64                     `json:"resource_efficiency"`
-	ReconfigFee          int                         `json:"reconfig_fee"`
-	Hosts                []map[string]any            `json:"hosts"`
-	Actions              []service.ReconfigActionRow `json:"actions"`
+	ScopeServerCount     int                          `json:"scope_server_count"`
+	SuccessServerCount   int                          `json:"success_server_count"`
+	SuccessCoreCount     float64                      `json:"success_core_count"`
+	ReconfigServerCount  int                          `json:"reconfig_server_count"`
+	DismantleServerCount int                          `json:"dismantle_server_count"`
+	PlannedReconfigCount int                          `json:"planned_reconfig_count"`
+	SuccessReconfigCount int                          `json:"success_reconfig_count"`
+	ResourceEfficiency   float64                      `json:"resource_efficiency"`
+	ReconfigFee          int                          `json:"reconfig_fee"`
+	Hosts                []map[string]any             `json:"hosts"`
+	Actions              []service.ReconfigActionRow  `json:"actions"`
 }
 
 func NewReconfigHandler(svc *service.ReconfigService) *ReconfigHandler {
@@ -74,8 +76,8 @@ func (h *ReconfigHandler) normalizeReq(req CalculateReconfigPlanReq) service.Rec
 		sns = sns[:1000]
 	}
 	return service.ReconfigPlanCalculateRequest{
-		Target: req.Target,
-		Scope: service.ReconfigScopeConfig{PSAList: req.Scope.PSAList, ConfigTypes: req.Scope.ConfigTypes, SNs: sns},
+		Target:         req.Target,
+		Scope:          service.ReconfigScopeConfig{PSAList: req.Scope.PSAList, ConfigTypes: req.Scope.ConfigTypes, SNs: sns},
 		GoalValueScore: req.GoalValueScore,
 	}
 }
@@ -206,27 +208,55 @@ func (h *ReconfigHandler) ListSavedPlans(c *gin.Context) {
 
 func (h *ReconfigHandler) GetSavedPlan(c *gin.Context) {
 	c.Set("audit_action", "reconfig.plan.saved.get")
-	planID := strings.TrimSpace(c.Param("plan_id"))
-	if planID == "" {
-		fail(c, 40001, "plan_id不能为空")
-		return
-	}
-	filename := filepath.Join("backend", "logs", "reconfig-plans", fmt.Sprintf("%s.json", planID))
-	payload, err := os.ReadFile(filename)
+	row, err := loadSavedPlan(strings.TrimSpace(c.Param("plan_id")))
 	if err != nil {
-		if os.IsNotExist(err) {
+		if strings.Contains(err.Error(), "not found") {
 			fail(c, 40401, "方案不存在")
+			return
+		}
+		if strings.Contains(err.Error(), "invalid") {
+			fail(c, 50001, "方案内容损坏")
 			return
 		}
 		fail(c, 50001, "读取改配方案失败")
 		return
 	}
-	var row reconfigPlanSnapshot
-	if err := json.Unmarshal(payload, &row); err != nil {
-		fail(c, 50001, "方案内容损坏")
+	ok(c, row)
+}
+
+func (h *ReconfigHandler) ExportPlanResultActions(c *gin.Context) {
+	c.Set("audit_action", "reconfig.plan.result.actions.export")
+	jobID := strings.TrimSpace(c.Param("job_id"))
+	h.mu.RLock()
+	job, found := h.jobs[jobID]
+	h.mu.RUnlock()
+	if !found {
+		fail(c, 40401, "任务不存在")
 		return
 	}
-	ok(c, row)
+	if job.Status != "done" || job.Result == nil {
+		fail(c, 40001, "任务未完成，无法导出执行清单")
+		return
+	}
+	exportActionsExcel(c, job.Result.Actions, fmt.Sprintf("reconfig-actions-%s", jobID))
+}
+
+func (h *ReconfigHandler) ExportSavedPlanActions(c *gin.Context) {
+	c.Set("audit_action", "reconfig.plan.saved.actions.export")
+	row, err := loadSavedPlan(strings.TrimSpace(c.Param("plan_id")))
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			fail(c, 40401, "方案不存在")
+			return
+		}
+		if strings.Contains(err.Error(), "invalid") {
+			fail(c, 50001, "方案内容损坏")
+			return
+		}
+		fail(c, 50001, "读取改配方案失败")
+		return
+	}
+	exportActionsExcel(c, row.Actions, fmt.Sprintf("reconfig-actions-%s", row.PlanID))
 }
 
 func saveReconfigPlanSnapshot(jobID string, target service.ReconfigTargetConfig, out service.ReconfigPlanCalculateResponse) error {
@@ -253,9 +283,9 @@ func saveReconfigPlanSnapshot(jobID string, target service.ReconfigTargetConfig,
 
 	for _, a := range out.Actions {
 		hosts = append(hosts, map[string]any{
-			"target_sn": a.TargetSN,
-			"gap_type": a.GapType,
-			"gap_qty": a.GapQty,
+			"target_sn":    a.TargetSN,
+			"gap_type":     a.GapType,
+			"gap_qty":      a.GapQty,
 			"part_details": a.PartDetails,
 		})
 		if sn := strings.TrimSpace(a.TargetSN); sn != "" {
@@ -323,6 +353,57 @@ func toInt(v any) int {
 	default:
 		return 0
 	}
+}
+
+func loadSavedPlan(planID string) (reconfigPlanSnapshot, error) {
+	if planID == "" {
+		return reconfigPlanSnapshot{}, fmt.Errorf("plan_id empty")
+	}
+	filename := filepath.Join("backend", "logs", "reconfig-plans", fmt.Sprintf("%s.json", planID))
+	payload, err := os.ReadFile(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return reconfigPlanSnapshot{}, fmt.Errorf("not found")
+		}
+		return reconfigPlanSnapshot{}, err
+	}
+	var row reconfigPlanSnapshot
+	if err := json.Unmarshal(payload, &row); err != nil {
+		return reconfigPlanSnapshot{}, fmt.Errorf("invalid")
+	}
+	return row, nil
+}
+
+func exportActionsExcel(c *gin.Context, actions []service.ReconfigActionRow, filenamePrefix string) {
+	f := excelize.NewFile()
+	sheet := f.GetSheetName(0)
+	f.SetSheetName(sheet, "执行清单")
+	headers := []string{"目标SN", "缺口类型", "缺口数量", "推荐来源", "配件明细", "跨机房搬迁", "执行动作", "规则命中说明"}
+	for i, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		_ = f.SetCellValue("执行清单", cell, h)
+	}
+	for i, a := range actions {
+		row := i + 2
+		_ = f.SetCellValue("执行清单", fmt.Sprintf("A%d", row), a.TargetSN)
+		_ = f.SetCellValue("执行清单", fmt.Sprintf("B%d", row), a.GapType)
+		_ = f.SetCellValue("执行清单", fmt.Sprintf("C%d", row), a.GapQty)
+		_ = f.SetCellValue("执行清单", fmt.Sprintf("D%d", row), a.Source)
+		_ = f.SetCellValue("执行清单", fmt.Sprintf("E%d", row), a.PartDetails)
+		_ = f.SetCellValue("执行清单", fmt.Sprintf("F%d", row), a.CrossIDC)
+		_ = f.SetCellValue("执行清单", fmt.Sprintf("G%d", row), a.Action)
+		_ = f.SetCellValue("执行清单", fmt.Sprintf("H%d", row), a.RuleHit)
+	}
+	_ = f.SetColWidth("执行清单", "A", "H", 24)
+	buf, err := f.WriteToBuffer()
+	if err != nil {
+		fail(c, 50001, "导出执行清单失败")
+		return
+	}
+	filename := fmt.Sprintf("%s-%s.xlsx", filenamePrefix, time.Now().Format("20060102-150405"))
+	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	c.Data(200, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buf.Bytes())
 }
 
 func extractSourceSNs(source string) []string {

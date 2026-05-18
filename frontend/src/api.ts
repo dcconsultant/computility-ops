@@ -209,6 +209,14 @@ export async function getSavedReconfigPlan(planId: string) {
   return data;
 }
 
+export function exportReconfigActionsByJob(jobId: string) {
+  window.open(`/api/v1/reconfig/plan/result/${jobId}/actions/export`, '_blank');
+}
+
+export function exportReconfigActionsByPlan(planId: string) {
+  window.open(`/api/v1/reconfig/plans/${planId}/actions/export`, '_blank');
+}
+
 export async function importValueScoreOriginalValues(file: File) {
   const form = new FormData();
   form.append('file', file);
