@@ -351,18 +351,33 @@ func (s *ReconfigService) CalculatePlanWithProgress(ctx context.Context, req Rec
 	}
 	sort.Strings(successServerSNs)
 
+	plannedReconfigCount := 0
+	for _, c := range candidates {
+		if c.Status == "候选" && (c.MemoryGapGB > 0 || c.StorageGapTB > 0) {
+			plannedReconfigCount++
+		}
+	}
+	successReconfigCount := successServerCount
+	resourceEfficiency := 0.0
+	if plannedReconfigCount > 0 {
+		resourceEfficiency = round2(float64(successReconfigCount) / float64(plannedReconfigCount))
+	}
+
 	return ReconfigPlanCalculateResponse{
 		TargetResolved: target,
 		Candidates:     candidates,
 		Actions:        actions,
 		Summary: map[string]any{
-			"scope_server_count":   len(filteredServers),
-			"candidate_count":      len(candidates),
-			"action_count":         len(actions),
-			"success_server_count": successServerCount,
-			"success_core_count":   round2(successCoreCount),
-			"success_server_sns":   successServerSNs,
-			"warnings":             warnings,
+			"scope_server_count":      len(filteredServers),
+			"candidate_count":         len(candidates),
+			"action_count":            len(actions),
+			"success_server_count":    successServerCount,
+			"success_core_count":      round2(successCoreCount),
+			"success_server_sns":      successServerSNs,
+			"planned_reconfig_count":  plannedReconfigCount,
+			"success_reconfig_count":  successReconfigCount,
+			"resource_efficiency":     resourceEfficiency,
+			"warnings":                warnings,
 		},
 	}, nil
 }
@@ -430,169 +445,133 @@ func (s *ReconfigService) buildActions(candidates []ReconfigCandidateRow, filter
 		}
 	}
 
+	usedPartSN := map[string]struct{}{}
 	actions := make([]ReconfigActionRow, 0)
 	successSN := map[string]bool{}
+	plannedSN := map[string]struct{}{}
+
+	sort.SliceStable(candidates, func(i, j int) bool {
+		wi := candidates[i].MemoryGapGB + candidates[i].StorageGapTB*1024
+		wj := candidates[j].MemoryGapGB + candidates[j].StorageGapTB*1024
+		if wi != wj {
+			return wi < wj
+		}
+		if candidates[i].PerfScore != candidates[j].PerfScore {
+			return candidates[i].PerfScore > candidates[j].PerfScore
+		}
+		return candidates[i].SN < candidates[j].SN
+	})
+
 	for _, c := range candidates {
 		if c.Status != "候选" || (c.MemoryGapGB <= 0 && c.StorageGapTB <= 0) {
 			continue
 		}
+		plannedSN[c.SN] = struct{}{}
+
 		hostMems := memoryByServerSN[c.SN]
 		hostDisks := diskByServerSN[c.SN]
 		memSpec := map[string]any{}
 		diskSpec := map[string]any{}
-		if len(hostMems) > 0 {
-			memSpec = hostMems[0]
-		}
-		if len(hostDisks) > 0 {
-			diskSpec = hostDisks[0]
-		}
+		if len(hostMems) > 0 { memSpec = hostMems[0] }
+		if len(hostDisks) > 0 { diskSpec = hostDisks[0] }
 		memUnit := preferredMemoryUnitGB(memSpec, memoryInventory)
 		diskUnitTB := math.Max(0.1, pickNum(diskSpec, "capacity", "容量")/1024)
 		needMemCount := roundUpToEven(c.MemoryGapGB / memUnit)
 		needDiskCount := int(math.Ceil(c.StorageGapTB / diskUnitTB))
 
+		tempActions := make([]ReconfigActionRow, 0, 2)
+		tempUsed := make([]string, 0, needMemCount+needDiskCount)
 		memFulfilled := needMemCount <= 0
-		if needMemCount > 0 {
-			matched := make([]map[string]any, 0)
-			for _, m := range memoryInventory {
-				if strings.TrimSpace(pick(m, "brand", "厂商")) != strings.TrimSpace(pick(memSpec, "brand", "厂商")) {
-					continue
-				}
-				if strings.TrimSpace(pick(m, "model", "型号")) != strings.TrimSpace(pick(memSpec, "model", "型号")) {
-					continue
-				}
-				if pickNum(m, "capacity", "容量") != pickNum(memSpec, "capacity", "容量") {
-					continue
-				}
-				if pickNum(m, "datarate", "数据传输率(TM/s)", "数据传输率(MT/s)") != pickNum(memSpec, "datarate", "数据传输率(TM/s)", "数据传输率(MT/s)") {
-					continue
-				}
-				matched = append(matched, m)
-				if len(matched) >= needMemCount {
-					break
-				}
-			}
+		diskFulfilled := needDiskCount <= 0
 
+		if needMemCount > 0 {
+			matched := make([]map[string]any, 0, needMemCount)
+			for _, m := range memoryInventory {
+				partSN := strings.TrimSpace(pick(m, "sn", "序列号"))
+				if partSN != "" { if _, ok := usedPartSN[partSN]; ok { continue } }
+				if strings.TrimSpace(pick(m, "brand", "厂商")) != strings.TrimSpace(pick(memSpec, "brand", "厂商")) { continue }
+				if strings.TrimSpace(pick(m, "model", "型号")) != strings.TrimSpace(pick(memSpec, "model", "型号")) { continue }
+				if pickNum(m, "capacity", "容量") != pickNum(memSpec, "capacity", "容量") { continue }
+				if pickNum(m, "datarate", "数据传输率(TM/s)", "数据传输率(MT/s)") != pickNum(memSpec, "datarate", "数据传输率(TM/s)", "数据传输率(MT/s)") { continue }
+				matched = append(matched, m)
+				if len(matched) >= needMemCount { break }
+			}
 			if len(matched) >= needMemCount {
 				memFulfilled = true
 				srcRack := strings.TrimSpace(pick(matched[0], "rack", "机柜"))
 				srcIDC := strings.TrimSpace(rackIDC[srcRack])
 				sns := make([]string, 0, len(matched))
 				for _, x := range matched {
-					sns = append(sns, strings.TrimSpace(pick(x, "sn", "序列号")))
+					sn := strings.TrimSpace(pick(x, "sn", "序列号"))
+					sns = append(sns, sn)
+					if sn != "" { tempUsed = append(tempUsed, sn) }
 				}
-				actions = append(actions, ReconfigActionRow{
-					TargetSN:    c.SN,
-					GapType:     "内存",
-					GapQty:      fmt.Sprintf("%d 条", needMemCount),
-					Source:      fmt.Sprintf("库房（机房:%s 机柜:%s）", srcIDC, srcRack),
-					PartDetails: strings.Join(sns, ", "),
-					CrossIDC:    ternary(srcIDC != "" && c.Datacenter != "" && srcIDC != c.Datacenter, "是", "否"),
-					Action:      "改配",
-					RuleHit:     "内存规格一致（厂商/型号/容量/速率）+ 优先库房资源",
-				})
+				tempActions = append(tempActions, ReconfigActionRow{TargetSN:c.SN, GapType:"内存", GapQty:fmt.Sprintf("%d 条", needMemCount), Source:fmt.Sprintf("库房（机房:%s 机柜:%s）", srcIDC, srcRack), PartDetails:strings.Join(sns, ", "), CrossIDC:ternary(srcIDC != "" && c.Datacenter != "" && srcIDC != c.Datacenter, "是", "否"), Action:"改配", RuleHit:"内存规格一致（厂商/型号/容量/速率）+ 优先库房资源"})
 			} else {
-				donor := s.pickMemoryDonor(memories, memSpec, c.SN, needMemCount, candidateStatus, serverRack, serverIDC)
-				if donor.missingCount == 0 {
-					memFulfilled = true
-				}
+				donor := s.pickMemoryDonor(memories, memSpec, c.SN, needMemCount, candidateStatus, serverRack, serverIDC, usedPartSN)
+				if donor.missingCount == 0 { memFulfilled = true; tempUsed = append(tempUsed, donor.pickedPartSNs...) }
 				crossIDC := "否"
-				if donor.anyIDC != "" && c.Datacenter != "" && donor.anyIDC != c.Datacenter {
-					crossIDC = "是"
-				}
+				if donor.anyIDC != "" && c.Datacenter != "" && donor.anyIDC != c.Datacenter { crossIDC = "是" }
 				partDetails := donor.details
-				if donor.missingCount > 0 {
-					partDetails = fmt.Sprintf("%s；仍缺 %d 条", donor.details, donor.missingCount)
-				}
-				actions = append(actions, ReconfigActionRow{
-					TargetSN:    c.SN,
-					GapType:     "内存",
-					GapQty:      fmt.Sprintf("%d 条", needMemCount),
-					Source:      donor.source,
-					PartDetails: partDetails,
-					CrossIDC:    crossIDC,
-					Action:      "调拨",
-					RuleHit:     "库房不足后按优先级从主机侧调拨（内存不从内存带宽不足主机取件）",
-				})
+				if donor.missingCount > 0 { partDetails = fmt.Sprintf("%s；仍缺 %d 条", donor.details, donor.missingCount) }
+				tempActions = append(tempActions, ReconfigActionRow{TargetSN:c.SN, GapType:"内存", GapQty:fmt.Sprintf("%d 条", needMemCount), Source:donor.source, PartDetails:partDetails, CrossIDC:crossIDC, Action:"调拨", RuleHit:"库房不足后按优先级从主机侧调拨（内存不从内存带宽不足主机取件）"})
 			}
 		}
 
 		if needDiskCount > 0 {
-			matched := make([]map[string]any, 0)
+			matched := make([]map[string]any, 0, needDiskCount)
 			for _, d := range diskInventory {
-				if strings.TrimSpace(pick(d, "brand", "厂商")) != strings.TrimSpace(pick(diskSpec, "brand", "厂商")) {
-					continue
-				}
-				if strings.TrimSpace(pick(d, "model", "型号")) != strings.TrimSpace(pick(diskSpec, "model", "型号")) {
-					continue
-				}
-				if pickNum(d, "capacity", "容量") != pickNum(diskSpec, "capacity", "容量") {
-					continue
-				}
-				if strings.TrimSpace(pick(d, "application_category", "应用分类")) != strings.TrimSpace(pick(diskSpec, "application_category", "应用分类")) {
-					continue
-				}
+				partSN := strings.TrimSpace(pick(d, "sn", "序列号"))
+				if partSN != "" { if _, ok := usedPartSN[partSN]; ok { continue } }
+				if strings.TrimSpace(pick(d, "brand", "厂商")) != strings.TrimSpace(pick(diskSpec, "brand", "厂商")) { continue }
+				if strings.TrimSpace(pick(d, "model", "型号")) != strings.TrimSpace(pick(diskSpec, "model", "型号")) { continue }
+				if pickNum(d, "capacity", "容量") != pickNum(diskSpec, "capacity", "容量") { continue }
+				if strings.TrimSpace(pick(d, "application_category", "应用分类")) != strings.TrimSpace(pick(diskSpec, "application_category", "应用分类")) { continue }
 				matched = append(matched, d)
-				if len(matched) >= needDiskCount {
-					break
-				}
+				if len(matched) >= needDiskCount { break }
 			}
-
 			if len(matched) >= needDiskCount {
+				diskFulfilled = true
 				srcRack := strings.TrimSpace(pick(matched[0], "rack", "机柜"))
 				srcIDC := strings.TrimSpace(rackIDC[srcRack])
 				sns := make([]string, 0, len(matched))
 				for _, x := range matched {
-					sns = append(sns, strings.TrimSpace(pick(x, "sn", "序列号")))
+					sn := strings.TrimSpace(pick(x, "sn", "序列号"))
+					sns = append(sns, sn)
+					if sn != "" { tempUsed = append(tempUsed, sn) }
 				}
-				actions = append(actions, ReconfigActionRow{
-					TargetSN:    c.SN,
-					GapType:     "硬盘",
-					GapQty:      fmt.Sprintf("%d 块", needDiskCount),
-					Source:      fmt.Sprintf("库房（机房:%s 机柜:%s）", srcIDC, srcRack),
-					PartDetails: strings.Join(sns, ", "),
-					CrossIDC:    ternary(srcIDC != "" && c.Datacenter != "" && srcIDC != c.Datacenter, "是", "否"),
-					Action:      "改配",
-					RuleHit:     "硬盘规格一致（厂商/型号/容量/应用分类）+ 优先库房资源",
-				})
+				tempActions = append(tempActions, ReconfigActionRow{TargetSN:c.SN, GapType:"硬盘", GapQty:fmt.Sprintf("%d 块", needDiskCount), Source:fmt.Sprintf("库房（机房:%s 机柜:%s）", srcIDC, srcRack), PartDetails:strings.Join(sns, ", "), CrossIDC:ternary(srcIDC != "" && c.Datacenter != "" && srcIDC != c.Datacenter, "是", "否"), Action:"改配", RuleHit:"硬盘规格一致（厂商/型号/容量/应用分类）+ 优先库房资源"})
 			} else {
-				donor := s.pickDiskDonor(disks, diskSpec, c.SN, needDiskCount, candidateStatus, serverRack, serverIDC)
+				donor := s.pickDiskDonor(disks, diskSpec, c.SN, needDiskCount, candidateStatus, serverRack, serverIDC, usedPartSN)
+				if donor.missingCount == 0 { diskFulfilled = true; tempUsed = append(tempUsed, donor.pickedPartSNs...) }
 				crossIDC := "否"
-				if donor.anyIDC != "" && c.Datacenter != "" && donor.anyIDC != c.Datacenter {
-					crossIDC = "是"
-				}
+				if donor.anyIDC != "" && c.Datacenter != "" && donor.anyIDC != c.Datacenter { crossIDC = "是" }
 				partDetails := donor.details
-				if donor.missingCount > 0 {
-					partDetails = fmt.Sprintf("%s；仍缺 %d 块", donor.details, donor.missingCount)
-				}
-				actions = append(actions, ReconfigActionRow{
-					TargetSN:    c.SN,
-					GapType:     "硬盘",
-					GapQty:      fmt.Sprintf("%d 块", needDiskCount),
-					Source:      donor.source,
-					PartDetails: partDetails,
-					CrossIDC:    crossIDC,
-					Action:      "调拨",
-					RuleHit:     "库房不足后按优先级从主机侧调拨",
-				})
+				if donor.missingCount > 0 { partDetails = fmt.Sprintf("%s；仍缺 %d 块", donor.details, donor.missingCount) }
+				tempActions = append(tempActions, ReconfigActionRow{TargetSN:c.SN, GapType:"硬盘", GapQty:fmt.Sprintf("%d 块", needDiskCount), Source:donor.source, PartDetails:partDetails, CrossIDC:crossIDC, Action:"调拨", RuleHit:"库房不足后按优先级从主机侧调拨"})
 			}
 		}
-		if memFulfilled {
+
+		if memFulfilled && diskFulfilled {
 			successSN[c.SN] = true
+			actions = append(actions, tempActions...)
+			for _, psn := range tempUsed { if psn != "" { usedPartSN[psn] = struct{}{} } }
 		}
 	}
+
 	return actions, successSN
 }
 
 type donorPickResult struct {
-	source      string
-	details     string
-	anyIDC      string
+	source       string
+	details      string
+	anyIDC       string
 	missingCount int
+	pickedPartSNs []string
 }
 
-func (s *ReconfigService) pickMemoryDonor(memories []map[string]any, memSpec map[string]any, targetSN string, need int, candidateStatus map[string]string, serverRack, serverIDC map[string]string) donorPickResult {
-	return pickDonorCommon(memories, targetSN, need, candidateStatus, serverRack, serverIDC,
+func (s *ReconfigService) pickMemoryDonor(memories []map[string]any, memSpec map[string]any, targetSN string, need int, candidateStatus map[string]string, serverRack, serverIDC map[string]string, usedPartSN map[string]struct{}) donorPickResult {
+	return pickDonorCommon(memories, targetSN, need, candidateStatus, serverRack, serverIDC, usedPartSN,
 		func(m map[string]any) bool {
 			if strings.TrimSpace(pick(m, "brand", "厂商")) != strings.TrimSpace(pick(memSpec, "brand", "厂商")) {
 				return false
@@ -614,8 +593,8 @@ func (s *ReconfigService) pickMemoryDonor(memories []map[string]any, memSpec map
 	)
 }
 
-func (s *ReconfigService) pickDiskDonor(disks []map[string]any, diskSpec map[string]any, targetSN string, need int, candidateStatus map[string]string, serverRack, serverIDC map[string]string) donorPickResult {
-	return pickDonorCommon(disks, targetSN, need, candidateStatus, serverRack, serverIDC,
+func (s *ReconfigService) pickDiskDonor(disks []map[string]any, diskSpec map[string]any, targetSN string, need int, candidateStatus map[string]string, serverRack, serverIDC map[string]string, usedPartSN map[string]struct{}) donorPickResult {
+	return pickDonorCommon(disks, targetSN, need, candidateStatus, serverRack, serverIDC, usedPartSN,
 		func(d map[string]any) bool {
 			if strings.TrimSpace(pick(d, "brand", "厂商")) != strings.TrimSpace(pick(diskSpec, "brand", "厂商")) {
 				return false
@@ -635,7 +614,7 @@ func (s *ReconfigService) pickDiskDonor(disks []map[string]any, diskSpec map[str
 	)
 }
 
-func pickDonorCommon(rows []map[string]any, targetSN string, need int, candidateStatus map[string]string, serverRack, serverIDC map[string]string, specMatch func(map[string]any) bool, allowStatus func(string) bool) donorPickResult {
+func pickDonorCommon(rows []map[string]any, targetSN string, need int, candidateStatus map[string]string, serverRack, serverIDC map[string]string, usedPartSN map[string]struct{}, specMatch func(map[string]any) bool, allowStatus func(string) bool) donorPickResult {
 	type part struct {
 		partSN   string
 		donorSN  string
@@ -648,6 +627,12 @@ func pickDonorCommon(rows []map[string]any, targetSN string, need int, candidate
 		donorSN := strings.TrimSpace(pick(r, "sn_server", "服务器SN"))
 		if donorSN == "" || donorSN == targetSN {
 			continue
+		}
+		partSN := strings.TrimSpace(pick(r, "sn", "序列号"))
+		if partSN != "" {
+			if _, used := usedPartSN[partSN]; used {
+				continue
+			}
 		}
 		if !specMatch(r) {
 			continue
@@ -666,7 +651,7 @@ func pickDonorCommon(rows []map[string]any, targetSN string, need int, candidate
 			priority = 3
 		}
 		parts = append(parts, part{
-			partSN:   strings.TrimSpace(pick(r, "sn", "序列号")),
+			partSN:   partSN,
 			donorSN:  donorSN,
 			donorRack: ternary(serverRack[donorSN] != "", serverRack[donorSN], strings.TrimSpace(pick(r, "rack", "机柜"))),
 			donorIDC: serverIDC[donorSN],
@@ -718,11 +703,18 @@ func pickDonorCommon(rows []map[string]any, targetSN string, need int, candidate
 			sourceList[i] = fmt.Sprintf("SN:%s 机房:%s 机柜:%s", arr[0], arr[1], arr[2])
 		}
 	}
+	pickedPartSNs := make([]string, 0, len(picked))
+	for _, p := range picked {
+		if p.partSN != "" {
+			pickedPartSNs = append(pickedPartSNs, p.partSN)
+		}
+	}
 	return donorPickResult{
-		source:      "主机调拨（" + strings.Join(sourceList, "；") + "）",
-		details:     strings.Join(details, ", "),
-		anyIDC:      anyIDC,
-		missingCount: maxIntReconfig(0, need-len(picked)),
+		source:        "主机调拨（" + strings.Join(sourceList, "；") + "）",
+		details:       strings.Join(details, ", "),
+		anyIDC:        anyIDC,
+		missingCount:  maxIntReconfig(0, need-len(picked)),
+		pickedPartSNs: pickedPartSNs,
 	}
 }
 

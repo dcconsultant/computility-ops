@@ -42,6 +42,9 @@ type reconfigPlanSnapshot struct {
 	SuccessCoreCount     float64                     `json:"success_core_count"`
 	ReconfigServerCount  int                         `json:"reconfig_server_count"`
 	DismantleServerCount int                         `json:"dismantle_server_count"`
+	PlannedReconfigCount int                         `json:"planned_reconfig_count"`
+	SuccessReconfigCount int                         `json:"success_reconfig_count"`
+	ResourceEfficiency   float64                     `json:"resource_efficiency"`
 	ReconfigFee          int                         `json:"reconfig_fee"`
 	Hosts                []map[string]any            `json:"hosts"`
 	Actions              []service.ReconfigActionRow `json:"actions"`
@@ -231,6 +234,9 @@ func saveReconfigPlanSnapshot(jobID string, target service.ReconfigTargetConfig,
 	scopeCnt := toInt(summary["scope_server_count"])
 	successServerCnt := toInt(summary["success_server_count"])
 	successCoreCnt := toFloat(summary["success_core_count"])
+	plannedReconfigCount := toInt(summary["planned_reconfig_count"])
+	successReconfigCount := toInt(summary["success_reconfig_count"])
+	resourceEfficiency := toFloat(summary["resource_efficiency"])
 
 	hosts := make([]map[string]any, 0)
 	targetSet := map[string]struct{}{}
@@ -283,6 +289,9 @@ func saveReconfigPlanSnapshot(jobID string, target service.ReconfigTargetConfig,
 		SuccessCoreCount:     successCoreCnt,
 		ReconfigServerCount:  reconfigServerCount,
 		DismantleServerCount: dismantleServerCount,
+		PlannedReconfigCount: plannedReconfigCount,
+		SuccessReconfigCount: successReconfigCount,
+		ResourceEfficiency:   resourceEfficiency,
 		ReconfigFee:          reconfigFee,
 		Hosts:                hosts,
 		Actions:              out.Actions,

@@ -492,6 +492,9 @@ export default function ReconfigManagementPage() {
               { title: '范围服务器', dataIndex: 'scope_server_count', width: 100 },
               { title: '成功服务器', dataIndex: 'success_server_count', width: 100 },
               { title: '成功逻辑核', dataIndex: 'success_core_count', width: 100 },
+              { title: '计划改配服务器', dataIndex: 'planned_reconfig_count', width: 120 },
+              { title: '实际成功改配服务器', dataIndex: 'success_reconfig_count', width: 140 },
+              { title: '资源占用效率', dataIndex: 'resource_efficiency', width: 120, render: (v: number) => `${(Number(v || 0) * 100).toFixed(2)}%` },
               { title: '改配服务器', dataIndex: 'reconfig_server_count', width: 100 },
               { title: '拆配服务器', dataIndex: 'dismantle_server_count', width: 100 },
               { title: '改配费用', dataIndex: 'reconfig_fee', width: 110, render: (v: number) => `${Number(v || 0)}` },
@@ -510,6 +513,9 @@ export default function ReconfigManagementPage() {
                 <Descriptions.Item label="范围服务器">{selectedHistory.scope_server_count}</Descriptions.Item>
                 <Descriptions.Item label="成功服务器">{selectedHistory.success_server_count}</Descriptions.Item>
                 <Descriptions.Item label="成功逻辑核">{selectedHistory.success_core_count}</Descriptions.Item>
+                <Descriptions.Item label="计划改配服务器数">{selectedHistory.planned_reconfig_count}</Descriptions.Item>
+                <Descriptions.Item label="实际成功改配服务器数">{selectedHistory.success_reconfig_count}</Descriptions.Item>
+                <Descriptions.Item label="资源占用效率">{`${(Number(selectedHistory.resource_efficiency || 0) * 100).toFixed(2)}%`}</Descriptions.Item>
                 <Descriptions.Item label="改配服务器数">{selectedHistory.reconfig_server_count}</Descriptions.Item>
                 <Descriptions.Item label="拆配服务器数">{selectedHistory.dismantle_server_count}</Descriptions.Item>
                 <Descriptions.Item label="改配费用">{selectedHistory.reconfig_fee}</Descriptions.Item>
