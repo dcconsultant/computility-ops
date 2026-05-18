@@ -397,6 +397,15 @@ func (r *MetaRepo) DeleteRecord(ctx context.Context, modelID, recordID string) e
 	return nil
 }
 
+func (r *MetaRepo) DeleteRecordsByModel(ctx context.Context, modelID string) (int64, error) {
+	res, err := r.db.ExecContext(ctx, `UPDATE md_record SET deleted_flag=1, updated_at=? WHERE model_id=? AND deleted_flag=0`, time.Now(), modelID)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 func boolToInt(v bool) int {
 	if v {
 		return 1

@@ -588,6 +588,10 @@ func (h *MetaHandler) runImportJob(ctx context.Context, jobID, modelID string, x
 			rows = append(rows, data)
 			chunkKeys = append(chunkKeys, displayKey)
 		}
+		if len(rows) == 0 {
+			h.failJob(ctx, jobID, "Excel内容为空")
+			return
+		}
 		res, err := h.service.ReplaceAllRecordsBatchWithMode(ctx, modelID, rows, importUniqueMode)
 		if err != nil {
 			h.failJob(ctx, jobID, err.Error())

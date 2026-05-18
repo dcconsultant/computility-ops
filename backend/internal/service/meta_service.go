@@ -670,17 +670,15 @@ func (s *MetaService) ImportRecordsBatchWithMode(ctx context.Context, modelID st
 }
 
 func (s *MetaService) ReplaceAllRecordsBatchWithMode(ctx context.Context, modelID string, rows []map[string]any, mode string) (ImportRecordsResult, error) {
-	existing, prepared, result, err := s.prepareImportRows(ctx, modelID, rows, mode, false)
+	_, prepared, result, err := s.prepareImportRows(ctx, modelID, rows, mode, false)
 	if err != nil {
 		return ImportRecordsResult{}, err
 	}
 	if result.Failed > 0 {
 		return result, nil
 	}
-	for _, rec := range existing {
-		if err := s.repo.DeleteRecord(ctx, modelID, rec.ID); err != nil {
-			return ImportRecordsResult{}, err
-		}
+	if _, err := s.repo.DeleteRecordsByModel(ctx, modelID); err != nil {
+		return ImportRecordsResult{}, err
 	}
 	if len(prepared) > 0 {
 		if err := s.repo.CreateRecordsBatch(ctx, prepared); err != nil {

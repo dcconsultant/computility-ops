@@ -36,6 +36,7 @@ type MetaRepo interface {
 	CreateRecordsBatch(ctx context.Context, records []domain.MetaRecord) error
 	UpdateRecord(ctx context.Context, record domain.MetaRecord) error
 	DeleteRecord(ctx context.Context, modelID, recordID string) error
+	DeleteRecordsByModel(ctx context.Context, modelID string) (int64, error)
 
 	CreateVersion(ctx context.Context, version domain.MetaModelVersion) error
 	ListVersions(ctx context.Context, modelID string) ([]domain.MetaModelVersion, error)

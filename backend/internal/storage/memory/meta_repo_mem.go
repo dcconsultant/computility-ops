@@ -332,6 +332,17 @@ func (r *MetaRepo) DeleteRecord(_ context.Context, modelID, recordID string) err
 	return nil
 }
 
+func (r *MetaRepo) DeleteRecordsByModel(_ context.Context, modelID string) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.models[modelID]; !ok {
+		return 0, fmt.Errorf("model %s not found", modelID)
+	}
+	cnt := int64(len(r.records[modelID]))
+	r.records[modelID] = map[string]domain.MetaRecord{}
+	return cnt, nil
+}
+
 func (r *MetaRepo) CreateVersion(_ context.Context, version domain.MetaModelVersion) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
