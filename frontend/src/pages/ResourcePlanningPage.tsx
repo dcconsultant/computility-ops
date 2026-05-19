@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Button, Card, Col, Form, Input, InputNumber, Row, Space, Statistic, Typography, message } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
-import { calculateResourcePlanning } from '../api';
+import { calculateResourcePlanning, getResourcePlanningConfig, saveResourcePlanningConfig } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
 import type { ResourcePlanningResponse } from '../types';
 
@@ -9,8 +9,26 @@ const { Title, Text } = Typography;
 
 export default function ResourcePlanningPage() {
   const [loading, setLoading] = useState(false);
+  const [configLoading, setConfigLoading] = useState(false);
   const [result, setResult] = useState<ResourcePlanningResponse | null>(null);
   const [form] = Form.useForm();
+
+  useEffect(() => {
+    (async () => {
+      setConfigLoading(true);
+      try {
+        const resp = await getResourcePlanningConfig();
+        const data = ensureApiOk(resp).data;
+        if (data?.found && data.state?.config) {
+          form.setFieldsValue(data.state.config);
+        }
+      } catch {
+        // ignore
+      } finally {
+        setConfigLoading(false);
+      }
+    })();
+  }, [form]);
 
   async function onSubmit(values: any) {
     setLoading(true);
@@ -19,6 +37,7 @@ export default function ResourcePlanningPage() {
       if (payload.reconfig_done_server_count == null) delete payload.reconfig_done_server_count;
       if (payload.reconfig_done_logical_cores == null) delete payload.reconfig_done_logical_cores;
       if (payload.reconfig_done_cost_cny == null) delete payload.reconfig_done_cost_cny;
+      await saveResourcePlanningConfig(payload);
       const resp = await calculateResourcePlanning(payload);
       setResult(ensureApiOk(resp).data);
       message.success('资源规划计算完成');
@@ -76,7 +95,16 @@ export default function ResourcePlanningPage() {
           </Row>
           <Space>
             <Button type="primary" htmlType="submit" loading={loading}>生成资源规划</Button>
-            <Button icon={<ReloadOutlined />} onClick={() => form.resetFields()}>重置</Button>
+            <Button icon={<ReloadOutlined />} onClick={() => form.resetFields()} loading={configLoading}>重置</Button>
+            <Button onClick={async () => {
+              try {
+                const values = form.getFieldsValue();
+                await saveResourcePlanningConfig(values);
+                message.success('规划配置已保存');
+              } catch (e) {
+                message.error(parseApiError(e, '保存规划配置失败'));
+              }
+            }}>保存配置</Button>
           </Space>
         </Form>
       </Card>

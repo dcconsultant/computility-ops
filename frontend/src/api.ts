@@ -40,7 +40,8 @@ import type {
   MetaEnumOption,
   MetaRecord,
   ResourcePlanningRequest,
-  ResourcePlanningResponse
+  ResourcePlanningResponse,
+  ResourcePlanningConfigState
 } from './types';
 
 const http = axios.create({ baseURL: '/api/v1' });
@@ -178,6 +179,16 @@ export async function importValueScoreUnifiedParams(file: File) {
 
 export async function calculateValueScorePerformance() {
   const { data } = await http.post<ApiResp<ValueScorePerformanceCalcResult>>('/value-score/performance/calculate', {});
+  return data;
+}
+
+export async function getResourcePlanningConfig() {
+  const { data } = await http.get<ApiResp<{ found: boolean; state?: ResourcePlanningConfigState }>>('/resource-planning/config');
+  return data;
+}
+
+export async function saveResourcePlanningConfig(payload: ResourcePlanningRequest) {
+  const { data } = await http.post<ApiResp<{ saved: boolean }>>('/resource-planning/config', payload);
   return data;
 }
 

@@ -54,6 +54,11 @@ type ResourcePlanningResponse struct {
 	DisposalPlan      ResourcePlanningDisposalPlan      `json:"disposal_plan"`
 }
 
+type ResourcePlanningConfigState struct {
+	SavedAt time.Time               `json:"saved_at"`
+	Config  ResourcePlanningRequest `json:"config"`
+}
+
 type ResourcePlanningReconfigPlan struct {
 	SourcePlanID string  `json:"source_plan_id"`
 	ServerCount  int     `json:"server_count"`
@@ -194,7 +199,7 @@ func (s *ResourcePlanningService) Calculate(ctx context.Context, req ResourcePla
 	selfRepairPlan := calcSelfRepairPlan(servers, byConfig)
 	disposalPlan := calcDisposalPlan(servers, byConfig, disposalPSAs)
 
-	return ResourcePlanningResponse{
+	out := ResourcePlanningResponse{
 		GeneratedAt:       time.Now(),
 		Config:            req,
 		ReconfigPlan:      reconfigPlan,
@@ -203,7 +208,9 @@ func (s *ResourcePlanningService) Calculate(ctx context.Context, req ResourcePla
 		RenewalPlan:       renewalPlan,
 		SelfRepairPlan:    selfRepairPlan,
 		DisposalPlan:      disposalPlan,
-	}, nil
+	}
+	_ = s.SaveConfig(ctx, req)
+	return out, nil
 }
 
 func (s *ResourcePlanningService) calcReconfigPlan(req ResourcePlanningRequest) (ResourcePlanningReconfigPlan, error) {
@@ -324,7 +331,7 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 	}
 	selectedScore := 1.0 / selectedOriginal
 
-	routine := int(math.Floor(float64(baseDemand) / 10.0))
+	routine := int(math.Floor(float64(req.ComputeDemandCores) / 10.0))
 	if routine < 0 {
 		routine = 0
 	}
@@ -367,7 +374,7 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 	if remaining < 0 {
 		remaining = 0
 	}
-	if baseDemand > 0 && routine > 0 && remaining < routine {
+	if routine > 0 && remaining < routine {
 		remaining = routine
 	}
 	serverCount := int(math.Ceil(float64(remaining) / float64(selectedPkg.CPULogicalCores)))
@@ -564,6 +571,34 @@ func loadLatestReconfigSnapshot(base string) (reconfigSnapshotLite, error) {
 		latest.PlanID = strconv.FormatInt(latest.CreatedAt.Unix(), 10)
 	}
 	return latest, nil
+}
+
+func (s *ResourcePlanningService) SaveConfig(ctx context.Context, req ResourcePlanningRequest) error {
+	state := ResourcePlanningConfigState{SavedAt: time.Now(), Config: req}
+	payload, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Join("backend", "logs", "resource-planning"), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join("backend", "logs", "resource-planning", "config.latest.json"), payload, 0o644)
+}
+
+func (s *ResourcePlanningService) GetConfig(ctx context.Context) (ResourcePlanningConfigState, bool, error) {
+	path := filepath.Join("backend", "logs", "resource-planning", "config.latest.json")
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ResourcePlanningConfigState{}, false, nil
+		}
+		return ResourcePlanningConfigState{}, false, err
+	}
+	var state ResourcePlanningConfigState
+	if err := json.Unmarshal(payload, &state); err != nil {
+		return ResourcePlanningConfigState{}, false, err
+	}
+	return state, true, nil
 }
 
 func round2RP(v float64) float64 {

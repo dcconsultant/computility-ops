@@ -525,6 +525,11 @@ export interface ResourcePlanningRequest {
   quasi_purchase_cost_cny: number;
 }
 
+export interface ResourcePlanningConfigState {
+  saved_at: string;
+  config: ResourcePlanningRequest;
+}
+
 export interface ResourcePlanningResponse {
   generated_at: string;
   config: ResourcePlanningRequest;
