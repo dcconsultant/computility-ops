@@ -93,7 +93,7 @@ export default function ResourcePlanningPage() {
           <Row gutter={16}>
             <Col span={8}><Card title="3.2 改配利旧"><Statistic title="成功服务器" value={result.reconfig_plan.server_count} /><Statistic title="成功逻辑核" value={result.reconfig_plan.logical_cores} /><Statistic title="费用(CNY)" value={result.reconfig_plan.cost_cny} /></Card></Col>
             <Col span={8}><Card title="3.3 准系统采购利旧"><Statistic title="服务器数" value={result.quasi_purchase_plan.server_count} /><Statistic title="逻辑核" value={result.quasi_purchase_plan.logical_cores} /><Statistic title="费用(CNY)" value={result.quasi_purchase_plan.cost_cny} /></Card></Col>
-            <Col span={8}><Card title="3.5 续保"><Statistic title="设备数量" value={result.renewal_plan.device_count} /><Statistic title="覆盖算力(核)" value={result.renewal_plan.covered_cores} /><Statistic title="预算占用(CNY)" value={result.renewal_plan.budget_cny} /></Card></Col>
+            <Col span={8}><Card title="3.5 续保"><Statistic title="设备数量" value={result.renewal_plan.device_count} /><Statistic title="计算覆盖(核)" value={result.renewal_plan.covered_compute_cores} /><Statistic title="温存储覆盖(TB)" value={result.renewal_plan.covered_warm_storage_tb} /><Statistic title="热存储覆盖(TB)" value={result.renewal_plan.covered_hot_storage_tb} /><Statistic title="GPU覆盖(卡)" value={result.renewal_plan.covered_gpu_cards} /><Statistic title="预算占用(CNY)" value={result.renewal_plan.budget_cny} /></Card></Col>
           </Row>
 
           <Row gutter={16}>
@@ -112,7 +112,11 @@ export default function ResourcePlanningPage() {
                 <Statistic title="自维修设备数量" value={result.self_repair_plan.device_count} />
                 <Statistic title="自维修覆盖算力(核)" value={result.self_repair_plan.covered_cores} />
                 <Statistic title="处置设备数量" value={result.disposal_plan.device_count} />
-                <Statistic title="处置覆盖算力(核)" value={result.disposal_plan.covered_cores} />
+                <Statistic title="处置计算覆盖(核)" value={result.disposal_plan.covered_compute_cores} />
+                <Statistic title="处置温存储覆盖(TB)" value={result.disposal_plan.covered_warm_storage_tb} />
+                <Statistic title="处置热存储覆盖(TB)" value={result.disposal_plan.covered_hot_storage_tb} />
+                <Statistic title="处置GPU覆盖(卡)" value={result.disposal_plan.covered_gpu_cards} />
+                <Statistic title="处置套餐未匹配数" value={result.disposal_plan.unmatched_package_count} />
               </Card>
             </Col>
           </Row>

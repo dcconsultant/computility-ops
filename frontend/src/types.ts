@@ -556,7 +556,10 @@ export interface ResourcePlanningResponse {
   renewal_plan: {
     source_plan_id: string;
     device_count: number;
-    covered_cores: number;
+    covered_compute_cores: number;
+    covered_warm_storage_tb: number;
+    covered_hot_storage_tb: number;
+    covered_gpu_cards: number;
     budget_cny: number;
   };
   self_repair_plan: {
@@ -565,6 +568,10 @@ export interface ResourcePlanningResponse {
   };
   disposal_plan: {
     device_count: number;
-    covered_cores: number;
+    covered_compute_cores: number;
+    covered_warm_storage_tb: number;
+    covered_hot_storage_tb: number;
+    covered_gpu_cards: number;
+    unmatched_package_count: number;
   };
 }

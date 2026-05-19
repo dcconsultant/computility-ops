@@ -83,10 +83,13 @@ type ResourcePlanningNewPurchasePlan struct {
 }
 
 type ResourcePlanningRenewalPlan struct {
-	SourcePlanID string  `json:"source_plan_id"`
-	DeviceCount  int     `json:"device_count"`
-	CoveredCores int     `json:"covered_cores"`
-	BudgetCNY    float64 `json:"budget_cny"`
+	SourcePlanID         string  `json:"source_plan_id"`
+	DeviceCount          int     `json:"device_count"`
+	CoveredComputeCores  int     `json:"covered_compute_cores"`
+	CoveredWarmStorageTB float64 `json:"covered_warm_storage_tb"`
+	CoveredHotStorageTB  float64 `json:"covered_hot_storage_tb"`
+	CoveredGPUCards      int     `json:"covered_gpu_cards"`
+	BudgetCNY            float64 `json:"budget_cny"`
 }
 
 type ResourcePlanningSelfRepairPlan struct {
@@ -95,8 +98,12 @@ type ResourcePlanningSelfRepairPlan struct {
 }
 
 type ResourcePlanningDisposalPlan struct {
-	DeviceCount  int `json:"device_count"`
-	CoveredCores int `json:"covered_cores"`
+	DeviceCount           int     `json:"device_count"`
+	CoveredComputeCores   int     `json:"covered_compute_cores"`
+	CoveredWarmStorageTB  float64 `json:"covered_warm_storage_tb"`
+	CoveredHotStorageTB   float64 `json:"covered_hot_storage_tb"`
+	CoveredGPUCards       int     `json:"covered_gpu_cards"`
+	UnmatchedPackageCount int     `json:"unmatched_package_count"`
 }
 
 type reconfigSnapshotLite struct {
@@ -239,11 +246,46 @@ func (s *ResourcePlanningService) calcRenewalPlan(ctx context.Context) (Resource
 	if latest.DomesticBudget > 0 || latest.IndiaBudget > 0 {
 		budget = latest.DomesticBudget + latest.IndiaBudget
 	}
+	coveredWarm := 0.0
+	coveredHot := 0.0
+	coveredGPU := 0
+	for _, sec := range latest.Sections {
+		bucket := normalizeScene(sec.Bucket)
+		switch bucket {
+		case "warm_storage":
+			coveredWarm += sec.SelectedStorageTB
+		case "hot_storage":
+			coveredHot += sec.SelectedStorageTB
+		case "gpu":
+			for _, it := range sec.Items {
+				coveredGPU += it.GPUCardCount
+			}
+		}
+	}
+	if coveredWarm == 0 || coveredHot == 0 || coveredGPU == 0 {
+		for _, it := range latest.Items {
+			bucket := normalizeScene(it.Bucket)
+			if bucket == "" {
+				bucket = normalizeScene(it.SceneCategory)
+			}
+			switch bucket {
+			case "warm_storage":
+				coveredWarm += it.StorageCapacityTB
+			case "hot_storage":
+				coveredHot += it.StorageCapacityTB
+			case "gpu":
+				coveredGPU += it.GPUCardCount
+			}
+		}
+	}
 	return ResourcePlanningRenewalPlan{
-		SourcePlanID: latest.PlanID,
-		DeviceCount:  latest.SelectedCount,
-		CoveredCores: latest.SelectedCores,
-		BudgetCNY:    round2RP(budget),
+		SourcePlanID:         latest.PlanID,
+		DeviceCount:          latest.SelectedCount,
+		CoveredComputeCores:  latest.SelectedCores,
+		CoveredWarmStorageTB: round2RP(coveredWarm),
+		CoveredHotStorageTB:  round2RP(coveredHot),
+		CoveredGPUCards:      coveredGPU,
+		BudgetCNY:            round2RP(budget),
 	}, nil
 }
 
@@ -325,6 +367,9 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 	if remaining < 0 {
 		remaining = 0
 	}
+	if baseDemand > 0 && routine > 0 && remaining < routine {
+		remaining = routine
+	}
 	serverCount := int(math.Ceil(float64(remaining) / float64(selectedPkg.CPULogicalCores)))
 	coveredCores := serverCount * selectedPkg.CPULogicalCores
 	monthlyTCO := estimateMonthlyTCO(selectedPkg, selectedOriginal)
@@ -372,19 +417,43 @@ func calcSelfRepairPlan(servers []domain.Server, pkgByConfig map[string]domain.H
 
 func calcDisposalPlan(servers []domain.Server, pkgByConfig map[string]domain.HostPackageConfig, disposalPSAs []string) ResourcePlanningDisposalPlan {
 	count := 0
-	cores := 0
+	compute := 0
+	warm := 0.0
+	hot := 0.0
+	gpu := 0
+	unmatched := 0
 	for _, srv := range servers {
 		if !isPSAExcluded(srv.PSA, disposalPSAs) {
 			continue
 		}
+		count++
 		pkg, ok := pkgByConfig[srv.ConfigType]
 		if !ok {
+			unmatched++
 			continue
 		}
-		count++
-		cores += pkg.CPULogicalCores
+		scene := normalizeScene(pkg.SceneCategory)
+		switch scene {
+		case "compute":
+			compute += pkg.CPULogicalCores
+		case "warm_storage":
+			warm += pkg.StorageCapacityTB
+		case "hot_storage":
+			hot += pkg.StorageCapacityTB
+		case "gpu":
+			gpu += pkg.GPUCardCount
+		default:
+			compute += pkg.CPULogicalCores
+		}
 	}
-	return ResourcePlanningDisposalPlan{DeviceCount: count, CoveredCores: cores}
+	return ResourcePlanningDisposalPlan{
+		DeviceCount:           count,
+		CoveredComputeCores:   compute,
+		CoveredWarmStorageTB:  round2RP(warm),
+		CoveredHotStorageTB:   round2RP(hot),
+		CoveredGPUCards:       gpu,
+		UnmatchedPackageCount: unmatched,
+	}
 }
 
 func estimateMonthlyTCO(pkg domain.HostPackageConfig, original float64) float64 {
@@ -438,6 +507,9 @@ func normalizeScene(scene string) string {
 	s = strings.ReplaceAll(s, "暖", "warm")
 	s = strings.ReplaceAll(s, "cold", "warm")
 	s = strings.ReplaceAll(s, "hotstorage", "hotstorage")
+	if strings.Contains(s, "gpu") {
+		return "gpu"
+	}
 	if strings.Contains(s, "compute") {
 		return "compute"
 	}
