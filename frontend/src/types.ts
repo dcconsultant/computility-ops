@@ -578,5 +578,7 @@ export interface ResourcePlanningResponse {
     covered_hot_storage_tb: number;
     covered_gpu_cards: number;
     unmatched_package_count: number;
+    matched_psa_server_count: number;
+    normalized_psas: string[];
   };
 }

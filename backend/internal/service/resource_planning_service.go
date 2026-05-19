@@ -103,12 +103,14 @@ type ResourcePlanningSelfRepairPlan struct {
 }
 
 type ResourcePlanningDisposalPlan struct {
-	DeviceCount           int     `json:"device_count"`
-	CoveredComputeCores   int     `json:"covered_compute_cores"`
-	CoveredWarmStorageTB  float64 `json:"covered_warm_storage_tb"`
-	CoveredHotStorageTB   float64 `json:"covered_hot_storage_tb"`
-	CoveredGPUCards       int     `json:"covered_gpu_cards"`
-	UnmatchedPackageCount int     `json:"unmatched_package_count"`
+	DeviceCount           int      `json:"device_count"`
+	CoveredComputeCores   int      `json:"covered_compute_cores"`
+	CoveredWarmStorageTB  float64  `json:"covered_warm_storage_tb"`
+	CoveredHotStorageTB   float64  `json:"covered_hot_storage_tb"`
+	CoveredGPUCards       int      `json:"covered_gpu_cards"`
+	UnmatchedPackageCount int      `json:"unmatched_package_count"`
+	MatchedPSAServerCount int      `json:"matched_psa_server_count"`
+	NormalizedPSAs        []string `json:"normalized_psas,omitempty"`
 }
 
 type reconfigSnapshotLite struct {
@@ -429,10 +431,12 @@ func calcDisposalPlan(servers []domain.Server, pkgByConfig map[string]domain.Hos
 	hot := 0.0
 	gpu := 0
 	unmatched := 0
+	matchedPSA := 0
 	for _, srv := range servers {
 		if !isPSAExcluded(srv.PSA, disposalPSAs) {
 			continue
 		}
+		matchedPSA++
 		count++
 		pkg, ok := pkgByConfig[srv.ConfigType]
 		if !ok {
@@ -460,6 +464,8 @@ func calcDisposalPlan(servers []domain.Server, pkgByConfig map[string]domain.Hos
 		CoveredHotStorageTB:   round2RP(hot),
 		CoveredGPUCards:       gpu,
 		UnmatchedPackageCount: unmatched,
+		MatchedPSAServerCount: matchedPSA,
+		NormalizedPSAs:        disposalPSAs,
 	}
 }
 
@@ -471,32 +477,59 @@ func estimateMonthlyTCO(pkg domain.HostPackageConfig, original float64) float64 
 }
 
 func splitCSV(raw string) []string {
-	parts := strings.Split(raw, ",")
+	replacer := strings.NewReplacer("，", ",", "；", ",", ";", ",", "\n", ",", "\t", ",")
+	norm := replacer.Replace(raw)
+	parts := strings.Split(norm, ",")
 	out := make([]string, 0, len(parts))
+	seen := map[string]struct{}{}
 	for _, p := range parts {
-		t := strings.TrimSpace(p)
-		if t != "" {
-			out = append(out, t)
+		t := normalizePSAPath(p)
+		if t == "" {
+			continue
 		}
+		if _, ok := seen[t]; ok {
+			continue
+		}
+		seen[t] = struct{}{}
+		out = append(out, t)
 	}
 	return out
 }
 
 func isPSAExcluded(psa string, rules []string) bool {
-	psa = strings.TrimSpace(psa)
-	if psa == "" || len(rules) == 0 {
+	target := normalizePSAPath(psa)
+	if target == "" || len(rules) == 0 {
 		return false
 	}
 	for _, r := range rules {
-		r = strings.TrimSpace(r)
-		if r == "" {
+		rule := normalizePSAPath(r)
+		if rule == "" {
 			continue
 		}
-		if psa == r || strings.HasPrefix(psa, strings.TrimRight(r, "/")+"/") {
+		if target == rule || strings.HasPrefix(target, rule+"/") {
 			return true
 		}
 	}
 	return false
+}
+
+func normalizePSAPath(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	s = strings.ReplaceAll(s, "\\", "/")
+	for strings.Contains(s, "//") {
+		s = strings.ReplaceAll(s, "//", "/")
+	}
+	s = strings.TrimSpace(s)
+	if !strings.HasPrefix(s, "/") {
+		s = "/" + s
+	}
+	if len(s) > 1 {
+		s = strings.TrimRight(s, "/")
+	}
+	return s
 }
 
 func normalizeScene(scene string) string {

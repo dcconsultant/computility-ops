@@ -7,6 +7,24 @@ import type { ResourcePlanningResponse } from '../types';
 
 const { Title, Text } = Typography;
 
+const thousandFormatter = (value?: string | number) => {
+  const s = String(value ?? '');
+  if (!s) return '';
+  const neg = s.startsWith('-') ? '-' : '';
+  const body = neg ? s.slice(1) : s;
+  const [intPart, decPart] = body.split('.');
+  const formattedInt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `${neg}${decPart !== undefined ? `${formattedInt}.${decPart}` : formattedInt}`;
+};
+
+const thousandParser = (value?: string) => (value || '').replace(/,/g, '');
+
+const numberProps = {
+  style: { width: '100%' },
+  formatter: thousandFormatter,
+  parser: thousandParser
+} as const;
+
 export default function ResourcePlanningPage() {
   const [loading, setLoading] = useState(false);
   const [configLoading, setConfigLoading] = useState(false);
@@ -75,23 +93,23 @@ export default function ResourcePlanningPage() {
           onFinish={onSubmit}
         >
           <Row gutter={16}>
-            <Col span={6}><Form.Item name="admit_value_score" label="准入套餐价值分"><InputNumber style={{ width: '100%' }} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="compute_demand_cores" label="计算需求核" rules={[{ required: true }]}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="warm_storage_demand_tb" label="温存储需求(TB)"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="hot_storage_demand_tb" label="热存储需求(TB)"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="admit_value_score" label="准入套餐价值分"><InputNumber {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="compute_demand_cores" label="计算需求核" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="warm_storage_demand_tb" label="温存储需求(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="hot_storage_demand_tb" label="热存储需求(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
 
-            <Col span={6}><Form.Item name="cabinet_and_other_cost_cny" label="机柜及其他费用(CNY)"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="annual_depreciation_cny" label="年度折旧(CNY)"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="cabinet_and_other_cost_cny" label="机柜及其他费用(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="annual_depreciation_cny" label="年度折旧(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
             <Col span={6}><Form.Item name="disposal_psas" label="处置PSA(逗号分隔)" rules={[{ required: true }]}><Input /></Form.Item></Col>
             <Col span={6}><Form.Item name="non_business_psas" label="非业务PSA(逗号分隔)" rules={[{ required: true }]}><Input /></Form.Item></Col>
 
-            <Col span={6}><Form.Item name="reconfig_done_server_count" label="已改配成功服务器(可选)"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="reconfig_done_logical_cores" label="已改配成功逻辑核(可选)"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="reconfig_done_cost_cny" label="已改配费用(CNY,可选)"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="reconfig_done_server_count" label="已改配成功服务器(可选)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="reconfig_done_logical_cores" label="已改配成功逻辑核(可选)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="reconfig_done_cost_cny" label="已改配费用(CNY,可选)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
 
-            <Col span={6}><Form.Item name="quasi_purchase_server_count" label="准系统服务器数" rules={[{ required: true }]}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="quasi_purchase_logical_cores" label="准系统逻辑核" rules={[{ required: true }]}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="quasi_purchase_cost_cny" label="准系统费用(CNY)" rules={[{ required: true }]}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="quasi_purchase_server_count" label="准系统服务器数" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="quasi_purchase_logical_cores" label="准系统逻辑核" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="quasi_purchase_cost_cny" label="准系统费用(CNY)" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
           </Row>
           <Space>
             <Button type="primary" htmlType="submit" loading={loading}>生成资源规划</Button>
@@ -145,6 +163,8 @@ export default function ResourcePlanningPage() {
                 <Statistic title="处置热存储覆盖(TB)" value={result.disposal_plan.covered_hot_storage_tb} />
                 <Statistic title="处置GPU覆盖(卡)" value={result.disposal_plan.covered_gpu_cards} />
                 <Statistic title="处置套餐未匹配数" value={result.disposal_plan.unmatched_package_count} />
+                <Statistic title="PSA命中设备数" value={result.disposal_plan.matched_psa_server_count} />
+                <Text type="secondary">命中PSA：{(result.disposal_plan.normalized_psas || []).join(', ') || '-'}</Text>
               </Card>
             </Col>
           </Row>
