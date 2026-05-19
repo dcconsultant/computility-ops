@@ -38,7 +38,9 @@ import type {
   MetaModelVersion,
   MetaModelSnapshot,
   MetaEnumOption,
-  MetaRecord
+  MetaRecord,
+  ResourcePlanningRequest,
+  ResourcePlanningResponse
 } from './types';
 
 const http = axios.create({ baseURL: '/api/v1' });
@@ -176,6 +178,11 @@ export async function importValueScoreUnifiedParams(file: File) {
 
 export async function calculateValueScorePerformance() {
   const { data } = await http.post<ApiResp<ValueScorePerformanceCalcResult>>('/value-score/performance/calculate', {});
+  return data;
+}
+
+export async function calculateResourcePlanning(payload: ResourcePlanningRequest) {
+  const { data } = await http.post<ApiResp<ResourcePlanningResponse>>('/resource-planning/calculate', payload);
   return data;
 }
 

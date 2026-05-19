@@ -38,6 +38,7 @@ func Build(cfg config.Config) (*gin.Engine, error) {
 	contractSvc := service.NewContractService(contractRepo)
 	metaSvc := service.NewMetaService(metaRepo, cfg.MetaImportCleanDays, cfg.MetaImportKeepLatest, cfg.MetaImportUniqueMode)
 	reconfigMgmtSvc := service.NewReconfigService(metaRepo, datasetRepo)
+	resourcePlanningSvc := service.NewResourcePlanningService(serverRepo, datasetRepo, renewalRepo)
 
 	rules, err := rpinfra.LoadScoringRules(os.Getenv("REPLACEMENT_RULES_FILE"))
 	if err != nil {
@@ -57,6 +58,7 @@ func Build(cfg config.Config) (*gin.Engine, error) {
 		ValueScoreSetup:     handler.NewValueScoreSetupHandler(valueScoreSetupSvc),
 		MetaData:            handler.NewMetaHandler(metaSvc),
 		ReconfigMgmt:        handler.NewReconfigHandler(reconfigMgmtSvc),
+		ResourcePlanning:    handler.NewResourcePlanningHandler(resourcePlanningSvc),
 		StorageDriver:       driver,
 		ReplacementPlanning: rpapi.NewHandler(replacementSvc),
 		ReconfigPlanning:    rcapi.NewHandler(reconfigSvc),

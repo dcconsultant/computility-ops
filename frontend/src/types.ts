@@ -507,3 +507,64 @@ export interface MetaRecord {
   created_at: string;
   updated_at: string;
 }
+
+export interface ResourcePlanningRequest {
+  admit_value_score: number;
+  compute_demand_cores: number;
+  warm_storage_demand_tb: number;
+  hot_storage_demand_tb: number;
+  cabinet_and_other_cost_cny: number;
+  annual_depreciation_cny: number;
+  disposal_psas: string;
+  non_business_psas: string;
+  reconfig_done_server_count?: number;
+  reconfig_done_logical_cores?: number;
+  reconfig_done_cost_cny?: number;
+  quasi_purchase_server_count: number;
+  quasi_purchase_logical_cores: number;
+  quasi_purchase_cost_cny: number;
+}
+
+export interface ResourcePlanningResponse {
+  generated_at: string;
+  config: ResourcePlanningRequest;
+  reconfig_plan: {
+    source_plan_id: string;
+    server_count: number;
+    logical_cores: number;
+    cost_cny: number;
+  };
+  quasi_purchase_plan: {
+    server_count: number;
+    logical_cores: number;
+    cost_cny: number;
+  };
+  new_purchase_plan: {
+    package_config_type: string;
+    package_release_year: number;
+    server_count: number;
+    covered_logical_cores: number;
+    base_demand_cores: number;
+    routine_replacement_cores: number;
+    extra_replacement_cores: number;
+    total_replacement_cores: number;
+    purchase_amount_cny: number;
+    annual_cost_cny: number;
+    annual_budget_cny: number;
+    value_score: number;
+  };
+  renewal_plan: {
+    source_plan_id: string;
+    device_count: number;
+    covered_cores: number;
+    budget_cny: number;
+  };
+  self_repair_plan: {
+    device_count: number;
+    covered_cores: number;
+  };
+  disposal_plan: {
+    device_count: number;
+    covered_cores: number;
+  };
+}
