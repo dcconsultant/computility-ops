@@ -497,20 +497,75 @@ func splitCSV(raw string) []string {
 }
 
 func isPSAExcluded(psa string, rules []string) bool {
-	target := normalizePSAPath(psa)
-	if target == "" || len(rules) == 0 {
+	targets := splitPSATokensForRP(psa)
+	if len(targets) == 0 || len(rules) == 0 {
 		return false
 	}
-	for _, r := range rules {
-		rule := normalizePSAPath(r)
-		if rule == "" {
-			continue
+
+	ruleSet := map[string]struct{}{}
+	for _, rawRule := range rules {
+		for _, r := range splitPSATokensForRP(rawRule) {
+			ruleSet[r] = struct{}{}
 		}
-		if target == rule || strings.HasPrefix(target, rule+"/") {
-			return true
+	}
+	if len(ruleSet) == 0 {
+		return false
+	}
+
+	for _, target := range targets {
+		for rule := range ruleSet {
+			if target == rule || strings.HasPrefix(target, rule+"/") {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+func splitPSATokensForRP(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+
+	// 支持 JSON 数组格式，例如：["/a/b","/c/d"]
+	if strings.HasPrefix(raw, "[") && strings.HasSuffix(raw, "]") {
+		var arr []string
+		if err := json.Unmarshal([]byte(raw), &arr); err == nil {
+			out := make([]string, 0, len(arr))
+			for _, x := range arr {
+				if n := normalizePSAPath(x); n != "" {
+					out = append(out, n)
+				}
+			}
+			if len(out) > 0 {
+				return out
+			}
+		}
+	}
+
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		switch r {
+		case ',', '，', ';', '；':
+			return true
+		default:
+			return false
+		}
+	})
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if n := normalizePSAPath(p); n != "" {
+			out = append(out, n)
+		}
+	}
+	if len(out) > 0 {
+		return out
+	}
+
+	if n := normalizePSAPath(raw); n != "" {
+		return []string{n}
+	}
+	return nil
 }
 
 func normalizePSAPath(s string) string {
@@ -518,11 +573,16 @@ func normalizePSAPath(s string) string {
 	if s == "" {
 		return ""
 	}
+	// 去掉常见包裹字符："/a/b" 或 '/a/b'
+	s = strings.Trim(s, "\"'")
 	s = strings.ReplaceAll(s, "\\", "/")
 	for strings.Contains(s, "//") {
 		s = strings.ReplaceAll(s, "//", "/")
 	}
 	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
 	if !strings.HasPrefix(s, "/") {
 		s = "/" + s
 	}
