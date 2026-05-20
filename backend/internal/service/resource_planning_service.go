@@ -52,6 +52,7 @@ type ResourcePlanningResponse struct {
 	RenewalPlan       ResourcePlanningRenewalPlan       `json:"renewal_plan"`
 	SelfRepairPlan    ResourcePlanningSelfRepairPlan    `json:"self_repair_plan"`
 	DisposalPlan      ResourcePlanningDisposalPlan      `json:"disposal_plan"`
+	ResultAnalysis    ResourcePlanningResultAnalysis    `json:"result_analysis"`
 }
 
 type ResourcePlanningConfigState struct {
@@ -111,6 +112,53 @@ type ResourcePlanningDisposalPlan struct {
 	UnmatchedPackageCount int      `json:"unmatched_package_count"`
 	MatchedPSAServerCount int      `json:"matched_psa_server_count"`
 	NormalizedPSAs        []string `json:"normalized_psas,omitempty"`
+}
+
+type ResourcePlanningAmountBreakdown struct {
+	ReconfigCostCNY      float64 `json:"reconfig_cost_cny"`
+	QuasiPurchaseCostCNY float64 `json:"quasi_purchase_cost_cny"`
+	NewPurchaseCostCNY   float64 `json:"new_purchase_cost_cny"`
+	RenewalCostCNY       float64 `json:"renewal_cost_cny"`
+	CabinetOtherCostCNY  float64 `json:"cabinet_other_cost_cny"`
+	TotalCostCNY         float64 `json:"total_cost_cny"`
+}
+
+type ResourcePlanningCostBreakdown struct {
+	ReconfigCostCNY      float64 `json:"reconfig_cost_cny"`
+	QuasiPurchaseCostCNY float64 `json:"quasi_purchase_cost_cny"`
+	NewPurchaseCostCNY   float64 `json:"new_purchase_cost_cny"`
+	RenewalCostCNY       float64 `json:"renewal_cost_cny"`
+	DepreciationCostCNY  float64 `json:"depreciation_cost_cny"`
+	CabinetOtherCostCNY  float64 `json:"cabinet_other_cost_cny"`
+	TotalCostCNY         float64 `json:"total_cost_cny"`
+}
+
+type ResourcePlanningCapacityComputeBreakdown struct {
+	ReconfigCores      int `json:"reconfig_cores"`
+	QuasiPurchaseCores int `json:"quasi_purchase_cores"`
+	NewPurchaseCores   int `json:"new_purchase_cores"`
+	StockContinueCores int `json:"stock_continue_cores"`
+	TotalCores         int `json:"total_cores"`
+}
+
+type ResourcePlanningCapacityStorageBreakdown struct {
+	ReconfigTB      float64 `json:"reconfig_tb"`
+	QuasiPurchaseTB float64 `json:"quasi_purchase_tb"`
+	NewPurchaseTB   float64 `json:"new_purchase_tb"`
+	StockContinueTB float64 `json:"stock_continue_tb"`
+	TotalTB         float64 `json:"total_tb"`
+}
+
+type ResourcePlanningResultAnalysis struct {
+	Amount            ResourcePlanningAmountBreakdown          `json:"amount"`
+	Cost              ResourcePlanningCostBreakdown            `json:"cost"`
+	ComputeCapacity   ResourcePlanningCapacityComputeBreakdown `json:"compute_capacity"`
+	WarmStorage       ResourcePlanningCapacityStorageBreakdown `json:"warm_storage_capacity"`
+	HotStorage        ResourcePlanningCapacityStorageBreakdown `json:"hot_storage_capacity"`
+	NonBusinessPSAs   []string                                 `json:"non_business_psas,omitempty"`
+	AvailableCompute  int                                      `json:"available_compute_cores"`
+	AvailableWarmTB   float64                                  `json:"available_warm_storage_tb"`
+	AvailableHotTB    float64                                  `json:"available_hot_storage_tb"`
 }
 
 type reconfigSnapshotLite struct {
@@ -200,6 +248,7 @@ func (s *ResourcePlanningService) Calculate(ctx context.Context, req ResourcePla
 
 	selfRepairPlan := calcSelfRepairPlan(servers, byConfig)
 	disposalPlan := calcDisposalPlan(servers, byConfig, disposalPSAs)
+	resultAnalysis := calcResultAnalysis(req, servers, byConfig, nonBusinessPSAs, reconfigPlan, quasi, newPlan, renewalPlan)
 
 	out := ResourcePlanningResponse{
 		GeneratedAt:       time.Now(),
@@ -210,6 +259,7 @@ func (s *ResourcePlanningService) Calculate(ctx context.Context, req ResourcePla
 		RenewalPlan:       renewalPlan,
 		SelfRepairPlan:    selfRepairPlan,
 		DisposalPlan:      disposalPlan,
+		ResultAnalysis:    resultAnalysis,
 	}
 	_ = s.SaveConfig(ctx, req)
 	return out, nil
@@ -466,6 +516,89 @@ func calcDisposalPlan(servers []domain.Server, pkgByConfig map[string]domain.Hos
 		UnmatchedPackageCount: unmatched,
 		MatchedPSAServerCount: matchedPSA,
 		NormalizedPSAs:        disposalPSAs,
+	}
+}
+
+func calcResultAnalysis(req ResourcePlanningRequest, servers []domain.Server, pkgByConfig map[string]domain.HostPackageConfig, nonBusinessPSAs []string, reconfig ResourcePlanningReconfigPlan, quasi ResourcePlanningQuasiPurchasePlan, newPlan ResourcePlanningNewPurchasePlan, renewal ResourcePlanningRenewalPlan) ResourcePlanningResultAnalysis {
+	availableCompute := 0
+	availableWarm := 0.0
+	availableHot := 0.0
+	for _, srv := range servers {
+		if isPSAExcluded(srv.PSA, nonBusinessPSAs) {
+			continue
+		}
+		pkg, ok := pkgByConfig[srv.ConfigType]
+		if !ok {
+			continue
+		}
+		switch normalizeScene(pkg.SceneCategory) {
+		case "compute":
+			availableCompute += pkg.CPULogicalCores
+		case "warm_storage":
+			availableWarm += pkg.StorageCapacityTB
+		case "hot_storage":
+			availableHot += pkg.StorageCapacityTB
+		}
+	}
+
+	computeStock := availableCompute - reconfig.LogicalCores - quasi.LogicalCores - newPlan.CoveredLogicalCores
+	if computeStock < 0 {
+		computeStock = 0
+	}
+
+	amount := ResourcePlanningAmountBreakdown{
+		ReconfigCostCNY:      round2RP(reconfig.CostCNY),
+		QuasiPurchaseCostCNY: round2RP(quasi.CostCNY),
+		NewPurchaseCostCNY:   round2RP(newPlan.PurchaseAmountCNY),
+		RenewalCostCNY:       round2RP(renewal.BudgetCNY),
+		CabinetOtherCostCNY:  round2RP(req.CabinetAndOtherCostCNY),
+	}
+	amount.TotalCostCNY = round2RP(amount.ReconfigCostCNY + amount.QuasiPurchaseCostCNY + amount.NewPurchaseCostCNY + amount.RenewalCostCNY + amount.CabinetOtherCostCNY)
+
+	cost := ResourcePlanningCostBreakdown{
+		ReconfigCostCNY:      round2RP(reconfig.CostCNY),
+		QuasiPurchaseCostCNY: round2RP(quasi.CostCNY),
+		NewPurchaseCostCNY:   round2RP(newPlan.AnnualCostCNY),
+		RenewalCostCNY:       round2RP(renewal.BudgetCNY),
+		DepreciationCostCNY:  round2RP(req.AnnualDepreciationCNY),
+		CabinetOtherCostCNY:  round2RP(req.CabinetAndOtherCostCNY),
+	}
+	cost.TotalCostCNY = round2RP(cost.ReconfigCostCNY + cost.QuasiPurchaseCostCNY + cost.NewPurchaseCostCNY + cost.RenewalCostCNY + cost.DepreciationCostCNY + cost.CabinetOtherCostCNY)
+
+	compute := ResourcePlanningCapacityComputeBreakdown{
+		ReconfigCores:      reconfig.LogicalCores,
+		QuasiPurchaseCores: quasi.LogicalCores,
+		NewPurchaseCores:   newPlan.CoveredLogicalCores,
+		StockContinueCores: computeStock,
+	}
+	compute.TotalCores = compute.ReconfigCores + compute.QuasiPurchaseCores + compute.NewPurchaseCores + compute.StockContinueCores
+
+	warm := ResourcePlanningCapacityStorageBreakdown{
+		ReconfigTB:      0,
+		QuasiPurchaseTB: 0,
+		NewPurchaseTB:   0,
+		StockContinueTB: round2RP(availableWarm),
+	}
+	warm.TotalTB = round2RP(warm.ReconfigTB + warm.QuasiPurchaseTB + warm.NewPurchaseTB + warm.StockContinueTB)
+
+	hot := ResourcePlanningCapacityStorageBreakdown{
+		ReconfigTB:      0,
+		QuasiPurchaseTB: 0,
+		NewPurchaseTB:   0,
+		StockContinueTB: round2RP(availableHot),
+	}
+	hot.TotalTB = round2RP(hot.ReconfigTB + hot.QuasiPurchaseTB + hot.NewPurchaseTB + hot.StockContinueTB)
+
+	return ResourcePlanningResultAnalysis{
+		Amount:          amount,
+		Cost:            cost,
+		ComputeCapacity: compute,
+		WarmStorage:     warm,
+		HotStorage:      hot,
+		NonBusinessPSAs: nonBusinessPSAs,
+		AvailableCompute: availableCompute,
+		AvailableWarmTB:  round2RP(availableWarm),
+		AvailableHotTB:   round2RP(availableHot),
 	}
 }
 

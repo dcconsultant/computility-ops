@@ -69,8 +69,8 @@ export default function ResourcePlanningPage() {
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <Card>
-        <Title level={4} style={{ marginTop: 0 }}>资源规划（3.1-3.7）</Title>
-        <Text type="secondary">按最新需求文档执行：规划配置、改配利旧、准系统采购利旧、新机采购、续保、自维修、处置。</Text>
+        <Title level={4} style={{ marginTop: 0 }}>资源规划（3.1-3.8）</Title>
+        <Text type="secondary">按最新需求文档执行：规划配置、改配利旧、准系统采购利旧、新机采购、续保、自维修、处置、结果分析。</Text>
       </Card>
 
       <Card title="3.1 规划配置 + 3.2/3.3 输入">
@@ -168,6 +168,61 @@ export default function ResourcePlanningPage() {
               </Card>
             </Col>
           </Row>
+
+          <Card title="3.8 结果分析">
+            <Row gutter={16}>
+              <Col span={8}>
+                <Card type="inner" title="费用构成(CNY)">
+                  <Statistic title="改配利旧" value={result.result_analysis.amount.reconfig_cost_cny} />
+                  <Statistic title="准系统采购利旧" value={result.result_analysis.amount.quasi_purchase_cost_cny} />
+                  <Statistic title="新机采购" value={result.result_analysis.amount.new_purchase_cost_cny} />
+                  <Statistic title="续保" value={result.result_analysis.amount.renewal_cost_cny} />
+                  <Statistic title="机柜及其他" value={result.result_analysis.amount.cabinet_other_cost_cny} />
+                  <Statistic title="合计" value={result.result_analysis.amount.total_cost_cny} />
+                </Card>
+              </Col>
+              <Col span={8}>
+                <Card type="inner" title="成本构成(CNY)">
+                  <Statistic title="改配利旧" value={result.result_analysis.cost.reconfig_cost_cny} />
+                  <Statistic title="准系统采购利旧" value={result.result_analysis.cost.quasi_purchase_cost_cny} />
+                  <Statistic title="新机采购" value={result.result_analysis.cost.new_purchase_cost_cny} />
+                  <Statistic title="续保" value={result.result_analysis.cost.renewal_cost_cny} />
+                  <Statistic title="折旧" value={result.result_analysis.cost.depreciation_cost_cny} />
+                  <Statistic title="机柜及其他" value={result.result_analysis.cost.cabinet_other_cost_cny} />
+                  <Statistic title="合计" value={result.result_analysis.cost.total_cost_cny} />
+                </Card>
+              </Col>
+              <Col span={8}>
+                <Card type="inner" title="算力-计算(核)">
+                  <Statistic title="改配利旧" value={result.result_analysis.compute_capacity.reconfig_cores} />
+                  <Statistic title="准系统采购利旧" value={result.result_analysis.compute_capacity.quasi_purchase_cores} />
+                  <Statistic title="新机采购" value={result.result_analysis.compute_capacity.new_purchase_cores} />
+                  <Statistic title="存量继续使用" value={result.result_analysis.compute_capacity.stock_continue_cores} />
+                  <Statistic title="合计" value={result.result_analysis.compute_capacity.total_cores} />
+                </Card>
+              </Col>
+            </Row>
+            <Row gutter={16} style={{ marginTop: 16 }}>
+              <Col span={12}>
+                <Card type="inner" title="算力-温存储(TB)">
+                  <Statistic title="改配利旧" value={result.result_analysis.warm_storage_capacity.reconfig_tb} />
+                  <Statistic title="准系统采购利旧" value={result.result_analysis.warm_storage_capacity.quasi_purchase_tb} />
+                  <Statistic title="新机采购" value={result.result_analysis.warm_storage_capacity.new_purchase_tb} />
+                  <Statistic title="存量继续使用" value={result.result_analysis.warm_storage_capacity.stock_continue_tb} />
+                  <Statistic title="合计" value={result.result_analysis.warm_storage_capacity.total_tb} />
+                </Card>
+              </Col>
+              <Col span={12}>
+                <Card type="inner" title="算力-热存储(TB)">
+                  <Statistic title="改配利旧" value={result.result_analysis.hot_storage_capacity.reconfig_tb} />
+                  <Statistic title="准系统采购利旧" value={result.result_analysis.hot_storage_capacity.quasi_purchase_tb} />
+                  <Statistic title="新机采购" value={result.result_analysis.hot_storage_capacity.new_purchase_tb} />
+                  <Statistic title="存量继续使用" value={result.result_analysis.hot_storage_capacity.stock_continue_tb} />
+                  <Statistic title="合计" value={result.result_analysis.hot_storage_capacity.total_tb} />
+                </Card>
+              </Col>
+            </Row>
+          </Card>
         </>
       ) : null}
     </Space>

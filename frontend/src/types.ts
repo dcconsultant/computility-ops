@@ -581,4 +581,44 @@ export interface ResourcePlanningResponse {
     matched_psa_server_count: number;
     normalized_psas: string[];
   };
+  result_analysis: {
+    amount: {
+      reconfig_cost_cny: number;
+      quasi_purchase_cost_cny: number;
+      new_purchase_cost_cny: number;
+      renewal_cost_cny: number;
+      cabinet_other_cost_cny: number;
+      total_cost_cny: number;
+    };
+    cost: {
+      reconfig_cost_cny: number;
+      quasi_purchase_cost_cny: number;
+      new_purchase_cost_cny: number;
+      renewal_cost_cny: number;
+      depreciation_cost_cny: number;
+      cabinet_other_cost_cny: number;
+      total_cost_cny: number;
+    };
+    compute_capacity: {
+      reconfig_cores: number;
+      quasi_purchase_cores: number;
+      new_purchase_cores: number;
+      stock_continue_cores: number;
+      total_cores: number;
+    };
+    warm_storage_capacity: {
+      reconfig_tb: number;
+      quasi_purchase_tb: number;
+      new_purchase_tb: number;
+      stock_continue_tb: number;
+      total_tb: number;
+    };
+    hot_storage_capacity: {
+      reconfig_tb: number;
+      quasi_purchase_tb: number;
+      new_purchase_tb: number;
+      stock_continue_tb: number;
+      total_tb: number;
+    };
+  };
 }
