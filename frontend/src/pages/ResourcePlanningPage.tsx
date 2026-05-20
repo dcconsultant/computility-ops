@@ -25,6 +25,84 @@ const numberProps = {
   parser: thousandParser
 } as const;
 
+type ShareItem = {
+  name: string;
+  value: number;
+  color: string;
+};
+
+function toPct(value: number, total: number) {
+  if (!total) return 0;
+  return Number(((value / total) * 100).toFixed(1));
+}
+
+function ShareLegend({ items }: { items: ShareItem[] }) {
+  const total = items.reduce((s, x) => s + (x.value || 0), 0);
+  return (
+    <Space direction="vertical" size={6} style={{ width: '100%' }}>
+      {items.map((x) => (
+        <div key={x.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <Space size={8}>
+            <span style={{ width: 10, height: 10, borderRadius: 999, background: x.color, display: 'inline-block' }} />
+            <Text>{x.name}</Text>
+          </Space>
+          <Text type="secondary">{thousandFormatter(x.value)} ({toPct(x.value, total)}%)</Text>
+        </div>
+      ))}
+    </Space>
+  );
+}
+
+function PieShareChart({ title, items }: { title: string; items: ShareItem[] }) {
+  const total = items.reduce((s, x) => s + (x.value || 0), 0);
+  let acc = 0;
+  const gradient = items
+    .map((x) => {
+      const from = acc;
+      const pct = total > 0 ? (x.value / total) * 100 : 0;
+      acc += pct;
+      return `${x.color} ${from}% ${acc}%`;
+    })
+    .join(', ');
+  return (
+    <Card type="inner" title={title}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+        <div
+          style={{
+            width: 170,
+            height: 170,
+            borderRadius: '50%',
+            background: total > 0 ? `conic-gradient(${gradient})` : '#f5f5f5',
+            flex: '0 0 auto'
+          }}
+        />
+        <div style={{ flex: 1 }}>
+          <ShareLegend items={items} />
+          <div style={{ marginTop: 8 }}><Text strong>合计：{thousandFormatter(total)}</Text></div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function StackedShareBar({ title, unit, items }: { title: string; unit: string; items: ShareItem[] }) {
+  const total = items.reduce((s, x) => s + (x.value || 0), 0);
+  return (
+    <Card type="inner" title={title}>
+      <div style={{ width: '100%', borderRadius: 8, overflow: 'hidden', display: 'flex', height: 24, background: '#f5f5f5' }}>
+        {items.map((x) => {
+          const pct = toPct(x.value, total);
+          return <div key={x.name} style={{ width: `${pct}%`, background: x.color }} title={`${x.name}: ${thousandFormatter(x.value)} ${unit}`} />;
+        })}
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <ShareLegend items={items} />
+      </div>
+      <div style={{ marginTop: 8 }}><Text strong>合计：{thousandFormatter(total)} {unit}</Text></div>
+    </Card>
+  );
+}
+
 export default function ResourcePlanningPage() {
   const [loading, setLoading] = useState(false);
   const [configLoading, setConfigLoading] = useState(false);
@@ -169,57 +247,74 @@ export default function ResourcePlanningPage() {
             </Col>
           </Row>
 
-          <Card title="3.8 结果分析">
+          <Card title="3.8 结果分析（可视化占比图）">
             <Row gutter={16}>
-              <Col span={8}>
-                <Card type="inner" title="费用构成(CNY)">
-                  <Statistic title="改配利旧" value={result.result_analysis.amount.reconfig_cost_cny} />
-                  <Statistic title="准系统采购利旧" value={result.result_analysis.amount.quasi_purchase_cost_cny} />
-                  <Statistic title="新机采购" value={result.result_analysis.amount.new_purchase_cost_cny} />
-                  <Statistic title="续保" value={result.result_analysis.amount.renewal_cost_cny} />
-                  <Statistic title="机柜及其他" value={result.result_analysis.amount.cabinet_other_cost_cny} />
-                  <Statistic title="合计" value={result.result_analysis.amount.total_cost_cny} />
-                </Card>
+              <Col span={12}>
+                <PieShareChart
+                  title="费用构成占比（CNY）"
+                  items={[
+                    { name: '改配利旧', value: result.result_analysis.amount.reconfig_cost_cny, color: '#1677ff' },
+                    { name: '准系统采购利旧', value: result.result_analysis.amount.quasi_purchase_cost_cny, color: '#13c2c2' },
+                    { name: '新机采购', value: result.result_analysis.amount.new_purchase_cost_cny, color: '#52c41a' },
+                    { name: '续保', value: result.result_analysis.amount.renewal_cost_cny, color: '#faad14' },
+                    { name: '机柜及其他', value: result.result_analysis.amount.cabinet_other_cost_cny, color: '#722ed1' }
+                  ]}
+                />
               </Col>
-              <Col span={8}>
-                <Card type="inner" title="成本构成(CNY)">
-                  <Statistic title="改配利旧" value={result.result_analysis.cost.reconfig_cost_cny} />
-                  <Statistic title="准系统采购利旧" value={result.result_analysis.cost.quasi_purchase_cost_cny} />
-                  <Statistic title="新机采购" value={result.result_analysis.cost.new_purchase_cost_cny} />
-                  <Statistic title="续保" value={result.result_analysis.cost.renewal_cost_cny} />
-                  <Statistic title="折旧" value={result.result_analysis.cost.depreciation_cost_cny} />
-                  <Statistic title="机柜及其他" value={result.result_analysis.cost.cabinet_other_cost_cny} />
-                  <Statistic title="合计" value={result.result_analysis.cost.total_cost_cny} />
-                </Card>
-              </Col>
-              <Col span={8}>
-                <Card type="inner" title="算力-计算(核)">
-                  <Statistic title="改配利旧" value={result.result_analysis.compute_capacity.reconfig_cores} />
-                  <Statistic title="准系统采购利旧" value={result.result_analysis.compute_capacity.quasi_purchase_cores} />
-                  <Statistic title="新机采购" value={result.result_analysis.compute_capacity.new_purchase_cores} />
-                  <Statistic title="存量继续使用" value={result.result_analysis.compute_capacity.stock_continue_cores} />
-                  <Statistic title="合计" value={result.result_analysis.compute_capacity.total_cores} />
-                </Card>
+              <Col span={12}>
+                <PieShareChart
+                  title="成本构成占比（CNY）"
+                  items={[
+                    { name: '改配利旧', value: result.result_analysis.cost.reconfig_cost_cny, color: '#1677ff' },
+                    { name: '准系统采购利旧', value: result.result_analysis.cost.quasi_purchase_cost_cny, color: '#13c2c2' },
+                    { name: '新机采购', value: result.result_analysis.cost.new_purchase_cost_cny, color: '#52c41a' },
+                    { name: '续保', value: result.result_analysis.cost.renewal_cost_cny, color: '#faad14' },
+                    { name: '折旧', value: result.result_analysis.cost.depreciation_cost_cny, color: '#f759ab' },
+                    { name: '机柜及其他', value: result.result_analysis.cost.cabinet_other_cost_cny, color: '#722ed1' }
+                  ]}
+                />
               </Col>
             </Row>
+
+            <Row gutter={16} style={{ marginTop: 16 }}>
+              <Col span={24}>
+                <StackedShareBar
+                  title="算力-计算 组成占比（堆叠条，单位：核）"
+                  unit="核"
+                  items={[
+                    { name: '改配利旧', value: result.result_analysis.compute_capacity.reconfig_cores, color: '#1677ff' },
+                    { name: '准系统采购利旧', value: result.result_analysis.compute_capacity.quasi_purchase_cores, color: '#13c2c2' },
+                    { name: '新机采购', value: result.result_analysis.compute_capacity.new_purchase_cores, color: '#52c41a' },
+                    { name: '存量继续使用', value: result.result_analysis.compute_capacity.stock_continue_cores, color: '#faad14' }
+                  ]}
+                />
+              </Col>
+            </Row>
+
             <Row gutter={16} style={{ marginTop: 16 }}>
               <Col span={12}>
-                <Card type="inner" title="算力-温存储(TB)">
-                  <Statistic title="改配利旧" value={result.result_analysis.warm_storage_capacity.reconfig_tb} />
-                  <Statistic title="准系统采购利旧" value={result.result_analysis.warm_storage_capacity.quasi_purchase_tb} />
-                  <Statistic title="新机采购" value={result.result_analysis.warm_storage_capacity.new_purchase_tb} />
-                  <Statistic title="存量继续使用" value={result.result_analysis.warm_storage_capacity.stock_continue_tb} />
-                  <Statistic title="合计" value={result.result_analysis.warm_storage_capacity.total_tb} />
-                </Card>
+                <StackedShareBar
+                  title="算力-温存储 组成占比（堆叠条，单位：TB）"
+                  unit="TB"
+                  items={[
+                    { name: '改配利旧', value: result.result_analysis.warm_storage_capacity.reconfig_tb, color: '#1677ff' },
+                    { name: '准系统采购利旧', value: result.result_analysis.warm_storage_capacity.quasi_purchase_tb, color: '#13c2c2' },
+                    { name: '新机采购', value: result.result_analysis.warm_storage_capacity.new_purchase_tb, color: '#52c41a' },
+                    { name: '存量继续使用', value: result.result_analysis.warm_storage_capacity.stock_continue_tb, color: '#faad14' }
+                  ]}
+                />
               </Col>
               <Col span={12}>
-                <Card type="inner" title="算力-热存储(TB)">
-                  <Statistic title="改配利旧" value={result.result_analysis.hot_storage_capacity.reconfig_tb} />
-                  <Statistic title="准系统采购利旧" value={result.result_analysis.hot_storage_capacity.quasi_purchase_tb} />
-                  <Statistic title="新机采购" value={result.result_analysis.hot_storage_capacity.new_purchase_tb} />
-                  <Statistic title="存量继续使用" value={result.result_analysis.hot_storage_capacity.stock_continue_tb} />
-                  <Statistic title="合计" value={result.result_analysis.hot_storage_capacity.total_tb} />
-                </Card>
+                <StackedShareBar
+                  title="算力-热存储 组成占比（堆叠条，单位：TB）"
+                  unit="TB"
+                  items={[
+                    { name: '改配利旧', value: result.result_analysis.hot_storage_capacity.reconfig_tb, color: '#1677ff' },
+                    { name: '准系统采购利旧', value: result.result_analysis.hot_storage_capacity.quasi_purchase_tb, color: '#13c2c2' },
+                    { name: '新机采购', value: result.result_analysis.hot_storage_capacity.new_purchase_tb, color: '#52c41a' },
+                    { name: '存量继续使用', value: result.result_analysis.hot_storage_capacity.stock_continue_tb, color: '#faad14' }
+                  ]}
+                />
               </Col>
             </Row>
           </Card>
