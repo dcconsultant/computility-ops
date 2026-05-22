@@ -622,3 +622,17 @@ export interface ResourcePlanningResponse {
     };
   };
 }
+
+
+export interface Supplier {
+  supplier_id: string;
+  company_full_name: string;
+  tax_number: string;
+  project_owner: string;
+  project_owner_phone: string;
+  tech_contact: string;
+  tech_contact_phone: string;
+  business_scope: string;
+  created_at?: string;
+  updated_at?: string;
+}

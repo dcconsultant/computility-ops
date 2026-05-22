@@ -14,6 +14,7 @@ type Handlers struct {
 	Import              *handler.ImportHandler
 	Renewal             *handler.RenewalHandler
 	Contract            *handler.ContractHandler
+	Supplier            *handler.SupplierHandler
 	Cabinet             *handler.CabinetHandler
 	System              *handler.SystemHandler
 	ValueScoreSetup     *handler.ValueScoreSetupHandler
@@ -96,6 +97,11 @@ func NewRouter(h Handlers) *gin.Engine {
 		v1.GET("/system/import-errors", h.System.ListImportErrors)
 
 		v1.POST("/contracts", h.Contract.CreateContract)
+		v1.POST("/suppliers", h.Supplier.CreateSupplier)
+		v1.GET("/suppliers", h.Supplier.ListSuppliers)
+		v1.GET("/suppliers/:supplier_id", h.Supplier.GetSupplier)
+		v1.PUT("/suppliers/:supplier_id", h.Supplier.UpdateSupplier)
+		v1.DELETE("/suppliers/:supplier_id", h.Supplier.DeleteSupplier)
 		v1.GET("/contracts", h.Contract.ListContracts)
 		v1.GET("/contracts/:contract_id", h.Contract.GetContract)
 		v1.PUT("/contracts/:contract_id", h.Contract.UpdateContract)

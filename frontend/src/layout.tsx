@@ -94,6 +94,14 @@ export default function AppLayout() {
                 { key: '/reconfig', label: <Link to="/reconfig">改配管理</Link> }
               ]
             },
+            {
+              key: '/business-terms',
+              label: '商务条款',
+              children: [
+                { key: '/contracts', label: <Link to="/contracts">合同</Link> },
+                { key: '/suppliers', label: <Link to="/suppliers">供应商</Link> }
+              ]
+            },
             { key: '/resource-analysis', label: <Link to="/import?section=resource-analysis&tab=assets">资源分析</Link> },
             { key: '/test-zone', label: <Link to="/import?section=test-zone&tab=servers">测试专区</Link> }
           ]}

@@ -136,7 +136,7 @@ export default function ContractPage() {
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
-      <Card title="合同管理 - 新建/编辑合同" extra={editingID ? <Tag color="blue">编辑中：{editingID}</Tag> : <Tag>新建</Tag>}>
+      <Card title="合同 - 新建/编辑" extra={editingID ? <Tag color="blue">编辑中：{editingID}</Tag> : <Tag>新建</Tag>}>
         <Form
           form={form}
           layout="vertical"
@@ -184,7 +184,7 @@ export default function ContractPage() {
         </Form>
       </Card>
 
-      <Card title="合同管理 - 合同列表" extra={<Button onClick={reload} loading={loading}>刷新</Button>}>
+      <Card title="合同 - 列表" extra={<Button onClick={reload} loading={loading}>刷新</Button>}>
         <Table
           rowKey="contract_id"
           loading={loading}

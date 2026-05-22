@@ -32,6 +32,7 @@ import type {
   ImportErrorInsight,
   Contract,
   ContractAttachment,
+  Supplier,
   MetaField,
   MetaModel,
   MetaReference,
@@ -454,6 +455,28 @@ export function downloadContractAttachment(contractId: string, attachmentId: str
 
 export async function deleteContractAttachment(contractId: string, attachmentId: string) {
   const { data } = await http.delete<ApiResp<Contract>>(`/contracts/${contractId}/attachments/${attachmentId}`);
+  return data;
+}
+
+
+export async function listSuppliers(query?: string) {
+  const params = query?.trim() ? { q: query.trim() } : {};
+  const { data } = await http.get<ApiResp<ListData<Supplier>>>('/suppliers', { params });
+  return data;
+}
+
+export async function createSupplier(payload: Omit<Supplier, 'supplier_id' | 'created_at' | 'updated_at'>) {
+  const { data } = await http.post<ApiResp<Supplier>>('/suppliers', payload);
+  return data;
+}
+
+export async function updateSupplier(supplierId: string, payload: Omit<Supplier, 'supplier_id' | 'created_at' | 'updated_at'>) {
+  const { data } = await http.put<ApiResp<Supplier>>(`/suppliers/${supplierId}`, payload);
+  return data;
+}
+
+export async function deleteSupplier(supplierId: string) {
+  const { data } = await http.delete<ApiResp<{ deleted: boolean; supplier_id: string }>>(`/suppliers/${supplierId}`);
   return data;
 }
 
