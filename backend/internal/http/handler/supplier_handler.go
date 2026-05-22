@@ -206,12 +206,12 @@ func (h *SupplierHandler) ImportSuppliers(c *gin.Context) {
 			BusinessScope:    cell(row, 6),
 		})
 	}
-	count, err := h.service.ImportSuppliers(c.Request.Context(), inputs)
+	result, err := h.service.ImportSuppliers(c.Request.Context(), inputs)
 	if err != nil {
 		fail(c, 40001, err.Error())
 		return
 	}
-	ok(c, gin.H{"imported": count})
+	ok(c, result)
 }
 
 func cell(row []string, idx int) string {

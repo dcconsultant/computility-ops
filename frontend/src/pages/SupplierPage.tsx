@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Form, Input, Popconfirm, Space, Table, Tag, Upload, message } from 'antd';
+import { Button, Card, Form, Input, Popconfirm, Select, Space, Table, Tag, Upload, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { UploadProps } from 'antd';
 import { createSupplier, deleteSupplier, exportSupplierTemplate, exportSuppliers, importSuppliers, listSuppliers, updateSupplier } from '../api';
@@ -13,7 +13,7 @@ interface SupplierFormValue {
   project_owner_phone: string;
   tech_contact: string;
   tech_contact_phone: string;
-  business_scope: string;
+  business_scope: string[];
 }
 
 const EMPTY_FORM: SupplierFormValue = {
@@ -23,11 +23,13 @@ const EMPTY_FORM: SupplierFormValue = {
   project_owner_phone: '',
   tech_contact: '',
   tech_contact_phone: '',
-  business_scope: ''
+  business_scope: []
 };
 
 const TAX_REGEX = /^[0-9A-Z]{15,20}$/;
 const PHONE_REGEX = /^(1\d{10}|0\d{2,3}-?\d{7,8})$/;
+
+const BUSINESS_SCOPE_OPTIONS = ['服务器', '网络', '机柜服务', '维保', '机电设备', '软件', '零星工程', '总包'];
 
 export default function SupplierPage() {
   const [form] = Form.useForm<SupplierFormValue>();
@@ -67,7 +69,14 @@ export default function SupplierPage() {
     beforeUpload: async (file) => {
       try {
         const resp = ensureApiOk(await importSuppliers(file));
-        message.success(`导入成功，共处理 ${resp.data.imported} 条`);
+        const r = resp.data;
+        const summary = `导入完成：新增 ${r.created} 条，更新 ${r.updated} 条，失败 ${r.failed} 条`;
+        if (r.failed > 0) {
+          const details = (r.failures || []).slice(0, 10).map((x) => `第${x.row}行：${x.reason}`).join('；');
+          message.warning(`${summary}${details ? `。${details}` : ''}`);
+        } else {
+          message.success(summary);
+        }
         await reload();
       } catch (e) {
         message.error(parseApiError(e, '导入供应商失败'));
@@ -106,7 +115,7 @@ export default function SupplierPage() {
       project_owner_phone: item.project_owner_phone,
       tech_contact: item.tech_contact,
       tech_contact_phone: item.tech_contact_phone,
-      business_scope: item.business_scope
+      business_scope: (item.business_scope || '').split('、').map((x) => x.trim()).filter(Boolean)
     });
   }
 
@@ -129,7 +138,7 @@ export default function SupplierPage() {
       project_owner_phone: values.project_owner_phone.trim(),
       tech_contact: values.tech_contact.trim(),
       tech_contact_phone: values.tech_contact_phone.trim(),
-      business_scope: values.business_scope.trim()
+      business_scope: (values.business_scope || []).join('、')
     };
     setSaving(true);
     try {
@@ -190,8 +199,8 @@ export default function SupplierPage() {
             >
               <Input placeholder="电话" />
             </Form.Item>
-            <Form.Item name="business_scope" label="业务范围" rules={[{ required: true, message: '请输入业务范围' }]} style={{ minWidth: 420, flex: 1 }}>
-              <Input.TextArea rows={2} placeholder="例如：云资源采购、服务器维护、IDC 服务等" />
+            <Form.Item name="business_scope" label="业务范围" rules={[{ required: true, message: '请选择业务范围' }]} style={{ minWidth: 420, flex: 1 }}>
+              <Select mode="multiple" allowClear placeholder="请选择业务范围（可多选）" options={BUSINESS_SCOPE_OPTIONS.map((v) => ({ label: v, value: v }))} />
             </Form.Item>
           </Space>
           <Space>

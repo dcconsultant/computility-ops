@@ -19,6 +19,12 @@ var (
 	taxNumberRegex = regexp.MustCompile(`^[0-9A-Z]{15,20}$`)
 )
 
+var AllowedBusinessScopes = []string{"服务器", "网络", "机柜服务", "维保", "机电设备", "软件", "零星工程", "总包"}
+
+var allowedBusinessScopeSet = map[string]struct{}{
+	"服务器": {}, "网络": {}, "机柜服务": {}, "维保": {}, "机电设备": {}, "软件": {}, "零星工程": {}, "总包": {},
+}
+
 type UpsertSupplierInput struct {
 	CompanyFullName   string
 	TaxNumber         string
@@ -27,6 +33,18 @@ type UpsertSupplierInput struct {
 	TechContact       string
 	TechContactPhone  string
 	BusinessScope     string
+}
+
+type SupplierImportFailure struct {
+	Row    int    `json:"row"`
+	Reason string `json:"reason"`
+}
+
+type SupplierImportResult struct {
+	Created  int                     `json:"created"`
+	Updated  int                     `json:"updated"`
+	Failed   int                     `json:"failed"`
+	Failures []SupplierImportFailure `json:"failures,omitempty"`
 }
 
 type SupplierService struct {
@@ -47,7 +65,7 @@ func (s *SupplierService) CreateSupplier(ctx context.Context, in UpsertSupplierI
 		ProjectOwnerPhone: normalizePhone(in.ProjectOwnerPhone),
 		TechContact:       strings.TrimSpace(in.TechContact),
 		TechContactPhone:  normalizePhone(in.TechContactPhone),
-		BusinessScope:     strings.TrimSpace(in.BusinessScope),
+		BusinessScope:     normalizeBusinessScope(in.BusinessScope),
 	}, true)
 	if err != nil {
 		return domain.Supplier{}, err
@@ -69,7 +87,7 @@ func (s *SupplierService) UpdateSupplier(ctx context.Context, supplierID string,
 	old.ProjectOwnerPhone = normalizePhone(in.ProjectOwnerPhone)
 	old.TechContact = strings.TrimSpace(in.TechContact)
 	old.TechContactPhone = normalizePhone(in.TechContactPhone)
-	old.BusinessScope = strings.TrimSpace(in.BusinessScope)
+	old.BusinessScope = normalizeBusinessScope(in.BusinessScope)
 
 	item, err := validateAndBuildSupplier(old, false)
 	if err != nil {
@@ -107,34 +125,45 @@ func (s *SupplierService) ListSuppliers(ctx context.Context, keyword string) ([]
 	return list, nil
 }
 
-func (s *SupplierService) ImportSuppliers(ctx context.Context, rows []UpsertSupplierInput) (int, error) {
+func (s *SupplierService) ImportSuppliers(ctx context.Context, rows []UpsertSupplierInput) (SupplierImportResult, error) {
+	result := SupplierImportResult{}
 	existing, err := s.repo.ListSuppliers(ctx)
 	if err != nil {
-		return 0, err
+		return result, err
 	}
 	byTax := make(map[string]domain.Supplier, len(existing))
 	for _, item := range existing {
 		byTax[normalizeTaxNumber(item.TaxNumber)] = item
 	}
 
-	count := 0
 	for i, row := range rows {
+		rowNo := i + 2
 		tax := normalizeTaxNumber(row.TaxNumber)
+		if strings.TrimSpace(tax) == "" && strings.TrimSpace(row.CompanyFullName) == "" && strings.TrimSpace(row.BusinessScope) == "" {
+			continue
+		}
 		if tax == "" {
+			result.Failed++
+			result.Failures = append(result.Failures, SupplierImportFailure{Row: rowNo, Reason: "tax_number is required"})
 			continue
 		}
 		if old, ok := byTax[tax]; ok {
 			if _, err := s.UpdateSupplier(ctx, old.SupplierID, row); err != nil {
-				return count, fmt.Errorf("row %d: %w", i+2, err)
+				result.Failed++
+				result.Failures = append(result.Failures, SupplierImportFailure{Row: rowNo, Reason: err.Error()})
+				continue
 			}
+			result.Updated++
 		} else {
 			if _, err := s.CreateSupplier(ctx, row); err != nil {
-				return count, fmt.Errorf("row %d: %w", i+2, err)
+				result.Failed++
+				result.Failures = append(result.Failures, SupplierImportFailure{Row: rowNo, Reason: err.Error()})
+				continue
 			}
+			result.Created++
 		}
-		count++
 	}
-	return count, nil
+	return result, nil
 }
 
 func (s *SupplierService) DeleteSupplier(ctx context.Context, supplierID string) error {
@@ -176,6 +205,9 @@ func validateAndBuildSupplier(item domain.Supplier, isCreate bool) (domain.Suppl
 	if strings.TrimSpace(item.BusinessScope) == "" {
 		return domain.Supplier{}, fmt.Errorf("business_scope is required")
 	}
+	if err := validateBusinessScope(item.BusinessScope); err != nil {
+		return domain.Supplier{}, err
+	}
 	now := time.Now().Format(time.RFC3339)
 	if isCreate || strings.TrimSpace(item.CreatedAt) == "" {
 		item.CreatedAt = now
@@ -195,4 +227,46 @@ func normalizePhone(s string) string {
 func isValidPhone(s string) bool {
 	v := strings.ReplaceAll(strings.TrimSpace(s), " ", "")
 	return cnMobileRegex.MatchString(v) || landlineRegex.MatchString(v)
+}
+
+func validateBusinessScope(raw string) error {
+	scopes := splitBusinessScopes(raw)
+	if len(scopes) == 0 {
+		return fmt.Errorf("business_scope is required")
+	}
+	for _, scope := range scopes {
+		if _, ok := allowedBusinessScopeSet[scope]; !ok {
+			return fmt.Errorf("invalid business_scope option: %s", scope)
+		}
+	}
+	return nil
+}
+
+func normalizeBusinessScope(raw string) string {
+	scopes := splitBusinessScopes(raw)
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		if _, ok := seen[scope]; ok {
+			continue
+		}
+		seen[scope] = struct{}{}
+		out = append(out, scope)
+	}
+	return strings.Join(out, "、")
+}
+
+func splitBusinessScopes(raw string) []string {
+	replacer := strings.NewReplacer("，", ",", "、", ",", ";", ",", "；", ",", "|", ",", "/", ",")
+	normalized := replacer.Replace(strings.TrimSpace(raw))
+	parts := strings.Split(normalized, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		v := strings.TrimSpace(p)
+		if v == "" {
+			continue
+		}
+		out = append(out, v)
+	}
+	return out
 }

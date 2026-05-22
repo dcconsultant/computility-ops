@@ -481,10 +481,22 @@ export async function deleteSupplier(supplierId: string) {
 }
 
 
+export interface SupplierImportFailure {
+  row: number;
+  reason: string;
+}
+
+export interface SupplierImportResult {
+  created: number;
+  updated: number;
+  failed: number;
+  failures?: SupplierImportFailure[];
+}
+
 export async function importSuppliers(file: File) {
   const form = new FormData();
   form.append('file', file);
-  const { data } = await http.post<ApiResp<{ imported: number }>>('/suppliers/import', form, {
+  const { data } = await http.post<ApiResp<SupplierImportResult>>('/suppliers/import', form, {
     headers: { 'Content-Type': 'multipart/form-data' }
   });
   return data;
