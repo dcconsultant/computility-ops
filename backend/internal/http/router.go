@@ -98,7 +98,10 @@ func NewRouter(h Handlers) *gin.Engine {
 
 		v1.POST("/contracts", h.Contract.CreateContract)
 		v1.POST("/suppliers", h.Supplier.CreateSupplier)
+		v1.POST("/suppliers/import", h.Supplier.ImportSuppliers)
 		v1.GET("/suppliers", h.Supplier.ListSuppliers)
+		v1.GET("/suppliers/export", h.Supplier.ExportSuppliers)
+		v1.GET("/suppliers/template/export", h.Supplier.ExportSupplierTemplate)
 		v1.GET("/suppliers/:supplier_id", h.Supplier.GetSupplier)
 		v1.PUT("/suppliers/:supplier_id", h.Supplier.UpdateSupplier)
 		v1.DELETE("/suppliers/:supplier_id", h.Supplier.DeleteSupplier)

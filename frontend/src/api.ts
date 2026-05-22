@@ -480,6 +480,25 @@ export async function deleteSupplier(supplierId: string) {
   return data;
 }
 
+
+export async function importSuppliers(file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await http.post<ApiResp<{ imported: number }>>('/suppliers/import', form, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
+  return data;
+}
+
+export function exportSuppliers() {
+  window.open('/api/v1/suppliers/export', '_blank');
+}
+
+export function exportSupplierTemplate() {
+  window.open('/api/v1/suppliers/template/export', '_blank');
+}
+
+
 export interface MySQLTestPayload {
   dsn?: string;
   host?: string;

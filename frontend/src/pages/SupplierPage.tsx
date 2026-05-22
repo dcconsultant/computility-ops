@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Form, Input, Popconfirm, Space, Table, Tag, message } from 'antd';
+import { Button, Card, Form, Input, Popconfirm, Space, Table, Tag, Upload, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { createSupplier, deleteSupplier, listSuppliers, updateSupplier } from '../api';
+import type { UploadProps } from 'antd';
+import { createSupplier, deleteSupplier, exportSupplierTemplate, exportSuppliers, importSuppliers, listSuppliers, updateSupplier } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
 import type { Supplier } from '../types';
 
@@ -24,6 +25,9 @@ const EMPTY_FORM: SupplierFormValue = {
   tech_contact_phone: '',
   business_scope: ''
 };
+
+const TAX_REGEX = /^[0-9A-Z]{15,20}$/;
+const PHONE_REGEX = /^(1\d{10}|0\d{2,3}-?\d{7,8})$/;
 
 export default function SupplierPage() {
   const [form] = Form.useForm<SupplierFormValue>();
@@ -49,13 +53,28 @@ export default function SupplierPage() {
       render: (_, row) => (
         <Space>
           <Button size="small" onClick={() => onEdit(row)}>编辑</Button>
-          <Popconfirm title="确认删除该供应商？" onConfirm={() => onDelete(row.supplier_id)}>
+          <Popconfirm title="确认删除该供应商？若已被合同引用将无法删除。" onConfirm={() => onDelete(row.supplier_id)}>
             <Button size="small" danger>删除</Button>
           </Popconfirm>
         </Space>
       )
     }
   ], []);
+
+  const uploadProps: UploadProps = {
+    accept: '.xlsx',
+    showUploadList: false,
+    beforeUpload: async (file) => {
+      try {
+        const resp = ensureApiOk(await importSuppliers(file));
+        message.success(`导入成功，共处理 ${resp.data.imported} 条`);
+        await reload();
+      } catch (e) {
+        message.error(parseApiError(e, '导入供应商失败'));
+      }
+      return false;
+    }
+  };
 
   useEffect(() => {
     reload();
@@ -105,7 +124,7 @@ export default function SupplierPage() {
   async function onSubmit(values: SupplierFormValue) {
     const payload = {
       company_full_name: values.company_full_name.trim(),
-      tax_number: values.tax_number.trim(),
+      tax_number: values.tax_number.trim().toUpperCase(),
       project_owner: values.project_owner.trim(),
       project_owner_phone: values.project_owner_phone.trim(),
       tech_contact: values.tech_contact.trim(),
@@ -138,19 +157,37 @@ export default function SupplierPage() {
             <Form.Item name="company_full_name" label="公司全名" rules={[{ required: true, message: '请输入公司全名' }]} style={{ width: 360 }}>
               <Input placeholder="例如：某某科技有限公司" />
             </Form.Item>
-            <Form.Item name="tax_number" label="税号" rules={[{ required: true, message: '请输入税号' }]} style={{ width: 260 }}>
+            <Form.Item
+              name="tax_number"
+              label="税号"
+              rules={[
+                { required: true, message: '请输入税号' },
+                { pattern: TAX_REGEX, message: '税号格式不正确（15-20位大写字母/数字）' }
+              ]}
+              style={{ width: 260 }}
+            >
               <Input placeholder="统一社会信用代码 / 税号" />
             </Form.Item>
             <Form.Item name="project_owner" label="项目负责人" style={{ width: 180 }}>
               <Input placeholder="负责人姓名" />
             </Form.Item>
-            <Form.Item name="project_owner_phone" label="项目负责人电话" style={{ width: 200 }}>
+            <Form.Item
+              name="project_owner_phone"
+              label="项目负责人电话"
+              rules={[{ pattern: PHONE_REGEX, message: '电话格式不正确（11位手机号或区号座机）' }]}
+              style={{ width: 200 }}
+            >
               <Input placeholder="电话" />
             </Form.Item>
             <Form.Item name="tech_contact" label="技术接口人" style={{ width: 180 }}>
               <Input placeholder="技术联系人" />
             </Form.Item>
-            <Form.Item name="tech_contact_phone" label="技术接口人电话" style={{ width: 200 }}>
+            <Form.Item
+              name="tech_contact_phone"
+              label="技术接口人电话"
+              rules={[{ pattern: PHONE_REGEX, message: '电话格式不正确（11位手机号或区号座机）' }]}
+              style={{ width: 200 }}
+            >
               <Input placeholder="电话" />
             </Form.Item>
             <Form.Item name="business_scope" label="业务范围" rules={[{ required: true, message: '请输入业务范围' }]} style={{ minWidth: 420, flex: 1 }}>
@@ -168,6 +205,11 @@ export default function SupplierPage() {
         title="供应商清单"
         extra={(
           <Space>
+            <Upload {...uploadProps}>
+              <Button>导入 Excel</Button>
+            </Upload>
+            <Button onClick={exportSupplierTemplate}>下载模板</Button>
+            <Button onClick={exportSuppliers}>导出 Excel</Button>
             <Input.Search
               allowClear
               placeholder="按公司、税号、联系人、业务范围搜索"

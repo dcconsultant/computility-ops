@@ -36,7 +36,7 @@ func Build(cfg config.Config) (*gin.Engine, error) {
 	valueScoreSetupSvc := service.NewValueScoreSetupService(datasetRepo, serverRepo)
 	renewalSvc := service.NewRenewalService(serverRepo, datasetRepo, renewalRepo)
 	contractSvc := service.NewContractService(contractRepo)
-	supplierSvc := service.NewSupplierService(supplierRepo)
+	supplierSvc := service.NewSupplierService(supplierRepo, contractRepo)
 	metaSvc := service.NewMetaService(metaRepo, cfg.MetaImportCleanDays, cfg.MetaImportKeepLatest, cfg.MetaImportUniqueMode)
 	reconfigMgmtSvc := service.NewReconfigService(metaRepo, datasetRepo)
 	resourcePlanningSvc := service.NewResourcePlanningService(serverRepo, datasetRepo, renewalRepo)
