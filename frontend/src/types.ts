@@ -509,7 +509,6 @@ export interface MetaRecord {
 }
 
 export interface ResourcePlanningRequest {
-  admit_value_score: number;
   self_build_value_score_compute?: number;
   self_build_value_score_warm_storage?: number;
   self_build_value_score_hot_storage?: number;
@@ -528,9 +527,15 @@ export interface ResourcePlanningRequest {
   non_business_psas: string;
   reconfig_done_server_count?: number;
   reconfig_done_logical_cores?: number;
+  reconfig_done_warm_storage_tb?: number;
+  reconfig_done_hot_storage_tb?: number;
+  reconfig_done_gpu_cards?: number;
   reconfig_done_cost_cny?: number;
   quasi_purchase_server_count: number;
   quasi_purchase_logical_cores: number;
+  quasi_purchase_warm_storage_tb?: number;
+  quasi_purchase_hot_storage_tb?: number;
+  quasi_purchase_gpu_cards?: number;
   quasi_purchase_cost_cny: number;
 }
 
@@ -560,11 +565,17 @@ export interface ResourcePlanningResponse {
     source_plan_id: string;
     server_count: number;
     logical_cores: number;
+    covered_warm_storage_tb: number;
+    covered_hot_storage_tb: number;
+    covered_gpu_cards: number;
     cost_cny: number;
   };
   quasi_purchase_plan: {
     server_count: number;
     logical_cores: number;
+    covered_warm_storage_tb: number;
+    covered_hot_storage_tb: number;
+    covered_gpu_cards: number;
     cost_cny: number;
   };
   new_purchase_plan: {

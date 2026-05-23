@@ -27,7 +27,6 @@ func NewResourcePlanningService(serverRepo repository.ServerRepo, datasetRepo re
 }
 
 type ResourcePlanningRequest struct {
-	AdmitValueScore              float64 `json:"admit_value_score"`
 	SelfBuildValueScoreCompute   float64 `json:"self_build_value_score_compute"`
 	SelfBuildValueScoreWarm      float64 `json:"self_build_value_score_warm_storage"`
 	SelfBuildValueScoreHot       float64 `json:"self_build_value_score_hot_storage"`
@@ -46,9 +45,15 @@ type ResourcePlanningRequest struct {
 	NonBusinessPSAs           string   `json:"non_business_psas"`
 	ReconfigDoneServerCount   *int     `json:"reconfig_done_server_count"`
 	ReconfigDoneLogicalCores  *int     `json:"reconfig_done_logical_cores"`
+	ReconfigDoneWarmStorageTB *float64 `json:"reconfig_done_warm_storage_tb"`
+	ReconfigDoneHotStorageTB  *float64 `json:"reconfig_done_hot_storage_tb"`
+	ReconfigDoneGPUCards      *int     `json:"reconfig_done_gpu_cards"`
 	ReconfigDoneCostCNY       *float64 `json:"reconfig_done_cost_cny"`
 	QuasiPurchaseServerCount  int      `json:"quasi_purchase_server_count"`
 	QuasiPurchaseLogicalCores int      `json:"quasi_purchase_logical_cores"`
+	QuasiPurchaseWarmTB       float64  `json:"quasi_purchase_warm_storage_tb"`
+	QuasiPurchaseHotTB        float64  `json:"quasi_purchase_hot_storage_tb"`
+	QuasiPurchaseGPUCards     int      `json:"quasi_purchase_gpu_cards"`
 	QuasiPurchaseCostCNY      float64  `json:"quasi_purchase_cost_cny"`
 }
 
@@ -70,16 +75,22 @@ type ResourcePlanningConfigState struct {
 }
 
 type ResourcePlanningReconfigPlan struct {
-	SourcePlanID string  `json:"source_plan_id"`
-	ServerCount  int     `json:"server_count"`
-	LogicalCores int     `json:"logical_cores"`
-	CostCNY      float64 `json:"cost_cny"`
+	SourcePlanID         string  `json:"source_plan_id"`
+	ServerCount          int     `json:"server_count"`
+	LogicalCores         int     `json:"logical_cores"`
+	CoveredWarmStorageTB float64 `json:"covered_warm_storage_tb"`
+	CoveredHotStorageTB  float64 `json:"covered_hot_storage_tb"`
+	CoveredGPUCards      int     `json:"covered_gpu_cards"`
+	CostCNY              float64 `json:"cost_cny"`
 }
 
 type ResourcePlanningQuasiPurchasePlan struct {
-	ServerCount  int     `json:"server_count"`
-	LogicalCores int     `json:"logical_cores"`
-	CostCNY      float64 `json:"cost_cny"`
+	ServerCount          int     `json:"server_count"`
+	LogicalCores         int     `json:"logical_cores"`
+	CoveredWarmStorageTB float64 `json:"covered_warm_storage_tb"`
+	CoveredHotStorageTB  float64 `json:"covered_hot_storage_tb"`
+	CoveredGPUCards      int     `json:"covered_gpu_cards"`
+	CostCNY              float64 `json:"cost_cny"`
 }
 
 type ResourcePlanningScenePurchasePlan struct {
@@ -217,6 +228,15 @@ func (s *ResourcePlanningService) Calculate(ctx context.Context, req ResourcePla
 	if req.ReconfigDoneLogicalCores != nil && *req.ReconfigDoneLogicalCores < 0 {
 		return ResourcePlanningResponse{}, fmt.Errorf("已改配成功逻辑核必须>=0")
 	}
+	if req.ReconfigDoneWarmStorageTB != nil && *req.ReconfigDoneWarmStorageTB < 0 {
+		return ResourcePlanningResponse{}, fmt.Errorf("已改配温存储必须>=0")
+	}
+	if req.ReconfigDoneHotStorageTB != nil && *req.ReconfigDoneHotStorageTB < 0 {
+		return ResourcePlanningResponse{}, fmt.Errorf("已改配热存储必须>=0")
+	}
+	if req.ReconfigDoneGPUCards != nil && *req.ReconfigDoneGPUCards < 0 {
+		return ResourcePlanningResponse{}, fmt.Errorf("已改配GPU卡数必须>=0")
+	}
 	if req.ReconfigDoneCostCNY != nil && *req.ReconfigDoneCostCNY < 0 {
 		return ResourcePlanningResponse{}, fmt.Errorf("已改配费用必须>=0")
 	}
@@ -246,9 +266,12 @@ func (s *ResourcePlanningService) Calculate(ctx context.Context, req ResourcePla
 	}
 
 	quasi := ResourcePlanningQuasiPurchasePlan{
-		ServerCount:  req.QuasiPurchaseServerCount,
-		LogicalCores: req.QuasiPurchaseLogicalCores,
-		CostCNY:      round2RP(req.QuasiPurchaseCostCNY),
+		ServerCount:          req.QuasiPurchaseServerCount,
+		LogicalCores:         req.QuasiPurchaseLogicalCores,
+		CoveredWarmStorageTB: round2RP(req.QuasiPurchaseWarmTB),
+		CoveredHotStorageTB:  round2RP(req.QuasiPurchaseHotTB),
+		CoveredGPUCards:      req.QuasiPurchaseGPUCards,
+		CostCNY:              round2RP(req.QuasiPurchaseCostCNY),
 	}
 
 	renewalPlan, err := s.calcRenewalPlan(ctx)
@@ -314,12 +337,21 @@ func (s *ResourcePlanningService) calcReconfigPlan(req ResourcePlanningRequest) 
 		LogicalCores: int(math.Round(snap.SuccessCoreCount)),
 		CostCNY:      round2(snap.ReconfigFee),
 	}
-	if req.ReconfigDoneServerCount != nil || req.ReconfigDoneLogicalCores != nil || req.ReconfigDoneCostCNY != nil {
+	if req.ReconfigDoneServerCount != nil || req.ReconfigDoneLogicalCores != nil || req.ReconfigDoneCostCNY != nil || req.ReconfigDoneWarmStorageTB != nil || req.ReconfigDoneHotStorageTB != nil || req.ReconfigDoneGPUCards != nil {
 		if req.ReconfigDoneServerCount == nil || req.ReconfigDoneLogicalCores == nil || req.ReconfigDoneCostCNY == nil {
-			return ResourcePlanningReconfigPlan{}, fmt.Errorf("已改配输入需同时提供成功服务器、成功逻辑核、费用")
+			return ResourcePlanningReconfigPlan{}, fmt.Errorf("已改配输入至少需提供服务器、计算、费用")
 		}
 		plan.ServerCount += *req.ReconfigDoneServerCount
 		plan.LogicalCores += *req.ReconfigDoneLogicalCores
+		if req.ReconfigDoneWarmStorageTB != nil {
+			plan.CoveredWarmStorageTB = round2RP(plan.CoveredWarmStorageTB + *req.ReconfigDoneWarmStorageTB)
+		}
+		if req.ReconfigDoneHotStorageTB != nil {
+			plan.CoveredHotStorageTB = round2RP(plan.CoveredHotStorageTB + *req.ReconfigDoneHotStorageTB)
+		}
+		if req.ReconfigDoneGPUCards != nil {
+			plan.CoveredGPUCards += *req.ReconfigDoneGPUCards
+		}
 		plan.CostCNY = round2RP(plan.CostCNY + *req.ReconfigDoneCostCNY)
 	}
 	return plan, nil
@@ -688,37 +720,37 @@ func calcResultAnalysis(req ResourcePlanningRequest, servers []domain.Server, pk
 	}
 	compute.TotalCores = compute.ReconfigCores + compute.QuasiPurchaseCores + compute.NewPurchaseCores + compute.StockContinueCores
 
-	warmStock := availableWarm - newPlan.CoveredWarmStorageTB
+	warmStock := availableWarm - reconfig.CoveredWarmStorageTB - quasi.CoveredWarmStorageTB - newPlan.CoveredWarmStorageTB
 	if warmStock < 0 {
 		warmStock = 0
 	}
 	warm := ResourcePlanningCapacityStorageBreakdown{
-		ReconfigTB:      0,
-		QuasiPurchaseTB: 0,
+		ReconfigTB:      round2RP(reconfig.CoveredWarmStorageTB),
+		QuasiPurchaseTB: round2RP(quasi.CoveredWarmStorageTB),
 		NewPurchaseTB:   round2RP(newPlan.CoveredWarmStorageTB),
 		StockContinueTB: round2RP(warmStock),
 	}
 	warm.TotalTB = round2RP(warm.ReconfigTB + warm.QuasiPurchaseTB + warm.NewPurchaseTB + warm.StockContinueTB)
 
-	hotStock := availableHot - newPlan.CoveredHotStorageTB
+	hotStock := availableHot - reconfig.CoveredHotStorageTB - quasi.CoveredHotStorageTB - newPlan.CoveredHotStorageTB
 	if hotStock < 0 {
 		hotStock = 0
 	}
 	hot := ResourcePlanningCapacityStorageBreakdown{
-		ReconfigTB:      0,
-		QuasiPurchaseTB: 0,
+		ReconfigTB:      round2RP(reconfig.CoveredHotStorageTB),
+		QuasiPurchaseTB: round2RP(quasi.CoveredHotStorageTB),
 		NewPurchaseTB:   round2RP(newPlan.CoveredHotStorageTB),
 		StockContinueTB: round2RP(hotStock),
 	}
 	hot.TotalTB = round2RP(hot.ReconfigTB + hot.QuasiPurchaseTB + hot.NewPurchaseTB + hot.StockContinueTB)
 
-	gpuStock := availableGPU - newPlan.CoveredGPUCards
+	gpuStock := availableGPU - reconfig.CoveredGPUCards - quasi.CoveredGPUCards - newPlan.CoveredGPUCards
 	if gpuStock < 0 {
 		gpuStock = 0
 	}
 	gpu := ResourcePlanningCapacityGPUBreakdown{
-		ReconfigCards:      0,
-		QuasiPurchaseCards: 0,
+		ReconfigCards:      reconfig.CoveredGPUCards,
+		QuasiPurchaseCards: quasi.CoveredGPUCards,
 		NewPurchaseCards:   newPlan.CoveredGPUCards,
 		StockContinueCards: gpuStock,
 	}
@@ -1147,9 +1179,6 @@ func sceneAdmitThreshold(req ResourcePlanningRequest, scene string) float64 {
 		if req.PublicCloudValueScoreGPU > 0 {
 			return req.PublicCloudValueScoreGPU
 		}
-	}
-	if req.AdmitValueScore > 0 {
-		return req.AdmitValueScore
 	}
 	return 0
 }

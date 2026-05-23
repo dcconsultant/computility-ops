@@ -156,7 +156,6 @@ export default function ResourcePlanningPage() {
           form={form}
           layout="vertical"
           initialValues={{
-            admit_value_score: 0,
             self_build_value_score_compute: 0,
             self_build_value_score_warm_storage: 0,
             self_build_value_score_hot_storage: 0,
@@ -173,39 +172,73 @@ export default function ResourcePlanningPage() {
             annual_depreciation_cny: 0,
             disposal_psas: '/server-decommission',
             non_business_psas: '/online-product',
+            reconfig_done_server_count: 0,
+            reconfig_done_logical_cores: 0,
+            reconfig_done_cost_cny: 0,
             quasi_purchase_server_count: 0,
             quasi_purchase_logical_cores: 0,
-            quasi_purchase_cost_cny: 0
+            quasi_purchase_cost_cny: 0,
+            reconfig_done_warm_storage_tb: 0,
+            reconfig_done_hot_storage_tb: 0,
+            reconfig_done_gpu_cards: 0,
+            quasi_purchase_warm_storage_tb: 0,
+            quasi_purchase_hot_storage_tb: 0,
+            quasi_purchase_gpu_cards: 0
           }}
           onFinish={onSubmit}
         >
-          <Row gutter={16}>
-            <Col span={6}><Form.Item name="self_build_value_score_compute" label="自建价值分-计算"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="public_cloud_value_score_compute" label="公有云价值分-计算"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="self_build_value_score_warm_storage" label="自建价值分-温存储"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="public_cloud_value_score_warm_storage" label="公有云价值分-温存储"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="self_build_value_score_hot_storage" label="自建价值分-热存储"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="public_cloud_value_score_hot_storage" label="公有云价值分-热存储"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="self_build_value_score_gpu" label="自建价值分-GPU"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="public_cloud_value_score_gpu" label="公有云价值分-GPU"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="admit_value_score" label="兼容门槛(旧)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="compute_demand_cores" label="计算需求核" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="warm_storage_demand_tb" label="温存储需求(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="hot_storage_demand_tb" label="热存储需求(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="gpu_demand_cards" label="GPU需求(卡)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+          <Title level={5}>（1）价值分</Title>
+          <Text type="secondary">一级：价值分 → 二级：公有云/自建 → 三级：四场景</Text>
+          <Row gutter={16} style={{ marginTop: 8 }}>
+            <Col span={6}><Form.Item name="self_build_value_score_compute" label="自建-计算"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="public_cloud_value_score_compute" label="公有云-计算"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="self_build_value_score_warm_storage" label="自建-温存储"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="public_cloud_value_score_warm_storage" label="公有云-温存储"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="self_build_value_score_hot_storage" label="自建-热存储"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="public_cloud_value_score_hot_storage" label="公有云-热存储"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="self_build_value_score_gpu" label="自建-GPU"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="public_cloud_value_score_gpu" label="公有云-GPU"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+          </Row>
 
+          <Title level={5}>（2）需求</Title>
+          <Text type="secondary">计算(核)、温存储(TB)、热存储(TB)、GPU(卡)</Text>
+          <Row gutter={16} style={{ marginTop: 8 }}>
+            <Col span={6}><Form.Item name="compute_demand_cores" label="计算需求(核)" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="warm_storage_demand_tb" label="温存储需求(TB)" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="hot_storage_demand_tb" label="热存储需求(TB)" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="gpu_demand_cards" label="GPU需求(卡)" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+          </Row>
+
+          <Title level={5}>（3）预确定费用</Title>
+          <Row gutter={16} style={{ marginTop: 8 }}>
             <Col span={6}><Form.Item name="cabinet_and_other_cost_cny" label="机柜及其他费用(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
             <Col span={6}><Form.Item name="annual_depreciation_cny" label="年度折旧(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="disposal_psas" label="处置PSA(逗号分隔)" rules={[{ required: true }]}><Input /></Form.Item></Col>
-            <Col span={6}><Form.Item name="non_business_psas" label="非业务PSA(逗号分隔)" rules={[{ required: true }]}><Input /></Form.Item></Col>
+          </Row>
 
-            <Col span={6}><Form.Item name="reconfig_done_server_count" label="已改配成功服务器(可选)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="reconfig_done_logical_cores" label="已改配成功逻辑核(可选)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="reconfig_done_cost_cny" label="已改配费用(CNY,可选)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+          <Title level={5}>（4）利旧项目</Title>
+          <Text type="secondary">一级：改配/准系统 → 二级：计算、温存储、热存储、GPU → 三级：服务器数/算力/费用</Text>
+          <Row gutter={16} style={{ marginTop: 8 }}>
+            <Col span={24}><Text strong>改配利旧（已改配人工输入）</Text></Col>
+            <Col span={6}><Form.Item name="reconfig_done_server_count" label="改配-服务器数"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="reconfig_done_logical_cores" label="改配-计算(核)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="reconfig_done_warm_storage_tb" label="改配-温存储(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="reconfig_done_hot_storage_tb" label="改配-热存储(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="reconfig_done_gpu_cards" label="改配-GPU(卡)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="reconfig_done_cost_cny" label="改配-费用(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
 
-            <Col span={6}><Form.Item name="quasi_purchase_server_count" label="准系统服务器数" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="quasi_purchase_logical_cores" label="准系统逻辑核" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="quasi_purchase_cost_cny" label="准系统费用(CNY)" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={24}><Text strong>准系统采购利旧</Text></Col>
+            <Col span={6}><Form.Item name="quasi_purchase_server_count" label="准系统-服务器数" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="quasi_purchase_logical_cores" label="准系统-计算(核)" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="quasi_purchase_warm_storage_tb" label="准系统-温存储(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="quasi_purchase_hot_storage_tb" label="准系统-热存储(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="quasi_purchase_gpu_cards" label="准系统-GPU(卡)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="quasi_purchase_cost_cny" label="准系统-费用(CNY)" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+          </Row>
+
+          <Title level={5}>（5）业务识别</Title>
+          <Row gutter={16} style={{ marginTop: 8 }}>
+            <Col span={12}><Form.Item name="disposal_psas" label="处置PSA(逗号分隔)" rules={[{ required: true }]}><Input /></Form.Item></Col>
+            <Col span={12}><Form.Item name="non_business_psas" label="非业务PSA(逗号分隔)" rules={[{ required: true }]}><Input /></Form.Item></Col>
           </Row>
           <Space>
             <Button type="primary" htmlType="submit" loading={loading}>生成资源规划</Button>
@@ -233,8 +266,8 @@ export default function ResourcePlanningPage() {
           />
 
           <Row gutter={16}>
-            <Col span={8}><Card title="3.2 改配利旧"><Statistic title="成功服务器" value={result.reconfig_plan.server_count} /><Statistic title="成功逻辑核" value={result.reconfig_plan.logical_cores} /><Statistic title="费用(CNY)" value={result.reconfig_plan.cost_cny} /></Card></Col>
-            <Col span={8}><Card title="3.3 准系统采购利旧"><Statistic title="服务器数" value={result.quasi_purchase_plan.server_count} /><Statistic title="逻辑核" value={result.quasi_purchase_plan.logical_cores} /><Statistic title="费用(CNY)" value={result.quasi_purchase_plan.cost_cny} /></Card></Col>
+            <Col span={8}><Card title="3.2 改配利旧"><Statistic title="成功服务器" value={result.reconfig_plan.server_count} /><Statistic title="计算覆盖(核)" value={result.reconfig_plan.logical_cores} /><Statistic title="温存储覆盖(TB)" value={result.reconfig_plan.covered_warm_storage_tb} /><Statistic title="热存储覆盖(TB)" value={result.reconfig_plan.covered_hot_storage_tb} /><Statistic title="GPU覆盖(卡)" value={result.reconfig_plan.covered_gpu_cards} /><Statistic title="费用(CNY)" value={result.reconfig_plan.cost_cny} /></Card></Col>
+            <Col span={8}><Card title="3.3 准系统采购利旧"><Statistic title="服务器数" value={result.quasi_purchase_plan.server_count} /><Statistic title="计算覆盖(核)" value={result.quasi_purchase_plan.logical_cores} /><Statistic title="温存储覆盖(TB)" value={result.quasi_purchase_plan.covered_warm_storage_tb} /><Statistic title="热存储覆盖(TB)" value={result.quasi_purchase_plan.covered_hot_storage_tb} /><Statistic title="GPU覆盖(卡)" value={result.quasi_purchase_plan.covered_gpu_cards} /><Statistic title="费用(CNY)" value={result.quasi_purchase_plan.cost_cny} /></Card></Col>
             <Col span={8}><Card title="3.5 续保"><Statistic title="设备数量" value={result.renewal_plan.device_count} /><Statistic title="计算覆盖(核)" value={result.renewal_plan.covered_compute_cores} /><Statistic title="温存储覆盖(TB)" value={result.renewal_plan.covered_warm_storage_tb} /><Statistic title="热存储覆盖(TB)" value={result.renewal_plan.covered_hot_storage_tb} /><Statistic title="GPU覆盖(卡)" value={result.renewal_plan.covered_gpu_cards} /><Statistic title="预算占用(CNY)" value={result.renewal_plan.budget_cny} /></Card></Col>
           </Row>
 
