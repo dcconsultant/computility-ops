@@ -33,6 +33,8 @@ func (p PSAString) MarshalJSON() ([]byte, error) {
 
 type RenewalPlan struct {
 	PlanID               string               `json:"plan_id"`
+	Status               string               `json:"status,omitempty"`
+	EffectiveAt          string               `json:"effective_at,omitempty"`
 	TargetDate           string               `json:"target_date,omitempty"`
 	ExcludedEnvironments []string             `json:"excluded_environments,omitempty"`
 	ExcludedPSAs         []string             `json:"excluded_psas,omitempty"`

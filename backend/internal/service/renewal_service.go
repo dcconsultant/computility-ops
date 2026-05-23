@@ -703,8 +703,11 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	}
 	sort.Strings(unmatchedConfigTypes)
 
+	now := time.Now()
 	plan := domain.RenewalPlan{
-		PlanID:               strconv.FormatInt(time.Now().Unix(), 10),
+		PlanID:               strconv.FormatInt(now.Unix(), 10),
+		Status:               "effective",
+		EffectiveAt:          now.Format(time.RFC3339),
 		TargetDate:           targetDate.Format("2006-01-02"),
 		ExcludedEnvironments: excludedCanonical,
 		ExcludedPSAs:         excludedPSACanonical,

@@ -73,19 +73,35 @@ type ResourcePlanningQuasiPurchasePlan struct {
 	CostCNY      float64 `json:"cost_cny"`
 }
 
+type ResourcePlanningScenePurchasePlan struct {
+	SceneCategory       string  `json:"scene_category"`
+	PackageConfigType   string  `json:"package_config_type"`
+	PackageReleaseYear  int     `json:"package_release_year"`
+	ServerCount         int     `json:"server_count"`
+	CoveredLogicalCores int     `json:"covered_logical_cores,omitempty"`
+	CoveredStorageTB    float64 `json:"covered_storage_tb,omitempty"`
+	PurchaseAmountCNY   float64 `json:"purchase_amount_cny"`
+	AnnualCostCNY       float64 `json:"annual_cost_cny"`
+	AnnualBudgetCNY     float64 `json:"annual_budget_cny"`
+	ValueScore          float64 `json:"value_score,omitempty"`
+}
+
 type ResourcePlanningNewPurchasePlan struct {
-	PackageConfigType       string  `json:"package_config_type"`
-	PackageReleaseYear      int     `json:"package_release_year"`
-	ServerCount             int     `json:"server_count"`
-	CoveredLogicalCores     int     `json:"covered_logical_cores"`
-	BaseDemandCores         int     `json:"base_demand_cores"`
-	RoutineReplacementCores int     `json:"routine_replacement_cores"`
-	ExtraReplacementCores   int     `json:"extra_replacement_cores"`
-	TotalReplacementCores   int     `json:"total_replacement_cores"`
-	PurchaseAmountCNY       float64 `json:"purchase_amount_cny"`
-	AnnualCostCNY           float64 `json:"annual_cost_cny"`
-	AnnualBudgetCNY         float64 `json:"annual_budget_cny"`
-	ValueScore              float64 `json:"value_score"`
+	PackageConfigType       string                             `json:"package_config_type"`
+	PackageReleaseYear      int                                `json:"package_release_year"`
+	ServerCount             int                                `json:"server_count"`
+	CoveredLogicalCores     int                                `json:"covered_logical_cores"`
+	CoveredWarmStorageTB    float64                            `json:"covered_warm_storage_tb"`
+	CoveredHotStorageTB     float64                            `json:"covered_hot_storage_tb"`
+	BaseDemandCores         int                                `json:"base_demand_cores"`
+	RoutineReplacementCores int                                `json:"routine_replacement_cores"`
+	ExtraReplacementCores   int                                `json:"extra_replacement_cores"`
+	TotalReplacementCores   int                                `json:"total_replacement_cores"`
+	PurchaseAmountCNY       float64                            `json:"purchase_amount_cny"`
+	AnnualCostCNY           float64                            `json:"annual_cost_cny"`
+	AnnualBudgetCNY         float64                            `json:"annual_budget_cny"`
+	ValueScore              float64                            `json:"value_score"`
+	ScenePlans              []ResourcePlanningScenePurchasePlan `json:"scene_plans,omitempty"`
 }
 
 type ResourcePlanningRenewalPlan struct {
@@ -163,6 +179,8 @@ type ResourcePlanningResultAnalysis struct {
 
 type reconfigSnapshotLite struct {
 	PlanID             string    `json:"plan_id"`
+	Status             string    `json:"status,omitempty"`
+	EffectiveAt        time.Time `json:"effective_at,omitempty"`
 	CreatedAt          time.Time `json:"created_at"`
 	SuccessServerCount int       `json:"success_server_count"`
 	SuccessCoreCount   float64   `json:"success_core_count"`
@@ -241,7 +259,7 @@ func (s *ResourcePlanningService) Calculate(ctx context.Context, req ResourcePla
 		baseDemand = 0
 	}
 
-	newPlan, err := s.calcNewPurchasePlan(req, baseDemand, packages, originalValues, servers, nonBusinessPSAs)
+	newPlan, err := s.calcNewPurchasePlan(req, baseDemand, packages, originalValues, servers, nonBusinessPSAs, reconfigPlan, quasi)
 	if err != nil {
 		return ResourcePlanningResponse{}, err
 	}
@@ -295,11 +313,9 @@ func (s *ResourcePlanningService) calcRenewalPlan(ctx context.Context) (Resource
 	if len(plans) == 0 {
 		return ResourcePlanningRenewalPlan{}, fmt.Errorf("续保方案为空，请先生成续保方案")
 	}
-	latest := plans[0]
-	for _, p := range plans[1:] {
-		if strings.TrimSpace(p.PlanID) > strings.TrimSpace(latest.PlanID) {
-			latest = p
-		}
+	latest, ok := selectLatestEffectiveRenewalPlan(plans)
+	if !ok {
+		return ResourcePlanningRenewalPlan{}, fmt.Errorf("未找到已生效续保方案，请先生效续保方案")
 	}
 	budget := 0.0
 	if latest.DomesticBudget > 0 || latest.IndiaBudget > 0 {
@@ -348,40 +364,22 @@ func (s *ResourcePlanningService) calcRenewalPlan(ctx context.Context) (Resource
 	}, nil
 }
 
-func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningRequest, baseDemand int, packages []domain.HostPackageConfig, originals []domain.ValueScoreOriginalValue, servers []domain.Server, nonBusinessPSAs []string) (ResourcePlanningNewPurchasePlan, error) {
-	candidates := make([]domain.HostPackageConfig, 0)
-	maxYear := -1
-	for _, p := range packages {
-		if normalizeScene(p.SceneCategory) != "compute" {
-			continue
-		}
-		if p.ReleaseYear > maxYear {
-			maxYear = p.ReleaseYear
-			candidates = []domain.HostPackageConfig{p}
-		} else if p.ReleaseYear == maxYear {
-			candidates = append(candidates, p)
-		}
-	}
-	if len(candidates) == 0 {
-		return ResourcePlanningNewPurchasePlan{}, fmt.Errorf("不存在场景大类=计算的套餐")
-	}
-	if len(candidates) > 1 {
-		return ResourcePlanningNewPurchasePlan{}, fmt.Errorf("套餐发布年份并列，请处理后再规划")
-	}
-	selectedPkg := candidates[0]
-	if selectedPkg.CPULogicalCores <= 0 {
-		return ResourcePlanningNewPurchasePlan{}, fmt.Errorf("新机套餐逻辑核无效")
-	}
-
+func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningRequest, baseDemand int, packages []domain.HostPackageConfig, originals []domain.ValueScoreOriginalValue, servers []domain.Server, nonBusinessPSAs []string, reconfigPlan ResourcePlanningReconfigPlan, quasi ResourcePlanningQuasiPurchasePlan) (ResourcePlanningNewPurchasePlan, error) {
 	originByConfig := make(map[string]float64, len(originals))
 	for _, o := range originals {
 		originByConfig[strings.TrimSpace(o.ConfigType)] = o.ServerOriginalCNY
 	}
-	selectedOriginal, ok := originByConfig[selectedPkg.ConfigType]
-	if !ok || selectedOriginal <= 0 {
+	pkgByConfig := mapPackageByConfigType(packages)
+
+	selectedComputePkg, err := pickLatestScenePackage(packages, "compute")
+	if err != nil {
+		return ResourcePlanningNewPurchasePlan{}, err
+	}
+	selectedComputeOriginal, ok := originByConfig[selectedComputePkg.ConfigType]
+	if !ok || selectedComputeOriginal <= 0 {
 		return ResourcePlanningNewPurchasePlan{}, fmt.Errorf("新机套餐缺少价值分原值")
 	}
-	selectedScore := 1.0 / selectedOriginal
+	selectedComputeScore := 1.0 / selectedComputeOriginal
 
 	routine := int(math.Floor(float64(req.ComputeDemandCores) / 10.0))
 	if routine < 0 {
@@ -393,7 +391,6 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 	}
 
 	eligibleScores := make([]float64, 0)
-	pkgByConfig := mapPackageByConfigType(packages)
 	for _, srv := range servers {
 		if isPSAExcluded(srv.PSA, nonBusinessPSAs) {
 			continue
@@ -406,6 +403,9 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 		if origin <= 0 {
 			continue
 		}
+		if yearsSinceRP(srv.LaunchDate, time.Now()) < 5 {
+			continue
+		}
 		eligibleScores = append(eligibleScores, 1.0/origin)
 	}
 	sort.Float64s(eligibleScores)
@@ -415,7 +415,7 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 		if remaining >= maxReplace {
 			break
 		}
-		if selectedScore > sc {
+		if selectedComputeScore > sc && selectedComputeScore >= req.AdmitValueScore {
 			remaining++
 			extra++
 		}
@@ -429,30 +429,101 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 	if routine > 0 && remaining < routine {
 		remaining = routine
 	}
-	serverCount := int(math.Ceil(float64(remaining) / float64(selectedPkg.CPULogicalCores)))
-	coveredCores := serverCount * selectedPkg.CPULogicalCores
-	monthlyTCO := estimateMonthlyTCO(selectedPkg, selectedOriginal)
-	month := int(time.Now().Month())
-	remainingMonths := 12 - month
-	if remainingMonths < 0 {
-		remainingMonths = 0
+
+	computeServerCount := int(math.Ceil(float64(remaining) / float64(selectedComputePkg.CPULogicalCores)))
+	computeCoveredCores := computeServerCount * selectedComputePkg.CPULogicalCores
+	computeMonthlyTCO := estimateMonthlyTCO(selectedComputePkg, selectedComputeOriginal)
+	remainingMonths := remainingBudgetMonths()
+	computePurchase := round2RP(selectedComputeOriginal * float64(computeServerCount))
+	computeAnnualCost := round2RP(computeMonthlyTCO * 12 * float64(computeServerCount))
+	computeAnnualBudget := round2RP(computeMonthlyTCO * float64(remainingMonths) * float64(computeServerCount))
+
+	availableWarm, availableHot := 0.0, 0.0
+	for _, srv := range servers {
+		if isPSAExcluded(srv.PSA, nonBusinessPSAs) {
+			continue
+		}
+		pkg, ok := pkgByConfig[srv.ConfigType]
+		if !ok {
+			continue
+		}
+		switch normalizeScene(pkg.SceneCategory) {
+		case "warm_storage":
+			availableWarm += pkg.StorageCapacityTB
+		case "hot_storage":
+			availableHot += pkg.StorageCapacityTB
+		}
 	}
-	if remainingMonths > 0 {
-		remainingMonths -= 1
+
+	warmNeed := req.WarmStorageDemandTB - availableWarm
+	if warmNeed < 0 {
+		warmNeed = 0
 	}
+	hotNeed := req.HotStorageDemandTB - availableHot
+	if hotNeed < 0 {
+		hotNeed = 0
+	}
+
+	scenePlans := make([]ResourcePlanningScenePurchasePlan, 0, 3)
+	scenePlans = append(scenePlans, ResourcePlanningScenePurchasePlan{
+		SceneCategory:       "compute",
+		PackageConfigType:   selectedComputePkg.ConfigType,
+		PackageReleaseYear:  selectedComputePkg.ReleaseYear,
+		ServerCount:         computeServerCount,
+		CoveredLogicalCores: computeCoveredCores,
+		PurchaseAmountCNY:   computePurchase,
+		AnnualCostCNY:       computeAnnualCost,
+		AnnualBudgetCNY:     computeAnnualBudget,
+		ValueScore:          selectedComputeScore,
+	})
+
+	totalPurchase := computePurchase
+	totalAnnualCost := computeAnnualCost
+	totalAnnualBudget := computeAnnualBudget
+	coveredWarmByNew := 0.0
+	coveredHotByNew := 0.0
+
+	if warmNeed > 0 {
+		p, e := buildStorageScenePurchasePlan("warm_storage", warmNeed, packages, originByConfig)
+		if e != nil {
+			return ResourcePlanningNewPurchasePlan{}, e
+		}
+		scenePlans = append(scenePlans, p)
+		totalPurchase += p.PurchaseAmountCNY
+		totalAnnualCost += p.AnnualCostCNY
+		totalAnnualBudget += p.AnnualBudgetCNY
+		coveredWarmByNew += p.CoveredStorageTB
+	}
+	if hotNeed > 0 {
+		p, e := buildStorageScenePurchasePlan("hot_storage", hotNeed, packages, originByConfig)
+		if e != nil {
+			return ResourcePlanningNewPurchasePlan{}, e
+		}
+		scenePlans = append(scenePlans, p)
+		totalPurchase += p.PurchaseAmountCNY
+		totalAnnualCost += p.AnnualCostCNY
+		totalAnnualBudget += p.AnnualBudgetCNY
+		coveredHotByNew += p.CoveredStorageTB
+	}
+
+	_ = reconfigPlan
+	_ = quasi
 	return ResourcePlanningNewPurchasePlan{
-		PackageConfigType:       selectedPkg.ConfigType,
-		PackageReleaseYear:      selectedPkg.ReleaseYear,
-		ServerCount:             serverCount,
-		CoveredLogicalCores:     coveredCores,
+		PackageConfigType:       selectedComputePkg.ConfigType,
+		PackageReleaseYear:      selectedComputePkg.ReleaseYear,
+		ServerCount:             computeServerCount,
+		CoveredLogicalCores:     computeCoveredCores,
+		CoveredWarmStorageTB:    round2RP(coveredWarmByNew),
+		CoveredHotStorageTB:     round2RP(coveredHotByNew),
 		BaseDemandCores:         baseDemand,
 		RoutineReplacementCores: routine,
 		ExtraReplacementCores:   extra,
 		TotalReplacementCores:   remaining,
-		PurchaseAmountCNY:       round2RP(selectedOriginal * float64(serverCount)),
-		AnnualCostCNY:           round2RP(monthlyTCO * 12 * float64(serverCount)),
-		AnnualBudgetCNY:         round2RP(monthlyTCO * float64(remainingMonths) * float64(serverCount)),
-		ValueScore:              selectedScore,
+		PurchaseAmountCNY:       round2RP(totalPurchase),
+		AnnualCostCNY:           round2RP(totalAnnualCost),
+		AnnualBudgetCNY:         round2RP(totalAnnualBudget),
+		ValueScore:              selectedComputeScore,
+		ScenePlans:              scenePlans,
 	}, nil
 }
 
@@ -573,19 +644,27 @@ func calcResultAnalysis(req ResourcePlanningRequest, servers []domain.Server, pk
 	}
 	compute.TotalCores = compute.ReconfigCores + compute.QuasiPurchaseCores + compute.NewPurchaseCores + compute.StockContinueCores
 
+	warmStock := availableWarm - newPlan.CoveredWarmStorageTB
+	if warmStock < 0 {
+		warmStock = 0
+	}
 	warm := ResourcePlanningCapacityStorageBreakdown{
 		ReconfigTB:      0,
 		QuasiPurchaseTB: 0,
-		NewPurchaseTB:   0,
-		StockContinueTB: round2RP(availableWarm),
+		NewPurchaseTB:   round2RP(newPlan.CoveredWarmStorageTB),
+		StockContinueTB: round2RP(warmStock),
 	}
 	warm.TotalTB = round2RP(warm.ReconfigTB + warm.QuasiPurchaseTB + warm.NewPurchaseTB + warm.StockContinueTB)
 
+	hotStock := availableHot - newPlan.CoveredHotStorageTB
+	if hotStock < 0 {
+		hotStock = 0
+	}
 	hot := ResourcePlanningCapacityStorageBreakdown{
 		ReconfigTB:      0,
 		QuasiPurchaseTB: 0,
-		NewPurchaseTB:   0,
-		StockContinueTB: round2RP(availableHot),
+		NewPurchaseTB:   round2RP(newPlan.CoveredHotStorageTB),
+		StockContinueTB: round2RP(hotStock),
 	}
 	hot.TotalTB = round2RP(hot.ReconfigTB + hot.QuasiPurchaseTB + hot.NewPurchaseTB + hot.StockContinueTB)
 
@@ -785,7 +864,18 @@ func loadLatestReconfigSnapshot(base string) (reconfigSnapshotLite, error) {
 		if jsonErr := json.Unmarshal(payload, &row); jsonErr != nil {
 			continue
 		}
-		if !found || row.CreatedAt.After(latest.CreatedAt) {
+		if row.Status != "" && !isPlanEffective(row.Status) {
+			continue
+		}
+		currentAt := row.EffectiveAt
+		if currentAt.IsZero() {
+			currentAt = row.CreatedAt
+		}
+		latestAt := latest.EffectiveAt
+		if latestAt.IsZero() {
+			latestAt = latest.CreatedAt
+		}
+		if !found || currentAt.After(latestAt) {
 			latest = row
 			found = true
 		}
@@ -829,4 +919,147 @@ func (s *ResourcePlanningService) GetConfig(ctx context.Context) (ResourcePlanni
 
 func round2RP(v float64) float64 {
 	return math.Round(v*100) / 100
+}
+
+func yearsSinceRP(launchDate string, now time.Time) float64 {
+	if strings.TrimSpace(launchDate) == "" {
+		return 0
+	}
+	if t, ok := parseFlexibleDateRP(launchDate); ok {
+		if now.After(t) {
+			return now.Sub(t).Hours() / 24 / 365
+		}
+	}
+	return 0
+}
+
+func parseFlexibleDateRP(raw string) (time.Time, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, false
+	}
+	layouts := []string{"2006-01-02", "2006/01/02", "2006/1/2", "2006-1-2", "20060102"}
+	for _, layout := range layouts {
+		if t, err := time.ParseInLocation(layout, raw, time.Local); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+func pickLatestScenePackage(packages []domain.HostPackageConfig, scene string) (domain.HostPackageConfig, error) {
+	candidates := make([]domain.HostPackageConfig, 0)
+	maxYear := -1
+	for _, p := range packages {
+		if normalizeScene(p.SceneCategory) != scene {
+			continue
+		}
+		if p.ReleaseYear > maxYear {
+			maxYear = p.ReleaseYear
+			candidates = []domain.HostPackageConfig{p}
+		} else if p.ReleaseYear == maxYear {
+			candidates = append(candidates, p)
+		}
+	}
+	if len(candidates) == 0 {
+		return domain.HostPackageConfig{}, fmt.Errorf("不存在场景大类=%s的套餐", scene)
+	}
+	if len(candidates) > 1 {
+		return domain.HostPackageConfig{}, fmt.Errorf("套餐发布年份并列，请处理后再规划")
+	}
+	return candidates[0], nil
+}
+
+func remainingBudgetMonths() int {
+	month := int(time.Now().Month())
+	left := 12 - month
+	if left < 0 {
+		left = 0
+	}
+	if left > 0 {
+		left -= 1
+	}
+	return left
+}
+
+func buildStorageScenePurchasePlan(scene string, needTB float64, packages []domain.HostPackageConfig, originByConfig map[string]float64) (ResourcePlanningScenePurchasePlan, error) {
+	pkg, err := pickLatestScenePackage(packages, scene)
+	if err != nil {
+		return ResourcePlanningScenePurchasePlan{}, err
+	}
+	if pkg.StorageCapacityTB <= 0 {
+		return ResourcePlanningScenePurchasePlan{}, fmt.Errorf("%s 场景新机套餐存储容量无效", scene)
+	}
+	origin := originByConfig[pkg.ConfigType]
+	if origin <= 0 {
+		return ResourcePlanningScenePurchasePlan{}, fmt.Errorf("新机套餐缺少价值分原值")
+	}
+	serverCount := int(math.Ceil(needTB / pkg.StorageCapacityTB))
+	coveredTB := float64(serverCount) * pkg.StorageCapacityTB
+	monthlyTCO := estimateMonthlyTCO(pkg, origin)
+	remainingMonths := remainingBudgetMonths()
+	return ResourcePlanningScenePurchasePlan{
+		SceneCategory:      scene,
+		PackageConfigType:  pkg.ConfigType,
+		PackageReleaseYear: pkg.ReleaseYear,
+		ServerCount:        serverCount,
+		CoveredStorageTB:   round2RP(coveredTB),
+		PurchaseAmountCNY:  round2RP(origin * float64(serverCount)),
+		AnnualCostCNY:      round2RP(monthlyTCO * 12 * float64(serverCount)),
+		AnnualBudgetCNY:    round2RP(monthlyTCO * float64(remainingMonths) * float64(serverCount)),
+	}, nil
+}
+
+func selectLatestEffectiveRenewalPlan(plans []domain.RenewalPlan) (domain.RenewalPlan, bool) {
+	best := domain.RenewalPlan{}
+	bestAt := time.Time{}
+	found := false
+	for _, p := range plans {
+		if !isPlanEffective(p.Status) {
+			continue
+		}
+		eff, ok := parseFlexibleDateTimeRP(p.EffectiveAt)
+		if !ok {
+			if sec, err := strconv.ParseInt(strings.TrimSpace(p.PlanID), 10, 64); err == nil && sec > 0 {
+				eff = time.Unix(sec, 0)
+				ok = true
+			}
+		}
+		if !ok {
+			continue
+		}
+		if !found || eff.After(bestAt) {
+			best = p
+			bestAt = eff
+			found = true
+		}
+	}
+	return best, found
+}
+
+func isPlanEffective(status string) bool {
+	s := strings.ToLower(strings.TrimSpace(status))
+	return s == "effective" || s == "已生效" || s == "生效"
+}
+
+func parseFlexibleDateTimeRP(raw string) (time.Time, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, false
+	}
+	layouts := []string{
+		time.RFC3339,
+		"2006-01-02 15:04:05",
+		"2006-01-02 15:04",
+		"2006/01/02 15:04:05",
+		"2006/01/02 15:04",
+		"2006-01-02",
+		"2006/01/02",
+	}
+	for _, layout := range layouts {
+		if t, err := time.ParseInLocation(layout, raw, time.Local); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
 }

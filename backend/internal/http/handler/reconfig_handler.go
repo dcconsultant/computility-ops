@@ -37,6 +37,8 @@ type reconfigPlanJob struct {
 
 type reconfigPlanSnapshot struct {
 	PlanID               string                       `json:"plan_id"`
+	Status               string                       `json:"status,omitempty"`
+	EffectiveAt          time.Time                    `json:"effective_at,omitempty"`
 	CreatedAt            time.Time                    `json:"created_at"`
 	Target               service.ReconfigTargetConfig `json:"target"`
 	ScopeServerCount     int                          `json:"scope_server_count"`
@@ -310,9 +312,12 @@ func saveReconfigPlanSnapshot(jobID string, target service.ReconfigTargetConfig,
 	dismantleServerCount := len(dismantleSet)
 	reconfigFee := (reconfigServerCount + dismantleServerCount) * 70
 
+	now := time.Now()
 	snapshot := reconfigPlanSnapshot{
-		PlanID:               fmt.Sprintf("%s-%d", jobID, time.Now().Unix()),
-		CreatedAt:            time.Now(),
+		PlanID:               fmt.Sprintf("%s-%d", jobID, now.Unix()),
+		Status:               "effective",
+		EffectiveAt:          now,
+		CreatedAt:            now,
 		Target:               target,
 		ScopeServerCount:     scopeCnt,
 		SuccessServerCount:   successServerCnt,
