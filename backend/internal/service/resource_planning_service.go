@@ -511,13 +511,22 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 		}
 	}
 
-	warmNeed := req.WarmStorageDemandTB - availableWarm
+	warmNeed := req.WarmStorageDemandTB - reconfigPlan.CoveredWarmStorageTB - quasi.CoveredWarmStorageTB - availableWarm
 	if warmNeed < 0 {
 		warmNeed = 0
 	}
-	hotNeed := req.HotStorageDemandTB - availableHot
+	warmMaxAnnual := req.WarmStorageDemandTB / 4.0
+	if warmMaxAnnual > 0 && warmNeed > warmMaxAnnual {
+		warmNeed = warmMaxAnnual
+	}
+
+	hotNeed := req.HotStorageDemandTB - reconfigPlan.CoveredHotStorageTB - quasi.CoveredHotStorageTB - availableHot
 	if hotNeed < 0 {
 		hotNeed = 0
+	}
+	hotMaxAnnual := req.HotStorageDemandTB / 4.0
+	if hotMaxAnnual > 0 && hotNeed > hotMaxAnnual {
+		hotNeed = hotMaxAnnual
 	}
 
 	scenePlans := make([]ResourcePlanningScenePurchasePlan, 0, 4)
@@ -562,9 +571,13 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 		totalAnnualBudget += p.AnnualBudgetCNY
 		coveredHotByNew += p.CoveredStorageTB
 	}
-	gpuNeed := req.GPUDemandCards - availableGPU
+	gpuNeed := req.GPUDemandCards - reconfigPlan.CoveredGPUCards - quasi.CoveredGPUCards - availableGPU
 	if gpuNeed < 0 {
 		gpuNeed = 0
+	}
+	gpuMaxAnnual := req.GPUDemandCards / 4
+	if gpuMaxAnnual > 0 && gpuNeed > gpuMaxAnnual {
+		gpuNeed = gpuMaxAnnual
 	}
 	if gpuNeed > 0 {
 		p, e := buildGPUScenePurchasePlan(gpuNeed, packages, originByConfig, sceneAdmitThreshold(req, "gpu"))
