@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Col, Form, Input, InputNumber, Row, Space, Statistic, Typography, message } from 'antd';
+import { Alert, Button, Card, Col, Form, Input, InputNumber, Row, Space, Statistic, Tabs, Typography, message } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { calculateResourcePlanning, getResourcePlanningConfig, saveResourcePlanningConfig } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
@@ -129,10 +129,23 @@ export default function ResourcePlanningPage() {
   async function onSubmit(values: any) {
     setLoading(true);
     try {
+      const num = (x: any) => Number(x || 0);
       const payload: any = { ...values };
-      if (payload.reconfig_done_server_count == null) delete payload.reconfig_done_server_count;
-      if (payload.reconfig_done_logical_cores == null) delete payload.reconfig_done_logical_cores;
-      if (payload.reconfig_done_cost_cny == null) delete payload.reconfig_done_cost_cny;
+
+      payload.reconfig_done_server_count = num(values.reconfig_compute_server_count) + num(values.reconfig_warm_server_count) + num(values.reconfig_hot_server_count) + num(values.reconfig_gpu_server_count);
+      payload.reconfig_done_logical_cores = num(values.reconfig_compute_capacity);
+      payload.reconfig_done_warm_storage_tb = num(values.reconfig_warm_capacity);
+      payload.reconfig_done_hot_storage_tb = num(values.reconfig_hot_capacity);
+      payload.reconfig_done_gpu_cards = num(values.reconfig_gpu_capacity);
+      payload.reconfig_done_cost_cny = num(values.reconfig_compute_cost) + num(values.reconfig_warm_cost) + num(values.reconfig_hot_cost) + num(values.reconfig_gpu_cost);
+
+      payload.quasi_purchase_server_count = num(values.quasi_compute_server_count) + num(values.quasi_warm_server_count) + num(values.quasi_hot_server_count) + num(values.quasi_gpu_server_count);
+      payload.quasi_purchase_logical_cores = num(values.quasi_compute_capacity);
+      payload.quasi_purchase_warm_storage_tb = num(values.quasi_warm_capacity);
+      payload.quasi_purchase_hot_storage_tb = num(values.quasi_hot_capacity);
+      payload.quasi_purchase_gpu_cards = num(values.quasi_gpu_capacity);
+      payload.quasi_purchase_cost_cny = num(values.quasi_compute_cost) + num(values.quasi_warm_cost) + num(values.quasi_hot_cost) + num(values.quasi_gpu_cost);
+
       await saveResourcePlanningConfig(payload);
       const resp = await calculateResourcePlanning(payload);
       setResult(ensureApiOk(resp).data);
@@ -151,6 +164,14 @@ export default function ResourcePlanningPage() {
         <Text type="secondary">按最新需求文档执行：规划配置、改配利旧、准系统采购利旧、新机采购、续保、自维修、处置、结果分析。</Text>
       </Card>
 
+      <Tabs
+        defaultActiveKey="config"
+        items={[
+          {
+            key: 'config',
+            label: '规划配置',
+            children: (
+              <>
       <Card title="3.1 规划配置 + 3.2/3.3 输入">
         <Form
           form={form}
@@ -172,18 +193,32 @@ export default function ResourcePlanningPage() {
             annual_depreciation_cny: 0,
             disposal_psas: '/server-decommission',
             non_business_psas: '/online-product',
-            reconfig_done_server_count: 0,
-            reconfig_done_logical_cores: 0,
-            reconfig_done_cost_cny: 0,
-            quasi_purchase_server_count: 0,
-            quasi_purchase_logical_cores: 0,
-            quasi_purchase_cost_cny: 0,
-            reconfig_done_warm_storage_tb: 0,
-            reconfig_done_hot_storage_tb: 0,
-            reconfig_done_gpu_cards: 0,
-            quasi_purchase_warm_storage_tb: 0,
-            quasi_purchase_hot_storage_tb: 0,
-            quasi_purchase_gpu_cards: 0
+
+            reconfig_compute_server_count: 0,
+            reconfig_compute_capacity: 0,
+            reconfig_compute_cost: 0,
+            reconfig_warm_server_count: 0,
+            reconfig_warm_capacity: 0,
+            reconfig_warm_cost: 0,
+            reconfig_hot_server_count: 0,
+            reconfig_hot_capacity: 0,
+            reconfig_hot_cost: 0,
+            reconfig_gpu_server_count: 0,
+            reconfig_gpu_capacity: 0,
+            reconfig_gpu_cost: 0,
+
+            quasi_compute_server_count: 0,
+            quasi_compute_capacity: 0,
+            quasi_compute_cost: 0,
+            quasi_warm_server_count: 0,
+            quasi_warm_capacity: 0,
+            quasi_warm_cost: 0,
+            quasi_hot_server_count: 0,
+            quasi_hot_capacity: 0,
+            quasi_hot_cost: 0,
+            quasi_gpu_server_count: 0,
+            quasi_gpu_capacity: 0,
+            quasi_gpu_cost: 0
           }}
           onFinish={onSubmit}
         >
@@ -216,23 +251,41 @@ export default function ResourcePlanningPage() {
           </Row>
 
           <Title level={5}>（4）利旧项目</Title>
-          <Text type="secondary">一级：改配/准系统 → 二级：计算、温存储、热存储、GPU → 三级：服务器数/算力/费用</Text>
+          <Text type="secondary">每个场景一行：服务器数 + 算力 + 费用</Text>
           <Row gutter={16} style={{ marginTop: 8 }}>
-            <Col span={24}><Text strong>改配利旧（已改配人工输入）</Text></Col>
-            <Col span={6}><Form.Item name="reconfig_done_server_count" label="改配-服务器数"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="reconfig_done_logical_cores" label="改配-计算(核)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="reconfig_done_warm_storage_tb" label="改配-温存储(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="reconfig_done_hot_storage_tb" label="改配-热存储(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="reconfig_done_gpu_cards" label="改配-GPU(卡)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="reconfig_done_cost_cny" label="改配-费用(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={24}><Text strong>改配利旧</Text></Col>
+            <Col span={6}><Form.Item name="reconfig_compute_server_count" label="改配-计算 服务器数"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="reconfig_compute_capacity" label="改配-计算 算力(核)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="reconfig_compute_cost" label="改配-计算 费用(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+
+            <Col span={6}><Form.Item name="reconfig_warm_server_count" label="改配-温存储 服务器数"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="reconfig_warm_capacity" label="改配-温存储 算力(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="reconfig_warm_cost" label="改配-温存储 费用(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+
+            <Col span={6}><Form.Item name="reconfig_hot_server_count" label="改配-热存储 服务器数"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="reconfig_hot_capacity" label="改配-热存储 算力(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="reconfig_hot_cost" label="改配-热存储 费用(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+
+            <Col span={6}><Form.Item name="reconfig_gpu_server_count" label="改配-GPU 服务器数"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="reconfig_gpu_capacity" label="改配-GPU 算力(卡)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="reconfig_gpu_cost" label="改配-GPU 费用(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
 
             <Col span={24}><Text strong>准系统采购利旧</Text></Col>
-            <Col span={6}><Form.Item name="quasi_purchase_server_count" label="准系统-服务器数" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="quasi_purchase_logical_cores" label="准系统-计算(核)" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="quasi_purchase_warm_storage_tb" label="准系统-温存储(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="quasi_purchase_hot_storage_tb" label="准系统-热存储(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="quasi_purchase_gpu_cards" label="准系统-GPU(卡)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="quasi_purchase_cost_cny" label="准系统-费用(CNY)" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="quasi_compute_server_count" label="准系统-计算 服务器数" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="quasi_compute_capacity" label="准系统-计算 算力(核)" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="quasi_compute_cost" label="准系统-计算 费用(CNY)" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+
+            <Col span={6}><Form.Item name="quasi_warm_server_count" label="准系统-温存储 服务器数"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="quasi_warm_capacity" label="准系统-温存储 算力(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="quasi_warm_cost" label="准系统-温存储 费用(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+
+            <Col span={6}><Form.Item name="quasi_hot_server_count" label="准系统-热存储 服务器数"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="quasi_hot_capacity" label="准系统-热存储 算力(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="quasi_hot_cost" label="准系统-热存储 费用(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+
+            <Col span={6}><Form.Item name="quasi_gpu_server_count" label="准系统-GPU 服务器数"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="quasi_gpu_capacity" label="准系统-GPU 算力(卡)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="quasi_gpu_cost" label="准系统-GPU 费用(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
           </Row>
 
           <Title level={5}>（5）业务识别</Title>
@@ -255,7 +308,14 @@ export default function ResourcePlanningPage() {
           </Space>
         </Form>
       </Card>
-
+              </>
+            )
+          },
+          {
+            key: 'overview',
+            label: '资源规划概览',
+            children: (
+              <>
       {result ? (
         <>
           <Alert
@@ -410,7 +470,16 @@ export default function ResourcePlanningPage() {
             </Row>
           </Card>
         </>
-      ) : null}
+      ) : (
+        <Card>
+          <Text type="secondary">请先在“规划配置”Tab中点击“生成资源规划”。</Text>
+        </Card>
+      )}
+              </>
+            )
+          }
+        ]}
+      />
     </Space>
   );
 }
