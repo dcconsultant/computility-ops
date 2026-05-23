@@ -510,6 +510,14 @@ export interface MetaRecord {
 
 export interface ResourcePlanningRequest {
   admit_value_score: number;
+  self_build_value_score_compute?: number;
+  self_build_value_score_warm_storage?: number;
+  self_build_value_score_hot_storage?: number;
+  self_build_value_score_gpu?: number;
+  public_cloud_value_score_compute?: number;
+  public_cloud_value_score_warm_storage?: number;
+  public_cloud_value_score_hot_storage?: number;
+  public_cloud_value_score_gpu?: number;
   compute_demand_cores: number;
   warm_storage_demand_tb: number;
   hot_storage_demand_tb: number;

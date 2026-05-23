@@ -27,12 +27,20 @@ func NewResourcePlanningService(serverRepo repository.ServerRepo, datasetRepo re
 }
 
 type ResourcePlanningRequest struct {
-	AdmitValueScore           float64  `json:"admit_value_score"`
-	ComputeDemandCores        int      `json:"compute_demand_cores"`
-	WarmStorageDemandTB       float64  `json:"warm_storage_demand_tb"`
-	HotStorageDemandTB        float64  `json:"hot_storage_demand_tb"`
-	GPUDemandCards            int      `json:"gpu_demand_cards"`
-	CabinetAndOtherCostCNY    float64  `json:"cabinet_and_other_cost_cny"`
+	AdmitValueScore              float64 `json:"admit_value_score"`
+	SelfBuildValueScoreCompute   float64 `json:"self_build_value_score_compute"`
+	SelfBuildValueScoreWarm      float64 `json:"self_build_value_score_warm_storage"`
+	SelfBuildValueScoreHot       float64 `json:"self_build_value_score_hot_storage"`
+	SelfBuildValueScoreGPU       float64 `json:"self_build_value_score_gpu"`
+	PublicCloudValueScoreCompute float64 `json:"public_cloud_value_score_compute"`
+	PublicCloudValueScoreWarm    float64 `json:"public_cloud_value_score_warm_storage"`
+	PublicCloudValueScoreHot     float64 `json:"public_cloud_value_score_hot_storage"`
+	PublicCloudValueScoreGPU     float64 `json:"public_cloud_value_score_gpu"`
+	ComputeDemandCores           int     `json:"compute_demand_cores"`
+	WarmStorageDemandTB          float64 `json:"warm_storage_demand_tb"`
+	HotStorageDemandTB           float64 `json:"hot_storage_demand_tb"`
+	GPUDemandCards               int     `json:"gpu_demand_cards"`
+	CabinetAndOtherCostCNY       float64 `json:"cabinet_and_other_cost_cny"`
 	AnnualDepreciationCNY     float64  `json:"annual_depreciation_cny"`
 	DisposalPSAs              string   `json:"disposal_psas"`
 	NonBusinessPSAs           string   `json:"non_business_psas"`
@@ -392,6 +400,7 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 		return ResourcePlanningNewPurchasePlan{}, fmt.Errorf("新机套餐缺少价值分原值")
 	}
 	selectedComputeScore := 1.0 / selectedComputeOriginal
+	computeAdmitThreshold := sceneAdmitThreshold(req, "compute")
 
 	routine := int(math.Floor(float64(req.ComputeDemandCores) / 10.0))
 	if routine < 0 {
@@ -427,7 +436,7 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 		if remaining >= maxReplace {
 			break
 		}
-		if selectedComputeScore > sc && selectedComputeScore >= req.AdmitValueScore {
+		if selectedComputeScore > sc && selectedComputeScore >= computeAdmitThreshold {
 			remaining++
 			extra++
 		}
@@ -500,7 +509,7 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 	coveredGPUByNew := 0
 
 	if warmNeed > 0 {
-		p, e := buildStorageScenePurchasePlan("warm_storage", warmNeed, packages, originByConfig)
+		p, e := buildStorageScenePurchasePlan("warm_storage", warmNeed, packages, originByConfig, sceneAdmitThreshold(req, "warm_storage"))
 		if e != nil {
 			return ResourcePlanningNewPurchasePlan{}, e
 		}
@@ -511,7 +520,7 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 		coveredWarmByNew += p.CoveredStorageTB
 	}
 	if hotNeed > 0 {
-		p, e := buildStorageScenePurchasePlan("hot_storage", hotNeed, packages, originByConfig)
+		p, e := buildStorageScenePurchasePlan("hot_storage", hotNeed, packages, originByConfig, sceneAdmitThreshold(req, "hot_storage"))
 		if e != nil {
 			return ResourcePlanningNewPurchasePlan{}, e
 		}
@@ -526,7 +535,7 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 		gpuNeed = 0
 	}
 	if gpuNeed > 0 {
-		p, e := buildGPUScenePurchasePlan(gpuNeed, packages, originByConfig)
+		p, e := buildGPUScenePurchasePlan(gpuNeed, packages, originByConfig, sceneAdmitThreshold(req, "gpu"))
 		if e != nil {
 			return ResourcePlanningNewPurchasePlan{}, e
 		}
@@ -1030,7 +1039,7 @@ func remainingBudgetMonths() int {
 	return left
 }
 
-func buildStorageScenePurchasePlan(scene string, needTB float64, packages []domain.HostPackageConfig, originByConfig map[string]float64) (ResourcePlanningScenePurchasePlan, error) {
+func buildStorageScenePurchasePlan(scene string, needTB float64, packages []domain.HostPackageConfig, originByConfig map[string]float64, admitThreshold float64) (ResourcePlanningScenePurchasePlan, error) {
 	pkg, err := pickLatestScenePackage(packages, scene)
 	if err != nil {
 		return ResourcePlanningScenePurchasePlan{}, err
@@ -1041,6 +1050,10 @@ func buildStorageScenePurchasePlan(scene string, needTB float64, packages []doma
 	origin := originByConfig[pkg.ConfigType]
 	if origin <= 0 {
 		return ResourcePlanningScenePurchasePlan{}, fmt.Errorf("新机套餐缺少价值分原值")
+	}
+	score := 1.0 / origin
+	if admitThreshold > 0 && score < admitThreshold {
+		return ResourcePlanningScenePurchasePlan{}, fmt.Errorf("%s 场景新机套餐价值分低于门槛", scene)
 	}
 	serverCount := int(math.Ceil(needTB / pkg.StorageCapacityTB))
 	coveredTB := float64(serverCount) * pkg.StorageCapacityTB
@@ -1055,10 +1068,11 @@ func buildStorageScenePurchasePlan(scene string, needTB float64, packages []doma
 		PurchaseAmountCNY:  round2RP(origin * float64(serverCount)),
 		AnnualCostCNY:      round2RP(monthlyTCO * 12 * float64(serverCount)),
 		AnnualBudgetCNY:    round2RP(monthlyTCO * float64(remainingMonths) * float64(serverCount)),
+		ValueScore:         score,
 	}, nil
 }
 
-func buildGPUScenePurchasePlan(needCards int, packages []domain.HostPackageConfig, originByConfig map[string]float64) (ResourcePlanningScenePurchasePlan, error) {
+func buildGPUScenePurchasePlan(needCards int, packages []domain.HostPackageConfig, originByConfig map[string]float64, admitThreshold float64) (ResourcePlanningScenePurchasePlan, error) {
 	pkg, err := pickLatestScenePackage(packages, "gpu")
 	if err != nil {
 		return ResourcePlanningScenePurchasePlan{}, err
@@ -1069,6 +1083,10 @@ func buildGPUScenePurchasePlan(needCards int, packages []domain.HostPackageConfi
 	origin := originByConfig[pkg.ConfigType]
 	if origin <= 0 {
 		return ResourcePlanningScenePurchasePlan{}, fmt.Errorf("新机套餐缺少价值分原值")
+	}
+	score := 1.0 / origin
+	if admitThreshold > 0 && score < admitThreshold {
+		return ResourcePlanningScenePurchasePlan{}, fmt.Errorf("gpu 场景新机套餐价值分低于门槛")
 	}
 	serverCount := int(math.Ceil(float64(needCards) / float64(pkg.GPUCardCount)))
 	coveredCards := serverCount * pkg.GPUCardCount
@@ -1083,7 +1101,64 @@ func buildGPUScenePurchasePlan(needCards int, packages []domain.HostPackageConfi
 		PurchaseAmountCNY:  round2RP(origin * float64(serverCount)),
 		AnnualCostCNY:      round2RP(monthlyTCO * 12 * float64(serverCount)),
 		AnnualBudgetCNY:    round2RP(monthlyTCO * float64(remainingMonths) * float64(serverCount)),
+		ValueScore:         score,
 	}, nil
+}
+
+func sceneAdmitThreshold(req ResourcePlanningRequest, scene string) float64 {
+	switch scene {
+	case "compute":
+		if req.SelfBuildValueScoreCompute > 0 {
+			if req.PublicCloudValueScoreCompute > 0 {
+				return maxFloatRP(req.SelfBuildValueScoreCompute, req.PublicCloudValueScoreCompute)
+			}
+			return req.SelfBuildValueScoreCompute
+		}
+		if req.PublicCloudValueScoreCompute > 0 {
+			return req.PublicCloudValueScoreCompute
+		}
+	case "warm_storage":
+		if req.SelfBuildValueScoreWarm > 0 {
+			if req.PublicCloudValueScoreWarm > 0 {
+				return maxFloatRP(req.SelfBuildValueScoreWarm, req.PublicCloudValueScoreWarm)
+			}
+			return req.SelfBuildValueScoreWarm
+		}
+		if req.PublicCloudValueScoreWarm > 0 {
+			return req.PublicCloudValueScoreWarm
+		}
+	case "hot_storage":
+		if req.SelfBuildValueScoreHot > 0 {
+			if req.PublicCloudValueScoreHot > 0 {
+				return maxFloatRP(req.SelfBuildValueScoreHot, req.PublicCloudValueScoreHot)
+			}
+			return req.SelfBuildValueScoreHot
+		}
+		if req.PublicCloudValueScoreHot > 0 {
+			return req.PublicCloudValueScoreHot
+		}
+	case "gpu":
+		if req.SelfBuildValueScoreGPU > 0 {
+			if req.PublicCloudValueScoreGPU > 0 {
+				return maxFloatRP(req.SelfBuildValueScoreGPU, req.PublicCloudValueScoreGPU)
+			}
+			return req.SelfBuildValueScoreGPU
+		}
+		if req.PublicCloudValueScoreGPU > 0 {
+			return req.PublicCloudValueScoreGPU
+		}
+	}
+	if req.AdmitValueScore > 0 {
+		return req.AdmitValueScore
+	}
+	return 0
+}
+
+func maxFloatRP(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func selectLatestEffectiveRenewalPlan(plans []domain.RenewalPlan) (domain.RenewalPlan, bool) {

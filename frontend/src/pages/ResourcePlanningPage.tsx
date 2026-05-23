@@ -157,6 +157,14 @@ export default function ResourcePlanningPage() {
           layout="vertical"
           initialValues={{
             admit_value_score: 0,
+            self_build_value_score_compute: 0,
+            self_build_value_score_warm_storage: 0,
+            self_build_value_score_hot_storage: 0,
+            self_build_value_score_gpu: 0,
+            public_cloud_value_score_compute: 0,
+            public_cloud_value_score_warm_storage: 0,
+            public_cloud_value_score_hot_storage: 0,
+            public_cloud_value_score_gpu: 0,
             compute_demand_cores: 100000,
             warm_storage_demand_tb: 0,
             hot_storage_demand_tb: 0,
@@ -172,7 +180,15 @@ export default function ResourcePlanningPage() {
           onFinish={onSubmit}
         >
           <Row gutter={16}>
-            <Col span={6}><Form.Item name="admit_value_score" label="准入套餐价值分"><InputNumber {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="self_build_value_score_compute" label="自建价值分-计算"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="public_cloud_value_score_compute" label="公有云价值分-计算"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="self_build_value_score_warm_storage" label="自建价值分-温存储"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="public_cloud_value_score_warm_storage" label="公有云价值分-温存储"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="self_build_value_score_hot_storage" label="自建价值分-热存储"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="public_cloud_value_score_hot_storage" label="公有云价值分-热存储"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="self_build_value_score_gpu" label="自建价值分-GPU"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="public_cloud_value_score_gpu" label="公有云价值分-GPU"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="admit_value_score" label="兼容门槛(旧)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
             <Col span={6}><Form.Item name="compute_demand_cores" label="计算需求核" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
             <Col span={6}><Form.Item name="warm_storage_demand_tb" label="温存储需求(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
             <Col span={6}><Form.Item name="hot_storage_demand_tb" label="热存储需求(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
