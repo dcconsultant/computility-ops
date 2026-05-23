@@ -511,22 +511,13 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 		}
 	}
 
-	warmNeed := req.WarmStorageDemandTB - reconfigPlan.CoveredWarmStorageTB - quasi.CoveredWarmStorageTB - availableWarm
-	if warmNeed < 0 {
-		warmNeed = 0
+	warmBaseNeed := req.WarmStorageDemandTB - reconfigPlan.CoveredWarmStorageTB - quasi.CoveredWarmStorageTB - availableWarm
+	if warmBaseNeed < 0 {
+		warmBaseNeed = 0
 	}
-	warmMaxAnnual := req.WarmStorageDemandTB / 4.0
-	if warmMaxAnnual > 0 && warmNeed > warmMaxAnnual {
-		warmNeed = warmMaxAnnual
-	}
-
-	hotNeed := req.HotStorageDemandTB - reconfigPlan.CoveredHotStorageTB - quasi.CoveredHotStorageTB - availableHot
-	if hotNeed < 0 {
-		hotNeed = 0
-	}
-	hotMaxAnnual := req.HotStorageDemandTB / 4.0
-	if hotMaxAnnual > 0 && hotNeed > hotMaxAnnual {
-		hotNeed = hotMaxAnnual
+	hotBaseNeed := req.HotStorageDemandTB - reconfigPlan.CoveredHotStorageTB - quasi.CoveredHotStorageTB - availableHot
+	if hotBaseNeed < 0 {
+		hotBaseNeed = 0
 	}
 
 	scenePlans := make([]ResourcePlanningScenePurchasePlan, 0, 4)
@@ -549,46 +540,68 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 	coveredHotByNew := 0.0
 	coveredGPUByNew := 0
 
-	if warmNeed > 0 {
-		p, e := buildStorageScenePurchasePlan("warm_storage", warmNeed, packages, originByConfig, sceneAdmitThreshold(req, "warm_storage"))
-		if e != nil {
-			return ResourcePlanningNewPurchasePlan{}, e
+	warmPkg, warmPkgErr := pickLatestScenePackage(packages, "warm_storage")
+	if warmPkgErr == nil {
+		warmScore := 0.0
+		if ov := originByConfig[warmPkg.ConfigType]; ov > 0 {
+			warmScore = 1.0 / ov
 		}
-		scenePlans = append(scenePlans, p)
-		totalPurchase += p.PurchaseAmountCNY
-		totalAnnualCost += p.AnnualCostCNY
-		totalAnnualBudget += p.AnnualBudgetCNY
-		coveredWarmByNew += p.CoveredStorageTB
-	}
-	if hotNeed > 0 {
-		p, e := buildStorageScenePurchasePlan("hot_storage", hotNeed, packages, originByConfig, sceneAdmitThreshold(req, "hot_storage"))
-		if e != nil {
-			return ResourcePlanningNewPurchasePlan{}, e
+		warmNeed := calcReplacementNeedFloat("warm_storage", req.WarmStorageDemandTB, warmBaseNeed, warmScore, sceneAdmitThreshold(req, "warm_storage"), servers, pkgByConfig, originByConfig, nonBusinessPSAs)
+		if warmNeed > 0 {
+			p, e := buildStorageScenePurchasePlan("warm_storage", warmNeed, packages, originByConfig, sceneAdmitThreshold(req, "warm_storage"))
+			if e != nil {
+				return ResourcePlanningNewPurchasePlan{}, e
+			}
+			scenePlans = append(scenePlans, p)
+			totalPurchase += p.PurchaseAmountCNY
+			totalAnnualCost += p.AnnualCostCNY
+			totalAnnualBudget += p.AnnualBudgetCNY
+			coveredWarmByNew += p.CoveredStorageTB
 		}
-		scenePlans = append(scenePlans, p)
-		totalPurchase += p.PurchaseAmountCNY
-		totalAnnualCost += p.AnnualCostCNY
-		totalAnnualBudget += p.AnnualBudgetCNY
-		coveredHotByNew += p.CoveredStorageTB
 	}
-	gpuNeed := req.GPUDemandCards - reconfigPlan.CoveredGPUCards - quasi.CoveredGPUCards - availableGPU
-	if gpuNeed < 0 {
-		gpuNeed = 0
-	}
-	gpuMaxAnnual := req.GPUDemandCards / 4
-	if gpuMaxAnnual > 0 && gpuNeed > gpuMaxAnnual {
-		gpuNeed = gpuMaxAnnual
-	}
-	if gpuNeed > 0 {
-		p, e := buildGPUScenePurchasePlan(gpuNeed, packages, originByConfig, sceneAdmitThreshold(req, "gpu"))
-		if e != nil {
-			return ResourcePlanningNewPurchasePlan{}, e
+
+	hotPkg, hotPkgErr := pickLatestScenePackage(packages, "hot_storage")
+	if hotPkgErr == nil {
+		hotScore := 0.0
+		if ov := originByConfig[hotPkg.ConfigType]; ov > 0 {
+			hotScore = 1.0 / ov
 		}
-		scenePlans = append(scenePlans, p)
-		totalPurchase += p.PurchaseAmountCNY
-		totalAnnualCost += p.AnnualCostCNY
-		totalAnnualBudget += p.AnnualBudgetCNY
-		coveredGPUByNew += p.CoveredGPUCards
+		hotNeed := calcReplacementNeedFloat("hot_storage", req.HotStorageDemandTB, hotBaseNeed, hotScore, sceneAdmitThreshold(req, "hot_storage"), servers, pkgByConfig, originByConfig, nonBusinessPSAs)
+		if hotNeed > 0 {
+			p, e := buildStorageScenePurchasePlan("hot_storage", hotNeed, packages, originByConfig, sceneAdmitThreshold(req, "hot_storage"))
+			if e != nil {
+				return ResourcePlanningNewPurchasePlan{}, e
+			}
+			scenePlans = append(scenePlans, p)
+			totalPurchase += p.PurchaseAmountCNY
+			totalAnnualCost += p.AnnualCostCNY
+			totalAnnualBudget += p.AnnualBudgetCNY
+			coveredHotByNew += p.CoveredStorageTB
+		}
+	}
+
+	gpuBaseNeed := req.GPUDemandCards - reconfigPlan.CoveredGPUCards - quasi.CoveredGPUCards - availableGPU
+	if gpuBaseNeed < 0 {
+		gpuBaseNeed = 0
+	}
+	gpuPkg, gpuPkgErr := pickLatestScenePackage(packages, "gpu")
+	if gpuPkgErr == nil {
+		gpuScore := 0.0
+		if ov := originByConfig[gpuPkg.ConfigType]; ov > 0 {
+			gpuScore = 1.0 / ov
+		}
+		gpuNeed := calcReplacementNeedInt("gpu", req.GPUDemandCards, gpuBaseNeed, gpuScore, sceneAdmitThreshold(req, "gpu"), servers, pkgByConfig, originByConfig, nonBusinessPSAs)
+		if gpuNeed > 0 {
+			p, e := buildGPUScenePurchasePlan(gpuNeed, packages, originByConfig, sceneAdmitThreshold(req, "gpu"))
+			if e != nil {
+				return ResourcePlanningNewPurchasePlan{}, e
+			}
+			scenePlans = append(scenePlans, p)
+			totalPurchase += p.PurchaseAmountCNY
+			totalAnnualCost += p.AnnualCostCNY
+			totalAnnualBudget += p.AnnualBudgetCNY
+			coveredGPUByNew += p.CoveredGPUCards
+		}
 	}
 
 	_ = reconfigPlan
@@ -1148,6 +1161,61 @@ func buildGPUScenePurchasePlan(needCards int, packages []domain.HostPackageConfi
 		AnnualBudgetCNY:    round2RP(monthlyTCO * float64(remainingMonths) * float64(serverCount)),
 		ValueScore:         score,
 	}, nil
+}
+
+func calcReplacementNeedFloat(scene string, demand float64, baseNeed float64, selectedScore float64, admitThreshold float64, servers []domain.Server, pkgByConfig map[string]domain.HostPackageConfig, originByConfig map[string]float64, nonBusinessPSAs []string) float64 {
+	routine := math.Floor(demand / 10.0)
+	if routine < 0 {
+		routine = 0
+	}
+	maxReplace := math.Floor(baseNeed / 4.0)
+	if maxReplace < routine {
+		maxReplace = routine
+	}
+
+	eligibleScores := make([]float64, 0)
+	for _, srv := range servers {
+		if isPSAExcluded(srv.PSA, nonBusinessPSAs) {
+			continue
+		}
+		pkg, ok := pkgByConfig[srv.ConfigType]
+		if !ok || normalizeScene(pkg.SceneCategory) != scene {
+			continue
+		}
+		origin := originByConfig[srv.ConfigType]
+		if origin <= 0 {
+			continue
+		}
+		if yearsSinceRP(srv.LaunchDate, time.Now()) < 5 {
+			continue
+		}
+		eligibleScores = append(eligibleScores, 1.0/origin)
+	}
+	sort.Float64s(eligibleScores)
+	remaining := routine
+	for _, sc := range eligibleScores {
+		if remaining >= maxReplace {
+			break
+		}
+		if selectedScore > sc && selectedScore >= admitThreshold {
+			remaining += 1
+		}
+	}
+	if remaining > maxReplace {
+		remaining = maxReplace
+	}
+	if remaining < 0 {
+		remaining = 0
+	}
+	if routine > 0 && remaining < routine {
+		remaining = routine
+	}
+	return remaining
+}
+
+func calcReplacementNeedInt(scene string, demand int, baseNeed int, selectedScore float64, admitThreshold float64, servers []domain.Server, pkgByConfig map[string]domain.HostPackageConfig, originByConfig map[string]float64, nonBusinessPSAs []string) int {
+	v := calcReplacementNeedFloat(scene, float64(demand), float64(baseNeed), selectedScore, admitThreshold, servers, pkgByConfig, originByConfig, nonBusinessPSAs)
+	return int(math.Round(v))
 }
 
 func sceneAdmitThreshold(req ResourcePlanningRequest, scene string) float64 {
