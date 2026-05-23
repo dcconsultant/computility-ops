@@ -227,10 +227,34 @@ export default function ResourcePlanningPage() {
                 <Statistic title="发布年份" value={result.new_purchase_plan.package_release_year} />
                 <Statistic title="建议采购数量" value={result.new_purchase_plan.server_count} />
                 <Statistic title="覆盖算力(核)" value={result.new_purchase_plan.covered_logical_cores} />
+                <Statistic title="覆盖温存储(TB)" value={result.new_purchase_plan.covered_warm_storage_tb} />
+                <Statistic title="覆盖热存储(TB)" value={result.new_purchase_plan.covered_hot_storage_tb} />
                 <Statistic title="采购金额(CNY)" value={result.new_purchase_plan.purchase_amount_cny} />
                 <Statistic title="年度预算(CNY)" value={result.new_purchase_plan.annual_budget_cny} />
               </Card>
             </Col>
+          </Row>
+
+          {(result.new_purchase_plan.scene_plans || []).length > 0 && (
+            <Card title="3.4 分场景新机采购明细" style={{ marginTop: 16 }}>
+              <Row gutter={16}>
+                {(result.new_purchase_plan.scene_plans || []).map((plan) => (
+                  <Col key={plan.scene_category} span={8}>
+                    <Card size="small" title={plan.scene_category}>
+                      <Statistic title="推荐套餐" value={plan.package_config_type} />
+                      <Statistic title="发布年份" value={plan.package_release_year} />
+                      <Statistic title="建议采购数量" value={plan.server_count} />
+                      <Statistic title={plan.scene_category === 'compute' ? '覆盖算力(核)' : '覆盖存储(TB)'} value={plan.scene_category === 'compute' ? plan.covered_logical_cores : plan.covered_storage_tb} />
+                      <Statistic title="采购金额(CNY)" value={plan.purchase_amount_cny} />
+                      <Statistic title="年度预算(CNY)" value={plan.annual_budget_cny} />
+                    </Card>
+                  </Col>
+                ))}
+              </Row>
+            </Card>
+          )}
+
+          <Row gutter={16} style={{ marginTop: 16 }}>
             <Col span={12}>
               <Card title="3.6 / 3.7">
                 <Statistic title="自维修设备数量" value={result.self_repair_plan.device_count} />

@@ -530,6 +530,19 @@ export interface ResourcePlanningConfigState {
   config: ResourcePlanningRequest;
 }
 
+export interface ResourcePlanningScenePurchasePlan {
+  scene_category: string;
+  package_config_type: string;
+  package_release_year: number;
+  server_count: number;
+  covered_logical_cores?: number;
+  covered_storage_tb?: number;
+  purchase_amount_cny: number;
+  annual_cost_cny: number;
+  annual_budget_cny: number;
+  value_score?: number;
+}
+
 export interface ResourcePlanningResponse {
   generated_at: string;
   config: ResourcePlanningRequest;
@@ -549,6 +562,8 @@ export interface ResourcePlanningResponse {
     package_release_year: number;
     server_count: number;
     covered_logical_cores: number;
+    covered_warm_storage_tb: number;
+    covered_hot_storage_tb: number;
     base_demand_cores: number;
     routine_replacement_cores: number;
     extra_replacement_cores: number;
@@ -557,6 +572,7 @@ export interface ResourcePlanningResponse {
     annual_cost_cny: number;
     annual_budget_cny: number;
     value_score: number;
+    scene_plans?: ResourcePlanningScenePurchasePlan[];
   };
   renewal_plan: {
     source_plan_id: string;
