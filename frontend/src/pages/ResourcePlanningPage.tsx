@@ -249,13 +249,29 @@ export default function ResourcePlanningPage() {
           </Card>
 
           <Title level={5}>（2）需求</Title>
-          <Text type="secondary">计算(核)、温存储(TB)、热存储(TB)、GPU(卡)</Text>
-          <Row gutter={16} style={{ marginTop: 8 }}>
-            <Col span={6}><Form.Item name="compute_demand_cores" label="计算需求(核)" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="warm_storage_demand_tb" label="温存储需求(TB)" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="hot_storage_demand_tb" label="热存储需求(TB)" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="gpu_demand_cards" label="GPU需求(卡)" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-          </Row>
+          <Text type="secondary">表格化：每个场景一行，统一需求口径</Text>
+          <Card type="inner" style={{ marginTop: 8 }}>
+            <Row gutter={8} style={{ fontWeight: 600, marginBottom: 8 }}>
+              <Col span={8}>场景</Col>
+              <Col span={16}>需求值</Col>
+            </Row>
+            <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
+              <Col span={8}><Text>计算（核）</Text></Col>
+              <Col span={16}><Form.Item name="compute_demand_cores" style={{ marginBottom: 0 }} rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+            <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
+              <Col span={8}><Text>温存储（TB）</Text></Col>
+              <Col span={16}><Form.Item name="warm_storage_demand_tb" style={{ marginBottom: 0 }} rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+            <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
+              <Col span={8}><Text>热存储（TB）</Text></Col>
+              <Col span={16}><Form.Item name="hot_storage_demand_tb" style={{ marginBottom: 0 }} rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+            <Row gutter={8} align="middle">
+              <Col span={8}><Text>GPU（卡）</Text></Col>
+              <Col span={16}><Form.Item name="gpu_demand_cards" style={{ marginBottom: 0 }} rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+          </Card>
 
           <Title level={5}>（3）预确定费用</Title>
           <Row gutter={16} style={{ marginTop: 8 }}>
