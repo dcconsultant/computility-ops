@@ -513,6 +513,7 @@ export interface ResourcePlanningRequest {
   compute_demand_cores: number;
   warm_storage_demand_tb: number;
   hot_storage_demand_tb: number;
+  gpu_demand_cards: number;
   cabinet_and_other_cost_cny: number;
   annual_depreciation_cny: number;
   disposal_psas: string;
@@ -537,6 +538,7 @@ export interface ResourcePlanningScenePurchasePlan {
   server_count: number;
   covered_logical_cores?: number;
   covered_storage_tb?: number;
+  covered_gpu_cards?: number;
   purchase_amount_cny: number;
   annual_cost_cny: number;
   annual_budget_cny: number;
@@ -564,6 +566,7 @@ export interface ResourcePlanningResponse {
     covered_logical_cores: number;
     covered_warm_storage_tb: number;
     covered_hot_storage_tb: number;
+    covered_gpu_cards: number;
     base_demand_cores: number;
     routine_replacement_cores: number;
     extra_replacement_cores: number;
@@ -635,6 +638,13 @@ export interface ResourcePlanningResponse {
       new_purchase_tb: number;
       stock_continue_tb: number;
       total_tb: number;
+    };
+    gpu_capacity: {
+      reconfig_cards: number;
+      quasi_purchase_cards: number;
+      new_purchase_cards: number;
+      stock_continue_cards: number;
+      total_cards: number;
     };
   };
 }

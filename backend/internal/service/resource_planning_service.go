@@ -31,6 +31,7 @@ type ResourcePlanningRequest struct {
 	ComputeDemandCores        int      `json:"compute_demand_cores"`
 	WarmStorageDemandTB       float64  `json:"warm_storage_demand_tb"`
 	HotStorageDemandTB        float64  `json:"hot_storage_demand_tb"`
+	GPUDemandCards            int      `json:"gpu_demand_cards"`
 	CabinetAndOtherCostCNY    float64  `json:"cabinet_and_other_cost_cny"`
 	AnnualDepreciationCNY     float64  `json:"annual_depreciation_cny"`
 	DisposalPSAs              string   `json:"disposal_psas"`
@@ -80,6 +81,7 @@ type ResourcePlanningScenePurchasePlan struct {
 	ServerCount         int     `json:"server_count"`
 	CoveredLogicalCores int     `json:"covered_logical_cores,omitempty"`
 	CoveredStorageTB    float64 `json:"covered_storage_tb,omitempty"`
+	CoveredGPUCards     int     `json:"covered_gpu_cards,omitempty"`
 	PurchaseAmountCNY   float64 `json:"purchase_amount_cny"`
 	AnnualCostCNY       float64 `json:"annual_cost_cny"`
 	AnnualBudgetCNY     float64 `json:"annual_budget_cny"`
@@ -93,6 +95,7 @@ type ResourcePlanningNewPurchasePlan struct {
 	CoveredLogicalCores     int                                `json:"covered_logical_cores"`
 	CoveredWarmStorageTB    float64                            `json:"covered_warm_storage_tb"`
 	CoveredHotStorageTB     float64                            `json:"covered_hot_storage_tb"`
+	CoveredGPUCards         int                                `json:"covered_gpu_cards"`
 	BaseDemandCores         int                                `json:"base_demand_cores"`
 	RoutineReplacementCores int                                `json:"routine_replacement_cores"`
 	ExtraReplacementCores   int                                `json:"extra_replacement_cores"`
@@ -165,12 +168,21 @@ type ResourcePlanningCapacityStorageBreakdown struct {
 	TotalTB         float64 `json:"total_tb"`
 }
 
+type ResourcePlanningCapacityGPUBreakdown struct {
+	ReconfigCards      int `json:"reconfig_cards"`
+	QuasiPurchaseCards int `json:"quasi_purchase_cards"`
+	NewPurchaseCards   int `json:"new_purchase_cards"`
+	StockContinueCards int `json:"stock_continue_cards"`
+	TotalCards         int `json:"total_cards"`
+}
+
 type ResourcePlanningResultAnalysis struct {
 	Amount            ResourcePlanningAmountBreakdown          `json:"amount"`
 	Cost              ResourcePlanningCostBreakdown            `json:"cost"`
 	ComputeCapacity   ResourcePlanningCapacityComputeBreakdown `json:"compute_capacity"`
 	WarmStorage       ResourcePlanningCapacityStorageBreakdown `json:"warm_storage_capacity"`
 	HotStorage        ResourcePlanningCapacityStorageBreakdown `json:"hot_storage_capacity"`
+	GPUCapacity       ResourcePlanningCapacityGPUBreakdown     `json:"gpu_capacity"`
 	NonBusinessPSAs   []string                                 `json:"non_business_psas,omitempty"`
 	AvailableCompute  int                                      `json:"available_compute_cores"`
 	AvailableWarmTB   float64                                  `json:"available_warm_storage_tb"`
@@ -439,6 +451,7 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 	computeAnnualBudget := round2RP(computeMonthlyTCO * float64(remainingMonths) * float64(computeServerCount))
 
 	availableWarm, availableHot := 0.0, 0.0
+	availableGPU := 0
 	for _, srv := range servers {
 		if isPSAExcluded(srv.PSA, nonBusinessPSAs) {
 			continue
@@ -452,6 +465,8 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 			availableWarm += pkg.StorageCapacityTB
 		case "hot_storage":
 			availableHot += pkg.StorageCapacityTB
+		case "gpu":
+			availableGPU += pkg.GPUCardCount
 		}
 	}
 
@@ -464,7 +479,7 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 		hotNeed = 0
 	}
 
-	scenePlans := make([]ResourcePlanningScenePurchasePlan, 0, 3)
+	scenePlans := make([]ResourcePlanningScenePurchasePlan, 0, 4)
 	scenePlans = append(scenePlans, ResourcePlanningScenePurchasePlan{
 		SceneCategory:       "compute",
 		PackageConfigType:   selectedComputePkg.ConfigType,
@@ -482,6 +497,7 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 	totalAnnualBudget := computeAnnualBudget
 	coveredWarmByNew := 0.0
 	coveredHotByNew := 0.0
+	coveredGPUByNew := 0
 
 	if warmNeed > 0 {
 		p, e := buildStorageScenePurchasePlan("warm_storage", warmNeed, packages, originByConfig)
@@ -505,6 +521,21 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 		totalAnnualBudget += p.AnnualBudgetCNY
 		coveredHotByNew += p.CoveredStorageTB
 	}
+	gpuNeed := req.GPUDemandCards - availableGPU
+	if gpuNeed < 0 {
+		gpuNeed = 0
+	}
+	if gpuNeed > 0 {
+		p, e := buildGPUScenePurchasePlan(gpuNeed, packages, originByConfig)
+		if e != nil {
+			return ResourcePlanningNewPurchasePlan{}, e
+		}
+		scenePlans = append(scenePlans, p)
+		totalPurchase += p.PurchaseAmountCNY
+		totalAnnualCost += p.AnnualCostCNY
+		totalAnnualBudget += p.AnnualBudgetCNY
+		coveredGPUByNew += p.CoveredGPUCards
+	}
 
 	_ = reconfigPlan
 	_ = quasi
@@ -515,6 +546,7 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 		CoveredLogicalCores:     computeCoveredCores,
 		CoveredWarmStorageTB:    round2RP(coveredWarmByNew),
 		CoveredHotStorageTB:     round2RP(coveredHotByNew),
+		CoveredGPUCards:         coveredGPUByNew,
 		BaseDemandCores:         baseDemand,
 		RoutineReplacementCores: routine,
 		ExtraReplacementCores:   extra,
@@ -594,6 +626,7 @@ func calcResultAnalysis(req ResourcePlanningRequest, servers []domain.Server, pk
 	availableCompute := 0
 	availableWarm := 0.0
 	availableHot := 0.0
+	availableGPU := 0
 	for _, srv := range servers {
 		if isPSAExcluded(srv.PSA, nonBusinessPSAs) {
 			continue
@@ -609,6 +642,8 @@ func calcResultAnalysis(req ResourcePlanningRequest, servers []domain.Server, pk
 			availableWarm += pkg.StorageCapacityTB
 		case "hot_storage":
 			availableHot += pkg.StorageCapacityTB
+		case "gpu":
+			availableGPU += pkg.GPUCardCount
 		}
 	}
 
@@ -668,12 +703,25 @@ func calcResultAnalysis(req ResourcePlanningRequest, servers []domain.Server, pk
 	}
 	hot.TotalTB = round2RP(hot.ReconfigTB + hot.QuasiPurchaseTB + hot.NewPurchaseTB + hot.StockContinueTB)
 
+	gpuStock := availableGPU - newPlan.CoveredGPUCards
+	if gpuStock < 0 {
+		gpuStock = 0
+	}
+	gpu := ResourcePlanningCapacityGPUBreakdown{
+		ReconfigCards:      0,
+		QuasiPurchaseCards: 0,
+		NewPurchaseCards:   newPlan.CoveredGPUCards,
+		StockContinueCards: gpuStock,
+	}
+	gpu.TotalCards = gpu.ReconfigCards + gpu.QuasiPurchaseCards + gpu.NewPurchaseCards + gpu.StockContinueCards
+
 	return ResourcePlanningResultAnalysis{
 		Amount:          amount,
 		Cost:            cost,
 		ComputeCapacity: compute,
 		WarmStorage:     warm,
 		HotStorage:      hot,
+		GPUCapacity:     gpu,
 		NonBusinessPSAs: nonBusinessPSAs,
 		AvailableCompute: availableCompute,
 		AvailableWarmTB:  round2RP(availableWarm),
@@ -1004,6 +1052,34 @@ func buildStorageScenePurchasePlan(scene string, needTB float64, packages []doma
 		PackageReleaseYear: pkg.ReleaseYear,
 		ServerCount:        serverCount,
 		CoveredStorageTB:   round2RP(coveredTB),
+		PurchaseAmountCNY:  round2RP(origin * float64(serverCount)),
+		AnnualCostCNY:      round2RP(monthlyTCO * 12 * float64(serverCount)),
+		AnnualBudgetCNY:    round2RP(monthlyTCO * float64(remainingMonths) * float64(serverCount)),
+	}, nil
+}
+
+func buildGPUScenePurchasePlan(needCards int, packages []domain.HostPackageConfig, originByConfig map[string]float64) (ResourcePlanningScenePurchasePlan, error) {
+	pkg, err := pickLatestScenePackage(packages, "gpu")
+	if err != nil {
+		return ResourcePlanningScenePurchasePlan{}, err
+	}
+	if pkg.GPUCardCount <= 0 {
+		return ResourcePlanningScenePurchasePlan{}, fmt.Errorf("gpu 场景新机套餐GPU卡数无效")
+	}
+	origin := originByConfig[pkg.ConfigType]
+	if origin <= 0 {
+		return ResourcePlanningScenePurchasePlan{}, fmt.Errorf("新机套餐缺少价值分原值")
+	}
+	serverCount := int(math.Ceil(float64(needCards) / float64(pkg.GPUCardCount)))
+	coveredCards := serverCount * pkg.GPUCardCount
+	monthlyTCO := estimateMonthlyTCO(pkg, origin)
+	remainingMonths := remainingBudgetMonths()
+	return ResourcePlanningScenePurchasePlan{
+		SceneCategory:      "gpu",
+		PackageConfigType:  pkg.ConfigType,
+		PackageReleaseYear: pkg.ReleaseYear,
+		ServerCount:        serverCount,
+		CoveredGPUCards:    coveredCards,
 		PurchaseAmountCNY:  round2RP(origin * float64(serverCount)),
 		AnnualCostCNY:      round2RP(monthlyTCO * 12 * float64(serverCount)),
 		AnnualBudgetCNY:    round2RP(monthlyTCO * float64(remainingMonths) * float64(serverCount)),

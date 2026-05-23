@@ -160,6 +160,7 @@ export default function ResourcePlanningPage() {
             compute_demand_cores: 100000,
             warm_storage_demand_tb: 0,
             hot_storage_demand_tb: 0,
+            gpu_demand_cards: 0,
             cabinet_and_other_cost_cny: 0,
             annual_depreciation_cny: 0,
             disposal_psas: '/server-decommission',
@@ -175,6 +176,7 @@ export default function ResourcePlanningPage() {
             <Col span={6}><Form.Item name="compute_demand_cores" label="计算需求核" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
             <Col span={6}><Form.Item name="warm_storage_demand_tb" label="温存储需求(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
             <Col span={6}><Form.Item name="hot_storage_demand_tb" label="热存储需求(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            <Col span={6}><Form.Item name="gpu_demand_cards" label="GPU需求(卡)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
 
             <Col span={6}><Form.Item name="cabinet_and_other_cost_cny" label="机柜及其他费用(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
             <Col span={6}><Form.Item name="annual_depreciation_cny" label="年度折旧(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
@@ -229,6 +231,7 @@ export default function ResourcePlanningPage() {
                 <Statistic title="覆盖算力(核)" value={result.new_purchase_plan.covered_logical_cores} />
                 <Statistic title="覆盖温存储(TB)" value={result.new_purchase_plan.covered_warm_storage_tb} />
                 <Statistic title="覆盖热存储(TB)" value={result.new_purchase_plan.covered_hot_storage_tb} />
+                <Statistic title="覆盖GPU(卡)" value={result.new_purchase_plan.covered_gpu_cards} />
                 <Statistic title="采购金额(CNY)" value={result.new_purchase_plan.purchase_amount_cny} />
                 <Statistic title="年度预算(CNY)" value={result.new_purchase_plan.annual_budget_cny} />
               </Card>
@@ -244,7 +247,7 @@ export default function ResourcePlanningPage() {
                       <Statistic title="推荐套餐" value={plan.package_config_type} />
                       <Statistic title="发布年份" value={plan.package_release_year} />
                       <Statistic title="建议采购数量" value={plan.server_count} />
-                      <Statistic title={plan.scene_category === 'compute' ? '覆盖算力(核)' : '覆盖存储(TB)'} value={plan.scene_category === 'compute' ? plan.covered_logical_cores : plan.covered_storage_tb} />
+                      <Statistic title={plan.scene_category === 'compute' ? '覆盖算力(核)' : (plan.scene_category === 'gpu' ? '覆盖GPU(卡)' : '覆盖存储(TB)')} value={plan.scene_category === 'compute' ? plan.covered_logical_cores : (plan.scene_category === 'gpu' ? plan.covered_gpu_cards : plan.covered_storage_tb)} />
                       <Statistic title="采购金额(CNY)" value={plan.purchase_amount_cny} />
                       <Statistic title="年度预算(CNY)" value={plan.annual_budget_cny} />
                     </Card>
@@ -337,6 +340,21 @@ export default function ResourcePlanningPage() {
                     { name: '准系统采购利旧', value: result.result_analysis.hot_storage_capacity.quasi_purchase_tb, color: '#13c2c2' },
                     { name: '新机采购', value: result.result_analysis.hot_storage_capacity.new_purchase_tb, color: '#52c41a' },
                     { name: '存量继续使用', value: result.result_analysis.hot_storage_capacity.stock_continue_tb, color: '#faad14' }
+                  ]}
+                />
+              </Col>
+            </Row>
+
+            <Row gutter={16} style={{ marginTop: 16 }}>
+              <Col span={24}>
+                <StackedShareBar
+                  title="算力-GPU 组成占比（堆叠条，单位：卡）"
+                  unit="卡"
+                  items={[
+                    { name: '改配利旧', value: result.result_analysis.gpu_capacity.reconfig_cards, color: '#1677ff' },
+                    { name: '准系统采购利旧', value: result.result_analysis.gpu_capacity.quasi_purchase_cards, color: '#13c2c2' },
+                    { name: '新机采购', value: result.result_analysis.gpu_capacity.new_purchase_cards, color: '#52c41a' },
+                    { name: '存量继续使用', value: result.result_analysis.gpu_capacity.stock_continue_cards, color: '#faad14' }
                   ]}
                 />
               </Col>
