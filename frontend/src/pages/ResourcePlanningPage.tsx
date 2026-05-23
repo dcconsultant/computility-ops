@@ -172,7 +172,7 @@ export default function ResourcePlanningPage() {
             label: '规划配置',
             children: (
               <>
-      <Card title="3.1 规划配置 + 3.2/3.3 输入">
+      <Card title="规划参数配置">
         <Form
           form={form}
           layout="vertical"
@@ -223,17 +223,30 @@ export default function ResourcePlanningPage() {
           onFinish={onSubmit}
         >
           <Title level={5}>（1）价值分</Title>
-          <Text type="secondary">一级：价值分 → 二级：公有云/自建 → 三级：四场景</Text>
-          <Row gutter={16} style={{ marginTop: 8 }}>
-            <Col span={6}><Form.Item name="self_build_value_score_compute" label="自建-计算"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="public_cloud_value_score_compute" label="公有云-计算"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="self_build_value_score_warm_storage" label="自建-温存储"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="public_cloud_value_score_warm_storage" label="公有云-温存储"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="self_build_value_score_hot_storage" label="自建-热存储"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="public_cloud_value_score_hot_storage" label="公有云-热存储"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="self_build_value_score_gpu" label="自建-GPU"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="public_cloud_value_score_gpu" label="公有云-GPU"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-          </Row>
+          <Text type="secondary">表格化：场景为列，分类为行</Text>
+          <Card type="inner" style={{ marginTop: 8 }}>
+            <Row gutter={8} style={{ fontWeight: 600, marginBottom: 8 }}>
+              <Col span={4}>分类</Col>
+              <Col span={5}>计算</Col>
+              <Col span={5}>温存储</Col>
+              <Col span={5}>热存储</Col>
+              <Col span={5}>GPU</Col>
+            </Row>
+            <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
+              <Col span={4}><Text>自建</Text></Col>
+              <Col span={5}><Form.Item name="self_build_value_score_compute" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={5}><Form.Item name="self_build_value_score_warm_storage" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={5}><Form.Item name="self_build_value_score_hot_storage" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={5}><Form.Item name="self_build_value_score_gpu" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+            <Row gutter={8} align="middle">
+              <Col span={4}><Text>公有云</Text></Col>
+              <Col span={5}><Form.Item name="public_cloud_value_score_compute" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={5}><Form.Item name="public_cloud_value_score_warm_storage" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={5}><Form.Item name="public_cloud_value_score_hot_storage" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={5}><Form.Item name="public_cloud_value_score_gpu" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+          </Card>
 
           <Title level={5}>（2）需求</Title>
           <Text type="secondary">计算(核)、温存储(TB)、热存储(TB)、GPU(卡)</Text>
@@ -251,42 +264,73 @@ export default function ResourcePlanningPage() {
           </Row>
 
           <Title level={5}>（4）利旧项目</Title>
-          <Text type="secondary">每个场景一行：服务器数 + 算力 + 费用</Text>
-          <Row gutter={16} style={{ marginTop: 8 }}>
-            <Col span={24}><Text strong>改配利旧</Text></Col>
-            <Col span={6}><Form.Item name="reconfig_compute_server_count" label="改配-计算 服务器数"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="reconfig_compute_capacity" label="改配-计算 算力(核)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="reconfig_compute_cost" label="改配-计算 费用(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+          <Text type="secondary">表头 + 分类的紧凑布局（每个场景一行）</Text>
 
-            <Col span={6}><Form.Item name="reconfig_warm_server_count" label="改配-温存储 服务器数"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="reconfig_warm_capacity" label="改配-温存储 算力(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="reconfig_warm_cost" label="改配-温存储 费用(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+          <Card type="inner" title="改配利旧" style={{ marginTop: 8 }}>
+            <Row gutter={8} style={{ fontWeight: 600, marginBottom: 8 }}>
+              <Col span={6}>场景</Col>
+              <Col span={6}>服务器数</Col>
+              <Col span={6}>算力</Col>
+              <Col span={6}>费用(CNY)</Col>
+            </Row>
+            <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
+              <Col span={6}><Text>计算</Text></Col>
+              <Col span={6}><Form.Item name="reconfig_compute_server_count" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="reconfig_compute_capacity" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="reconfig_compute_cost" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+            <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
+              <Col span={6}><Text>温存储</Text></Col>
+              <Col span={6}><Form.Item name="reconfig_warm_server_count" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="reconfig_warm_capacity" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="reconfig_warm_cost" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+            <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
+              <Col span={6}><Text>热存储</Text></Col>
+              <Col span={6}><Form.Item name="reconfig_hot_server_count" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="reconfig_hot_capacity" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="reconfig_hot_cost" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+            <Row gutter={8} align="middle">
+              <Col span={6}><Text>GPU</Text></Col>
+              <Col span={6}><Form.Item name="reconfig_gpu_server_count" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="reconfig_gpu_capacity" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="reconfig_gpu_cost" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+          </Card>
 
-            <Col span={6}><Form.Item name="reconfig_hot_server_count" label="改配-热存储 服务器数"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="reconfig_hot_capacity" label="改配-热存储 算力(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="reconfig_hot_cost" label="改配-热存储 费用(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-
-            <Col span={6}><Form.Item name="reconfig_gpu_server_count" label="改配-GPU 服务器数"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="reconfig_gpu_capacity" label="改配-GPU 算力(卡)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="reconfig_gpu_cost" label="改配-GPU 费用(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-
-            <Col span={24}><Text strong>准系统采购利旧</Text></Col>
-            <Col span={6}><Form.Item name="quasi_compute_server_count" label="准系统-计算 服务器数" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="quasi_compute_capacity" label="准系统-计算 算力(核)" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="quasi_compute_cost" label="准系统-计算 费用(CNY)" rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-
-            <Col span={6}><Form.Item name="quasi_warm_server_count" label="准系统-温存储 服务器数"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="quasi_warm_capacity" label="准系统-温存储 算力(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="quasi_warm_cost" label="准系统-温存储 费用(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-
-            <Col span={6}><Form.Item name="quasi_hot_server_count" label="准系统-热存储 服务器数"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="quasi_hot_capacity" label="准系统-热存储 算力(TB)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="quasi_hot_cost" label="准系统-热存储 费用(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-
-            <Col span={6}><Form.Item name="quasi_gpu_server_count" label="准系统-GPU 服务器数"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="quasi_gpu_capacity" label="准系统-GPU 算力(卡)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            <Col span={6}><Form.Item name="quasi_gpu_cost" label="准系统-GPU 费用(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-          </Row>
+          <Card type="inner" title="准系统采购利旧" style={{ marginTop: 12 }}>
+            <Row gutter={8} style={{ fontWeight: 600, marginBottom: 8 }}>
+              <Col span={6}>场景</Col>
+              <Col span={6}>服务器数</Col>
+              <Col span={6}>算力</Col>
+              <Col span={6}>费用(CNY)</Col>
+            </Row>
+            <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
+              <Col span={6}><Text>计算</Text></Col>
+              <Col span={6}><Form.Item name="quasi_compute_server_count" style={{ marginBottom: 0 }} rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="quasi_compute_capacity" style={{ marginBottom: 0 }} rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="quasi_compute_cost" style={{ marginBottom: 0 }} rules={[{ required: true }]}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+            <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
+              <Col span={6}><Text>温存储</Text></Col>
+              <Col span={6}><Form.Item name="quasi_warm_server_count" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="quasi_warm_capacity" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="quasi_warm_cost" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+            <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
+              <Col span={6}><Text>热存储</Text></Col>
+              <Col span={6}><Form.Item name="quasi_hot_server_count" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="quasi_hot_capacity" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="quasi_hot_cost" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+            <Row gutter={8} align="middle">
+              <Col span={6}><Text>GPU</Text></Col>
+              <Col span={6}><Form.Item name="quasi_gpu_server_count" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="quasi_gpu_capacity" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="quasi_gpu_cost" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+          </Card>
 
           <Title level={5}>（5）业务识别</Title>
           <Row gutter={16} style={{ marginTop: 8 }}>
