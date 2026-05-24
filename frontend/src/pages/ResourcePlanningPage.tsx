@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Card, Col, Form, Input, InputNumber, Row, Space, Statistic, Tabs, Typography, message } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
-import { calculateResourcePlanning, getResourcePlanningConfig, saveResourcePlanningConfig } from '../api';
+import { calculateResourcePlanning, getLatestResourcePlanningResult, getResourcePlanningConfig, saveResourcePlanningConfig } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
 import type { ResourcePlanningResponse } from '../types';
 
@@ -113,10 +113,17 @@ export default function ResourcePlanningPage() {
     (async () => {
       setConfigLoading(true);
       try {
-        const resp = await getResourcePlanningConfig();
-        const data = ensureApiOk(resp).data;
-        if (data?.found && data.state?.config) {
-          form.setFieldsValue(data.state.config);
+        const [cfgResp, latestResp] = await Promise.all([
+          getResourcePlanningConfig(),
+          getLatestResourcePlanningResult()
+        ]);
+        const cfgData = ensureApiOk(cfgResp).data;
+        if (cfgData?.found && cfgData.state?.config) {
+          form.setFieldsValue(cfgData.state.config);
+        }
+        const latestData = ensureApiOk(latestResp).data;
+        if (latestData?.found && latestData.result) {
+          setResult(latestData.result);
         }
       } catch {
         // ignore

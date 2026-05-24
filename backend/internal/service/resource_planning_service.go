@@ -22,6 +22,12 @@ type ResourcePlanningService struct {
 	renewalRepo repository.RenewalPlanRepo
 }
 
+const (
+	resourcePlanningLogDir      = "backend/logs/resource-planning"
+	resourcePlanningConfigFile  = "config.latest.json"
+	resourcePlanningResultFile  = "result.latest.json"
+)
+
 func NewResourcePlanningService(serverRepo repository.ServerRepo, datasetRepo repository.DatasetRepo, renewalRepo repository.RenewalPlanRepo) *ResourcePlanningService {
 	return &ResourcePlanningService{serverRepo: serverRepo, datasetRepo: datasetRepo, renewalRepo: renewalRepo}
 }
@@ -323,6 +329,7 @@ func (s *ResourcePlanningService) Calculate(ctx context.Context, req ResourcePla
 		ResultAnalysis:    resultAnalysis,
 	}
 	_ = s.SaveConfig(ctx, req)
+	_ = s.SaveLatestResult(ctx, out)
 	return out, nil
 }
 
@@ -1010,14 +1017,14 @@ func (s *ResourcePlanningService) SaveConfig(ctx context.Context, req ResourcePl
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Join("backend", "logs", "resource-planning"), 0o755); err != nil {
+	if err := os.MkdirAll(resourcePlanningLogDir, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join("backend", "logs", "resource-planning", "config.latest.json"), payload, 0o644)
+	return os.WriteFile(filepath.Join(resourcePlanningLogDir, resourcePlanningConfigFile), payload, 0o644)
 }
 
 func (s *ResourcePlanningService) GetConfig(ctx context.Context) (ResourcePlanningConfigState, bool, error) {
-	path := filepath.Join("backend", "logs", "resource-planning", "config.latest.json")
+	path := filepath.Join(resourcePlanningLogDir, resourcePlanningConfigFile)
 	payload, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -1030,6 +1037,33 @@ func (s *ResourcePlanningService) GetConfig(ctx context.Context) (ResourcePlanni
 		return ResourcePlanningConfigState{}, false, err
 	}
 	return state, true, nil
+}
+
+func (s *ResourcePlanningService) SaveLatestResult(ctx context.Context, resp ResourcePlanningResponse) error {
+	payload, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(resourcePlanningLogDir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(resourcePlanningLogDir, resourcePlanningResultFile), payload, 0o644)
+}
+
+func (s *ResourcePlanningService) GetLatestResult(ctx context.Context) (ResourcePlanningResponse, bool, error) {
+	path := filepath.Join(resourcePlanningLogDir, resourcePlanningResultFile)
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ResourcePlanningResponse{}, false, nil
+		}
+		return ResourcePlanningResponse{}, false, err
+	}
+	var out ResourcePlanningResponse
+	if err := json.Unmarshal(payload, &out); err != nil {
+		return ResourcePlanningResponse{}, false, err
+	}
+	return out, true, nil
 }
 
 func round2RP(v float64) float64 {

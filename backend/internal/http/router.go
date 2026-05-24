@@ -127,6 +127,7 @@ func NewRouter(h Handlers) *gin.Engine {
 		v1.GET("/ops/decisions/replacement", h.ReplacementPlanning.ListSuggestions)
 		v1.GET("/ops/decisions/reconfig", h.ReconfigPlanning.ListSuggestions)
 		v1.GET("/resource-planning/config", h.ResourcePlanning.GetConfig)
+		v1.GET("/resource-planning/result/latest", h.ResourcePlanning.GetLatestResult)
 		v1.POST("/resource-planning/config", h.ResourcePlanning.SaveConfig)
 		v1.POST("/resource-planning/calculate", h.ResourcePlanning.Calculate)
 		v1.POST("/reconfig/plan/calculate", h.ReconfigMgmt.CalculatePlan)

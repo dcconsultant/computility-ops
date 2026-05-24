@@ -193,6 +193,11 @@ export async function saveResourcePlanningConfig(payload: ResourcePlanningReques
   return data;
 }
 
+export async function getLatestResourcePlanningResult() {
+  const { data } = await http.get<ApiResp<{ found: boolean; result?: ResourcePlanningResponse }>>('/resource-planning/result/latest');
+  return data;
+}
+
 export async function calculateResourcePlanning(payload: ResourcePlanningRequest) {
   const { data } = await http.post<ApiResp<ResourcePlanningResponse>>('/resource-planning/calculate', payload);
   return data;

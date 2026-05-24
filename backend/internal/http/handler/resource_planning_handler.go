@@ -29,6 +29,20 @@ func (h *ResourcePlanningHandler) GetConfig(c *gin.Context) {
 	ok(c, gin.H{"found": true, "state": state})
 }
 
+func (h *ResourcePlanningHandler) GetLatestResult(c *gin.Context) {
+	c.Set("audit_action", "resource_planning.get_latest_result")
+	out, found, err := h.svc.GetLatestResult(c.Request.Context())
+	if err != nil {
+		fail(c, 50001, "读取资源规划结果失败")
+		return
+	}
+	if !found {
+		ok(c, gin.H{"found": false})
+		return
+	}
+	ok(c, gin.H{"found": true, "result": out})
+}
+
 func (h *ResourcePlanningHandler) SaveConfig(c *gin.Context) {
 	c.Set("audit_action", "resource_planning.save_config")
 	var req service.ResourcePlanningRequest
