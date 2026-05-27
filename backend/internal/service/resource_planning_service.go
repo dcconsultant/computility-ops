@@ -49,6 +49,32 @@ type ResourcePlanningRequest struct {
 	AnnualDepreciationCNY     float64  `json:"annual_depreciation_cny"`
 	DisposalPSAs              string   `json:"disposal_psas"`
 	NonBusinessPSAs           string   `json:"non_business_psas"`
+	// UI persistence fields (3.2 改配利旧：按场景手工录入)
+	ReconfigComputeServerCount *int     `json:"reconfig_compute_server_count,omitempty"`
+	ReconfigComputeCapacity    *int     `json:"reconfig_compute_capacity,omitempty"`
+	ReconfigComputeCost        *float64 `json:"reconfig_compute_cost,omitempty"`
+	ReconfigWarmServerCount    *int     `json:"reconfig_warm_server_count,omitempty"`
+	ReconfigWarmCapacity       *float64 `json:"reconfig_warm_capacity,omitempty"`
+	ReconfigWarmCost           *float64 `json:"reconfig_warm_cost,omitempty"`
+	ReconfigHotServerCount     *int     `json:"reconfig_hot_server_count,omitempty"`
+	ReconfigHotCapacity        *float64 `json:"reconfig_hot_capacity,omitempty"`
+	ReconfigHotCost            *float64 `json:"reconfig_hot_cost,omitempty"`
+	ReconfigGPUServerCount     *int     `json:"reconfig_gpu_server_count,omitempty"`
+	ReconfigGPUCapacity        *int     `json:"reconfig_gpu_capacity,omitempty"`
+	ReconfigGPUCost            *float64 `json:"reconfig_gpu_cost,omitempty"`
+	// UI persistence fields (3.3 准系统采购利旧：按场景手工录入)
+	QuasiComputeServerCount *int     `json:"quasi_compute_server_count,omitempty"`
+	QuasiComputeCapacity    *int     `json:"quasi_compute_capacity,omitempty"`
+	QuasiComputeCost        *float64 `json:"quasi_compute_cost,omitempty"`
+	QuasiWarmServerCount    *int     `json:"quasi_warm_server_count,omitempty"`
+	QuasiWarmCapacity       *float64 `json:"quasi_warm_capacity,omitempty"`
+	QuasiWarmCost           *float64 `json:"quasi_warm_cost,omitempty"`
+	QuasiHotServerCount     *int     `json:"quasi_hot_server_count,omitempty"`
+	QuasiHotCapacity        *float64 `json:"quasi_hot_capacity,omitempty"`
+	QuasiHotCost            *float64 `json:"quasi_hot_cost,omitempty"`
+	QuasiGPUServerCount     *int     `json:"quasi_gpu_server_count,omitempty"`
+	QuasiGPUCapacity        *int     `json:"quasi_gpu_capacity,omitempty"`
+	QuasiGPUCost            *float64 `json:"quasi_gpu_cost,omitempty"`
 	ReconfigDoneServerCount   *int     `json:"reconfig_done_server_count"`
 	ReconfigDoneLogicalCores  *int     `json:"reconfig_done_logical_cores"`
 	ReconfigDoneWarmStorageTB *float64 `json:"reconfig_done_warm_storage_tb"`
