@@ -375,6 +375,37 @@ export default function ResourcePlanningPage() {
             </Row>
           </Card>
 
+
+          <Card type="inner" title="新机采购" style={{ marginTop: 12 }}>
+            <Row gutter={8} style={{ fontWeight: 600, marginBottom: 8 }}>
+              <Col span={6}>场景</Col><Col span={6}>服务器数</Col><Col span={6}>算力</Col><Col span={6}>费用(CNY)</Col>
+            </Row>
+            <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
+              <Col span={6}><Text>计算（核）</Text></Col>
+              <Col span={6}><Form.Item name="executed_new_compute_server_count" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="executed_new_compute_capacity" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="executed_new_compute_cost" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+            <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
+              <Col span={6}><Text>温存储（TB）</Text></Col>
+              <Col span={6}><Form.Item name="executed_new_warm_server_count" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="executed_new_warm_capacity" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="executed_new_warm_cost" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+            <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
+              <Col span={6}><Text>热存储（TB）</Text></Col>
+              <Col span={6}><Form.Item name="executed_new_hot_server_count" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="executed_new_hot_capacity" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="executed_new_hot_cost" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+            <Row gutter={8} align="middle">
+              <Col span={6}><Text>GPU（卡）</Text></Col>
+              <Col span={6}><Form.Item name="executed_new_gpu_server_count" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="executed_new_gpu_capacity" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="executed_new_gpu_cost" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+          </Card>
+
           <Title level={5}>（5）业务识别</Title>
           <Row gutter={16} style={{ marginTop: 8 }}>
             <Col span={12}><Form.Item name="disposal_psas" label="处置PSA(逗号分隔)" rules={[{ required: true }]}><Input /></Form.Item></Col>
