@@ -75,6 +75,25 @@ type ResourcePlanningRequest struct {
 	QuasiGPUServerCount     *int     `json:"quasi_gpu_server_count,omitempty"`
 	QuasiGPUCapacity        *int     `json:"quasi_gpu_capacity,omitempty"`
 	QuasiGPUCost            *float64 `json:"quasi_gpu_cost,omitempty"`
+	// UI persistence fields (已执行项目-新机采购：按场景手工录入)
+	ExecutedNewComputeServerCount *int     `json:"executed_new_compute_server_count,omitempty"`
+	ExecutedNewComputeCapacity    *int     `json:"executed_new_compute_capacity,omitempty"`
+	ExecutedNewComputeCost        *float64 `json:"executed_new_compute_cost,omitempty"`
+	ExecutedNewWarmServerCount    *int     `json:"executed_new_warm_server_count,omitempty"`
+	ExecutedNewWarmCapacity       *float64 `json:"executed_new_warm_capacity,omitempty"`
+	ExecutedNewWarmCost           *float64 `json:"executed_new_warm_cost,omitempty"`
+	ExecutedNewHotServerCount     *int     `json:"executed_new_hot_server_count,omitempty"`
+	ExecutedNewHotCapacity        *float64 `json:"executed_new_hot_capacity,omitempty"`
+	ExecutedNewHotCost            *float64 `json:"executed_new_hot_cost,omitempty"`
+	ExecutedNewGPUServerCount     *int     `json:"executed_new_gpu_server_count,omitempty"`
+	ExecutedNewGPUCapacity        *int     `json:"executed_new_gpu_capacity,omitempty"`
+	ExecutedNewGPUCost            *float64 `json:"executed_new_gpu_cost,omitempty"`
+	ExecutedNewPurchaseServerCount  int      `json:"executed_new_purchase_server_count"`
+	ExecutedNewPurchaseLogicalCores int      `json:"executed_new_purchase_logical_cores"`
+	ExecutedNewPurchaseWarmTB       float64  `json:"executed_new_purchase_warm_storage_tb"`
+	ExecutedNewPurchaseHotTB        float64  `json:"executed_new_purchase_hot_storage_tb"`
+	ExecutedNewPurchaseGPUCards     int      `json:"executed_new_purchase_gpu_cards"`
+	ExecutedNewPurchaseCostCNY      float64  `json:"executed_new_purchase_cost_cny"`
 	ReconfigDoneServerCount   *int     `json:"reconfig_done_server_count"`
 	ReconfigDoneLogicalCores  *int     `json:"reconfig_done_logical_cores"`
 	ReconfigDoneWarmStorageTB *float64 `json:"reconfig_done_warm_storage_tb"`
@@ -306,6 +325,15 @@ func (s *ResourcePlanningService) Calculate(ctx context.Context, req ResourcePla
 		CostCNY:              round2RP(req.QuasiPurchaseCostCNY),
 	}
 
+	executedNew := ResourcePlanningNewPurchasePlan{
+		ServerCount:          req.ExecutedNewPurchaseServerCount,
+		CoveredLogicalCores:  req.ExecutedNewPurchaseLogicalCores,
+		CoveredWarmStorageTB: round2RP(req.ExecutedNewPurchaseWarmTB),
+		CoveredHotStorageTB:  round2RP(req.ExecutedNewPurchaseHotTB),
+		CoveredGPUCards:      req.ExecutedNewPurchaseGPUCards,
+		PurchaseAmountCNY:    round2RP(req.ExecutedNewPurchaseCostCNY),
+	}
+
 	renewalPlan, err := s.calcRenewalPlan(ctx)
 	if err != nil {
 		return ResourcePlanningResponse{}, err
@@ -329,15 +357,22 @@ func (s *ResourcePlanningService) Calculate(ctx context.Context, req ResourcePla
 		eligibleCore += pkg.CPULogicalCores
 	}
 
-	baseDemand := req.ComputeDemandCores - reconfigPlan.LogicalCores - quasi.LogicalCores - eligibleCore
+	baseDemand := req.ComputeDemandCores - reconfigPlan.LogicalCores - quasi.LogicalCores - executedNew.CoveredLogicalCores - eligibleCore
 	if baseDemand < 0 {
 		baseDemand = 0
 	}
 
-	newPlan, err := s.calcNewPurchasePlan(req, baseDemand, packages, originalValues, servers, nonBusinessPSAs, reconfigPlan, quasi)
+	newPlan, err := s.calcNewPurchasePlan(req, baseDemand, packages, originalValues, servers, nonBusinessPSAs, reconfigPlan, quasi, executedNew)
 	if err != nil {
 		return ResourcePlanningResponse{}, err
 	}
+
+	newPlan.ServerCount += executedNew.ServerCount
+	newPlan.CoveredLogicalCores += executedNew.CoveredLogicalCores
+	newPlan.CoveredWarmStorageTB = round2RP(newPlan.CoveredWarmStorageTB + executedNew.CoveredWarmStorageTB)
+	newPlan.CoveredHotStorageTB = round2RP(newPlan.CoveredHotStorageTB + executedNew.CoveredHotStorageTB)
+	newPlan.CoveredGPUCards += executedNew.CoveredGPUCards
+	newPlan.PurchaseAmountCNY = round2RP(newPlan.PurchaseAmountCNY + executedNew.PurchaseAmountCNY)
 
 	selfRepairPlan := calcSelfRepairPlan(servers, byConfig)
 	disposalPlan := calcDisposalPlan(servers, byConfig, disposalPSAs)
@@ -493,7 +528,7 @@ func (s *ResourcePlanningService) calcRenewalPlan(ctx context.Context) (Resource
 	}, nil
 }
 
-func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningRequest, baseDemand int, packages []domain.HostPackageConfig, originals []domain.ValueScoreOriginalValue, servers []domain.Server, nonBusinessPSAs []string, reconfigPlan ResourcePlanningReconfigPlan, quasi ResourcePlanningQuasiPurchasePlan) (ResourcePlanningNewPurchasePlan, error) {
+func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningRequest, baseDemand int, packages []domain.HostPackageConfig, originals []domain.ValueScoreOriginalValue, servers []domain.Server, nonBusinessPSAs []string, reconfigPlan ResourcePlanningReconfigPlan, quasi ResourcePlanningQuasiPurchasePlan, executedNew ResourcePlanningNewPurchasePlan) (ResourcePlanningNewPurchasePlan, error) {
 	originByConfig := make(map[string]float64, len(originals))
 	for _, o := range originals {
 		originByConfig[strings.TrimSpace(o.ConfigType)] = o.ServerOriginalCNY
@@ -540,6 +575,12 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 	}
 	sort.Float64s(eligibleScores)
 	remaining := routine
+	if executedNew.CoveredLogicalCores > 0 {
+		remaining -= executedNew.CoveredLogicalCores
+		if remaining < 0 {
+			remaining = 0
+		}
+	}
 	extra := 0
 	for _, sc := range eligibleScores {
 		if remaining >= maxReplace {
@@ -588,11 +629,11 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 		}
 	}
 
-	warmBaseNeed := req.WarmStorageDemandTB - reconfigPlan.CoveredWarmStorageTB - quasi.CoveredWarmStorageTB - availableWarm
+	warmBaseNeed := req.WarmStorageDemandTB - reconfigPlan.CoveredWarmStorageTB - quasi.CoveredWarmStorageTB - executedNew.CoveredWarmStorageTB - availableWarm
 	if warmBaseNeed < 0 {
 		warmBaseNeed = 0
 	}
-	hotBaseNeed := req.HotStorageDemandTB - reconfigPlan.CoveredHotStorageTB - quasi.CoveredHotStorageTB - availableHot
+	hotBaseNeed := req.HotStorageDemandTB - reconfigPlan.CoveredHotStorageTB - quasi.CoveredHotStorageTB - executedNew.CoveredHotStorageTB - availableHot
 	if hotBaseNeed < 0 {
 		hotBaseNeed = 0
 	}
@@ -625,7 +666,7 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 	if ov := originByConfig[warmPkg.ConfigType]; ov > 0 {
 		warmScore = 1.0 / ov
 	}
-	warmNeed := calcReplacementNeedFloat("warm_storage", req.WarmStorageDemandTB, warmBaseNeed, warmScore, sceneAdmitThreshold(req, "warm_storage"), servers, pkgByConfig, originByConfig, nonBusinessPSAs)
+	warmNeed := calcReplacementNeedFloat("warm_storage", req.WarmStorageDemandTB, warmBaseNeed, warmScore, sceneAdmitThreshold(req, "warm_storage"), servers, pkgByConfig, originByConfig, nonBusinessPSAs, executedNew.CoveredWarmStorageTB)
 	if warmNeed > 0 {
 		p, e := buildStorageScenePurchasePlan("warm_storage", warmNeed, packages, originByConfig, sceneAdmitThreshold(req, "warm_storage"))
 		if e != nil {
@@ -648,7 +689,7 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 	if ov := originByConfig[hotPkg.ConfigType]; ov > 0 {
 		hotScore = 1.0 / ov
 	}
-	hotNeed := calcReplacementNeedFloat("hot_storage", req.HotStorageDemandTB, hotBaseNeed, hotScore, sceneAdmitThreshold(req, "hot_storage"), servers, pkgByConfig, originByConfig, nonBusinessPSAs)
+	hotNeed := calcReplacementNeedFloat("hot_storage", req.HotStorageDemandTB, hotBaseNeed, hotScore, sceneAdmitThreshold(req, "hot_storage"), servers, pkgByConfig, originByConfig, nonBusinessPSAs, executedNew.CoveredHotStorageTB)
 	if hotNeed > 0 {
 		p, e := buildStorageScenePurchasePlan("hot_storage", hotNeed, packages, originByConfig, sceneAdmitThreshold(req, "hot_storage"))
 		if e != nil {
@@ -663,7 +704,7 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 		}
 	}
 
-	gpuBaseNeed := req.GPUDemandCards - reconfigPlan.CoveredGPUCards - quasi.CoveredGPUCards - availableGPU
+	gpuBaseNeed := req.GPUDemandCards - reconfigPlan.CoveredGPUCards - quasi.CoveredGPUCards - executedNew.CoveredGPUCards - availableGPU
 	if gpuBaseNeed < 0 {
 		gpuBaseNeed = 0
 	}
@@ -675,7 +716,7 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 	if ov := originByConfig[gpuPkg.ConfigType]; ov > 0 {
 		gpuScore = 1.0 / ov
 	}
-	gpuNeed := calcReplacementNeedInt("gpu", req.GPUDemandCards, gpuBaseNeed, gpuScore, sceneAdmitThreshold(req, "gpu"), servers, pkgByConfig, originByConfig, nonBusinessPSAs)
+	gpuNeed := calcReplacementNeedInt("gpu", req.GPUDemandCards, gpuBaseNeed, gpuScore, sceneAdmitThreshold(req, "gpu"), servers, pkgByConfig, originByConfig, nonBusinessPSAs, float64(executedNew.CoveredGPUCards))
 	if gpuNeed > 0 {
 		p, e := buildGPUScenePurchasePlan(gpuNeed, packages, originByConfig, sceneAdmitThreshold(req, "gpu"))
 		if e != nil {
@@ -692,6 +733,7 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 
 	_ = reconfigPlan
 	_ = quasi
+	_ = executedNew
 	return ResourcePlanningNewPurchasePlan{
 		PackageConfigType:       selectedComputePkg.ConfigType,
 		PackageReleaseYear:      selectedComputePkg.ReleaseYear,
@@ -1278,15 +1320,20 @@ func buildGPUScenePurchasePlan(needCards int, packages []domain.HostPackageConfi
 	}, nil
 }
 
-func calcReplacementNeedFloat(scene string, demand float64, baseNeed float64, selectedScore float64, admitThreshold float64, servers []domain.Server, pkgByConfig map[string]domain.HostPackageConfig, originByConfig map[string]float64, nonBusinessPSAs []string) float64 {
+func calcReplacementNeedFloat(scene string, demand float64, baseNeed float64, selectedScore float64, admitThreshold float64, servers []domain.Server, pkgByConfig map[string]domain.HostPackageConfig, originByConfig map[string]float64, nonBusinessPSAs []string, executedCovered float64) float64 {
 	if admitThreshold > 0 && selectedScore < admitThreshold {
 		return 0
 	}
 	routine := math.Floor(demand / 10.0)
+	routine -= executedCovered
+	if routine < 0 {
+		routine = 0
+	}
 	if routine < 0 {
 		routine = 0
 	}
 	maxReplace := math.Floor(baseNeed / 4.0)
+	maxReplace += executedCovered
 	if maxReplace < routine {
 		maxReplace = routine
 	}
@@ -1331,8 +1378,8 @@ func calcReplacementNeedFloat(scene string, demand float64, baseNeed float64, se
 	return remaining
 }
 
-func calcReplacementNeedInt(scene string, demand int, baseNeed int, selectedScore float64, admitThreshold float64, servers []domain.Server, pkgByConfig map[string]domain.HostPackageConfig, originByConfig map[string]float64, nonBusinessPSAs []string) int {
-	v := calcReplacementNeedFloat(scene, float64(demand), float64(baseNeed), selectedScore, admitThreshold, servers, pkgByConfig, originByConfig, nonBusinessPSAs)
+func calcReplacementNeedInt(scene string, demand int, baseNeed int, selectedScore float64, admitThreshold float64, servers []domain.Server, pkgByConfig map[string]domain.HostPackageConfig, originByConfig map[string]float64, nonBusinessPSAs []string, executedCovered float64) int {
+	v := calcReplacementNeedFloat(scene, float64(demand), float64(baseNeed), selectedScore, admitThreshold, servers, pkgByConfig, originByConfig, nonBusinessPSAs, executedCovered)
 	return int(math.Round(v))
 }
 

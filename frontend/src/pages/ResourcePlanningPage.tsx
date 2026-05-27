@@ -153,6 +153,13 @@ export default function ResourcePlanningPage() {
       payload.quasi_purchase_gpu_cards = num(values.quasi_gpu_capacity);
       payload.quasi_purchase_cost_cny = num(values.quasi_compute_cost) + num(values.quasi_warm_cost) + num(values.quasi_hot_cost) + num(values.quasi_gpu_cost);
 
+      payload.executed_new_purchase_server_count = num(values.executed_new_compute_server_count) + num(values.executed_new_warm_server_count) + num(values.executed_new_hot_server_count) + num(values.executed_new_gpu_server_count);
+      payload.executed_new_purchase_logical_cores = num(values.executed_new_compute_capacity);
+      payload.executed_new_purchase_warm_storage_tb = num(values.executed_new_warm_capacity);
+      payload.executed_new_purchase_hot_storage_tb = num(values.executed_new_hot_capacity);
+      payload.executed_new_purchase_gpu_cards = num(values.executed_new_gpu_capacity);
+      payload.executed_new_purchase_cost_cny = num(values.executed_new_compute_cost) + num(values.executed_new_warm_cost) + num(values.executed_new_hot_cost) + num(values.executed_new_gpu_cost);
+
       await saveResourcePlanningConfig(payload);
       const resp = await calculateResourcePlanning(payload);
       setResult(ensureApiOk(resp).data);
@@ -225,7 +232,20 @@ export default function ResourcePlanningPage() {
             quasi_hot_cost: 0,
             quasi_gpu_server_count: 0,
             quasi_gpu_capacity: 0,
-            quasi_gpu_cost: 0
+            quasi_gpu_cost: 0,
+
+            executed_new_compute_server_count: 0,
+            executed_new_compute_capacity: 0,
+            executed_new_compute_cost: 0,
+            executed_new_warm_server_count: 0,
+            executed_new_warm_capacity: 0,
+            executed_new_warm_cost: 0,
+            executed_new_hot_server_count: 0,
+            executed_new_hot_capacity: 0,
+            executed_new_hot_cost: 0,
+            executed_new_gpu_server_count: 0,
+            executed_new_gpu_capacity: 0,
+            executed_new_gpu_cost: 0
           }}
           onFinish={onSubmit}
         >
@@ -286,7 +306,7 @@ export default function ResourcePlanningPage() {
             <Col span={6}><Form.Item name="annual_depreciation_cny" label="年度折旧(CNY)"><InputNumber min={0} {...numberProps} /></Form.Item></Col>
           </Row>
 
-          <Title level={5}>（4）利旧项目</Title>
+          <Title level={5}>（4）已执行项目</Title>
           <Text type="secondary">表头 + 分类的紧凑布局（每个场景一行）</Text>
 
           <Card type="inner" title="改配利旧" style={{ marginTop: 8 }}>
@@ -550,3 +570,33 @@ export default function ResourcePlanningPage() {
     </Space>
   );
 }
+          <Card type="inner" title="新机采购" style={{ marginTop: 12 }}>
+            <Row gutter={8} style={{ fontWeight: 600, marginBottom: 8 }}>
+              <Col span={6}>场景</Col><Col span={6}>服务器数</Col><Col span={6}>算力</Col><Col span={6}>费用(CNY)</Col>
+            </Row>
+            <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
+              <Col span={6}><Text>计算（核）</Text></Col>
+              <Col span={6}><Form.Item name="executed_new_compute_server_count" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="executed_new_compute_capacity" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="executed_new_compute_cost" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+            <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
+              <Col span={6}><Text>温存储（TB）</Text></Col>
+              <Col span={6}><Form.Item name="executed_new_warm_server_count" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="executed_new_warm_capacity" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="executed_new_warm_cost" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+            <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
+              <Col span={6}><Text>热存储（TB）</Text></Col>
+              <Col span={6}><Form.Item name="executed_new_hot_server_count" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="executed_new_hot_capacity" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="executed_new_hot_cost" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+            <Row gutter={8} align="middle">
+              <Col span={6}><Text>GPU（卡）</Text></Col>
+              <Col span={6}><Form.Item name="executed_new_gpu_server_count" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="executed_new_gpu_capacity" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+              <Col span={6}><Form.Item name="executed_new_gpu_cost" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
+            </Row>
+          </Card>
+

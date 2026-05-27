@@ -29,7 +29,7 @@ func TestCalcReplacementNeedInt_Compute(t *testing.T) {
 	}
 	originByConfig := map[string]float64{"c-old": 10000} // score=0.0001
 
-	need := calcReplacementNeedInt("compute", 100, 100, 0.0002, 0.00015, servers, pkgByConfig, originByConfig, nil)
+	need := calcReplacementNeedInt("compute", 100, 100, 0.0002, 0.00015, servers, pkgByConfig, originByConfig, nil, 0)
 	if need != 25 { // routine=10, max=25, eligible enough to reach cap
 		t.Fatalf("unexpected compute replacement need: %d", need)
 	}
@@ -46,7 +46,7 @@ func TestCalcReplacementNeedFloat_WarmStorage(t *testing.T) {
 	}
 	originByConfig := map[string]float64{"w-old": 12000} // score≈0.0000833
 
-	need := calcReplacementNeedFloat("warm_storage", 40, 40, 0.0002, 0.0001, servers, pkgByConfig, originByConfig, nil)
+	need := calcReplacementNeedFloat("warm_storage", 40, 40, 0.0002, 0.0001, servers, pkgByConfig, originByConfig, nil, 0)
 	if need != 7 { // routine=4 + eligible3
 		t.Fatalf("unexpected warm replacement need: %.2f", need)
 	}
@@ -62,7 +62,7 @@ func TestCalcReplacementNeedFloat_HotStorage(t *testing.T) {
 	}
 	originByConfig := map[string]float64{"h-old": 9000} // score≈0.000111
 
-	need := calcReplacementNeedFloat("hot_storage", 30, 30, 0.0002, 0.00012, servers, pkgByConfig, originByConfig, nil)
+	need := calcReplacementNeedFloat("hot_storage", 30, 30, 0.0002, 0.00012, servers, pkgByConfig, originByConfig, nil, 0)
 	if need != 5 { // routine=3 + eligible2
 		t.Fatalf("unexpected hot replacement need: %.2f", need)
 	}
@@ -79,7 +79,7 @@ func TestCalcReplacementNeedInt_GPU(t *testing.T) {
 	}
 	originByConfig := map[string]float64{"g-old": 15000} // score≈0.0000667
 
-	need := calcReplacementNeedInt("gpu", 40, 40, 0.0002, 0.0001, servers, pkgByConfig, originByConfig, nil)
+	need := calcReplacementNeedInt("gpu", 40, 40, 0.0002, 0.0001, servers, pkgByConfig, originByConfig, nil, 0)
 	if need != 7 { // routine=4 + eligible3
 		t.Fatalf("unexpected gpu replacement need: %d", need)
 	}
