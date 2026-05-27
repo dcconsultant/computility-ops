@@ -410,8 +410,45 @@ func (s *ResourcePlanningService) calcRenewalPlan(ctx context.Context) (Resource
 		return ResourcePlanningRenewalPlan{}, rpModuleErr("续保规划", "未找到已生效续保方案，请先生效续保方案", nil)
 	}
 	budget := 0.0
+	manualBudget := 0.0
 	if latest.DomesticBudget > 0 || latest.IndiaBudget > 0 {
-		budget = latest.DomesticBudget + latest.IndiaBudget
+		manualBudget = latest.DomesticBudget + latest.IndiaBudget
+	}
+	// 优先使用“续保金额估算”口径（按国家+场景单价 × 续保台数），避免仅使用手工预算导致口径偏小。
+	if prices, e := s.renewalRepo.ListUnitPrices(ctx); e == nil && len(prices) > 0 {
+		priceMap := map[string]float64{}
+		for _, p := range prices {
+			country := strings.TrimSpace(p.Country)
+			scene := normalizeScene(strings.TrimSpace(p.SceneCategory))
+			if country == "" || scene == "" || p.UnitPrice <= 0 {
+				continue
+			}
+			priceMap[country+"|"+scene] = p.UnitPrice
+		}
+		estimated := 0.0
+		for _, it := range latest.Items {
+			region := "国内"
+			if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(it.IDC)), "IN") {
+				region = "印度"
+			}
+			scene := normalizeScene(it.Bucket)
+			if scene == "" {
+				scene = normalizeScene(it.SceneCategory)
+			}
+			if scene == "" {
+				continue
+			}
+			if unit, ok := priceMap[region+"|"+scene]; ok {
+				estimated += unit
+			}
+		}
+		if estimated > 0 {
+			budget = estimated
+		} else {
+			budget = manualBudget
+		}
+	} else {
+		budget = manualBudget
 	}
 	coveredWarm := 0.0
 	coveredHot := 0.0
