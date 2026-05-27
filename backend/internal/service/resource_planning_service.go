@@ -594,11 +594,13 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 		if e != nil {
 			return ResourcePlanningNewPurchasePlan{}, rpModuleErr("新机采购", "温存储场景生成采购方案失败", e)
 		}
-		scenePlans = append(scenePlans, p)
-		totalPurchase += p.PurchaseAmountCNY
-		totalAnnualCost += p.AnnualCostCNY
-		totalAnnualBudget += p.AnnualBudgetCNY
-		coveredWarmByNew += p.CoveredStorageTB
+		if p.ServerCount > 0 {
+			scenePlans = append(scenePlans, p)
+			totalPurchase += p.PurchaseAmountCNY
+			totalAnnualCost += p.AnnualCostCNY
+			totalAnnualBudget += p.AnnualBudgetCNY
+			coveredWarmByNew += p.CoveredStorageTB
+		}
 	}
 
 	hotPkg, hotPkgErr := pickLatestScenePackage(packages, "hot_storage")
@@ -615,11 +617,13 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 		if e != nil {
 			return ResourcePlanningNewPurchasePlan{}, rpModuleErr("新机采购", "热存储场景生成采购方案失败", e)
 		}
-		scenePlans = append(scenePlans, p)
-		totalPurchase += p.PurchaseAmountCNY
-		totalAnnualCost += p.AnnualCostCNY
-		totalAnnualBudget += p.AnnualBudgetCNY
-		coveredHotByNew += p.CoveredStorageTB
+		if p.ServerCount > 0 {
+			scenePlans = append(scenePlans, p)
+			totalPurchase += p.PurchaseAmountCNY
+			totalAnnualCost += p.AnnualCostCNY
+			totalAnnualBudget += p.AnnualBudgetCNY
+			coveredHotByNew += p.CoveredStorageTB
+		}
 	}
 
 	gpuBaseNeed := req.GPUDemandCards - reconfigPlan.CoveredGPUCards - quasi.CoveredGPUCards - availableGPU
@@ -640,11 +644,13 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 		if e != nil {
 			return ResourcePlanningNewPurchasePlan{}, rpModuleErr("新机采购", "GPU场景生成采购方案失败", e)
 		}
-		scenePlans = append(scenePlans, p)
-		totalPurchase += p.PurchaseAmountCNY
-		totalAnnualCost += p.AnnualCostCNY
-		totalAnnualBudget += p.AnnualBudgetCNY
-		coveredGPUByNew += p.CoveredGPUCards
+		if p.ServerCount > 0 {
+			scenePlans = append(scenePlans, p)
+			totalPurchase += p.PurchaseAmountCNY
+			totalAnnualCost += p.AnnualCostCNY
+			totalAnnualBudget += p.AnnualBudgetCNY
+			coveredGPUByNew += p.CoveredGPUCards
+		}
 	}
 
 	_ = reconfigPlan
@@ -1181,7 +1187,8 @@ func buildStorageScenePurchasePlan(scene string, needTB float64, packages []doma
 	}
 	score := 1.0 / origin
 	if admitThreshold > 0 && score < admitThreshold {
-		return ResourcePlanningScenePurchasePlan{}, fmt.Errorf("%s 场景新机套餐价值分低于门槛", scene)
+		// 价值分低于门槛：该场景不采购新机，不作为异常
+		return ResourcePlanningScenePurchasePlan{}, nil
 	}
 	serverCount := int(math.Ceil(needTB / pkg.StorageCapacityTB))
 	coveredTB := float64(serverCount) * pkg.StorageCapacityTB
@@ -1214,7 +1221,8 @@ func buildGPUScenePurchasePlan(needCards int, packages []domain.HostPackageConfi
 	}
 	score := 1.0 / origin
 	if admitThreshold > 0 && score < admitThreshold {
-		return ResourcePlanningScenePurchasePlan{}, fmt.Errorf("gpu 场景新机套餐价值分低于门槛")
+		// 价值分低于门槛：GPU场景不采购新机，不作为异常
+		return ResourcePlanningScenePurchasePlan{}, nil
 	}
 	serverCount := int(math.Ceil(float64(needCards) / float64(pkg.GPUCardCount)))
 	coveredCards := serverCount * pkg.GPUCardCount
@@ -1234,6 +1242,9 @@ func buildGPUScenePurchasePlan(needCards int, packages []domain.HostPackageConfi
 }
 
 func calcReplacementNeedFloat(scene string, demand float64, baseNeed float64, selectedScore float64, admitThreshold float64, servers []domain.Server, pkgByConfig map[string]domain.HostPackageConfig, originByConfig map[string]float64, nonBusinessPSAs []string) float64 {
+	if admitThreshold > 0 && selectedScore < admitThreshold {
+		return 0
+	}
 	routine := math.Floor(demand / 10.0)
 	if routine < 0 {
 		routine = 0
