@@ -333,6 +333,13 @@ func (s *ResourcePlanningService) Calculate(ctx context.Context, req ResourcePla
 	return out, nil
 }
 
+func rpModuleErr(module, point string, err error) error {
+	if err != nil {
+		return fmt.Errorf("模块=%s；异常点=%s：%w", module, point, err)
+	}
+	return fmt.Errorf("模块=%s；异常点=%s", module, point)
+}
+
 func (s *ResourcePlanningService) calcReconfigPlan(req ResourcePlanningRequest) (ResourcePlanningReconfigPlan, error) {
 	snap, err := loadLatestReconfigSnapshot(filepath.Join("backend", "logs", "reconfig-plans"))
 	if err != nil {
@@ -346,7 +353,7 @@ func (s *ResourcePlanningService) calcReconfigPlan(req ResourcePlanningRequest) 
 	}
 	if req.ReconfigDoneServerCount != nil || req.ReconfigDoneLogicalCores != nil || req.ReconfigDoneCostCNY != nil || req.ReconfigDoneWarmStorageTB != nil || req.ReconfigDoneHotStorageTB != nil || req.ReconfigDoneGPUCards != nil {
 		if req.ReconfigDoneServerCount == nil || req.ReconfigDoneLogicalCores == nil || req.ReconfigDoneCostCNY == nil {
-			return ResourcePlanningReconfigPlan{}, fmt.Errorf("已改配输入至少需提供服务器、计算、费用")
+			return ResourcePlanningReconfigPlan{}, rpModuleErr("改配利旧", "已改配输入至少需提供服务器、计算、费用", nil)
 		}
 		plan.ServerCount += *req.ReconfigDoneServerCount
 		plan.LogicalCores += *req.ReconfigDoneLogicalCores
@@ -370,11 +377,11 @@ func (s *ResourcePlanningService) calcRenewalPlan(ctx context.Context) (Resource
 		return ResourcePlanningRenewalPlan{}, err
 	}
 	if len(plans) == 0 {
-		return ResourcePlanningRenewalPlan{}, fmt.Errorf("续保方案为空，请先生成续保方案")
+		return ResourcePlanningRenewalPlan{}, rpModuleErr("续保规划", "续保方案为空，请先生成续保方案", nil)
 	}
 	latest, ok := selectLatestEffectiveRenewalPlan(plans)
 	if !ok {
-		return ResourcePlanningRenewalPlan{}, fmt.Errorf("未找到已生效续保方案，请先生效续保方案")
+		return ResourcePlanningRenewalPlan{}, rpModuleErr("续保规划", "未找到已生效续保方案，请先生效续保方案", nil)
 	}
 	budget := 0.0
 	if latest.DomesticBudget > 0 || latest.IndiaBudget > 0 {
@@ -432,11 +439,11 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 
 	selectedComputePkg, err := pickLatestScenePackage(packages, "compute")
 	if err != nil {
-		return ResourcePlanningNewPurchasePlan{}, err
+		return ResourcePlanningNewPurchasePlan{}, rpModuleErr("新机采购", "选取计算场景最新套餐失败", err)
 	}
 	selectedComputeOriginal, ok := originByConfig[selectedComputePkg.ConfigType]
 	if !ok || selectedComputeOriginal <= 0 {
-		return ResourcePlanningNewPurchasePlan{}, fmt.Errorf("新机套餐缺少价值分原值")
+		return ResourcePlanningNewPurchasePlan{}, rpModuleErr("新机采购", "新机套餐缺少价值分原值", nil)
 	}
 	selectedComputeScore := 1.0 / selectedComputeOriginal
 	computeAdmitThreshold := sceneAdmitThreshold(req, "compute")
@@ -463,7 +470,7 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 		if origin <= 0 {
 			continue
 		}
-		if yearsSinceRP(srv.LaunchDate, time.Now()) < 5 {
+		if yearsSinceRP(srv.LaunchDate, time.Now()) <= 5 {
 			continue
 		}
 		eligibleScores = append(eligibleScores, 1.0/origin)
@@ -548,43 +555,45 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 	coveredGPUByNew := 0
 
 	warmPkg, warmPkgErr := pickLatestScenePackage(packages, "warm_storage")
-	if warmPkgErr == nil {
-		warmScore := 0.0
-		if ov := originByConfig[warmPkg.ConfigType]; ov > 0 {
-			warmScore = 1.0 / ov
+	if warmPkgErr != nil {
+		return ResourcePlanningNewPurchasePlan{}, rpModuleErr("新机采购", "温存储场景选取最新套餐失败", warmPkgErr)
+	}
+	warmScore := 0.0
+	if ov := originByConfig[warmPkg.ConfigType]; ov > 0 {
+		warmScore = 1.0 / ov
+	}
+	warmNeed := calcReplacementNeedFloat("warm_storage", req.WarmStorageDemandTB, warmBaseNeed, warmScore, sceneAdmitThreshold(req, "warm_storage"), servers, pkgByConfig, originByConfig, nonBusinessPSAs)
+	if warmNeed > 0 {
+		p, e := buildStorageScenePurchasePlan("warm_storage", warmNeed, packages, originByConfig, sceneAdmitThreshold(req, "warm_storage"))
+		if e != nil {
+			return ResourcePlanningNewPurchasePlan{}, rpModuleErr("新机采购", "温存储场景生成采购方案失败", e)
 		}
-		warmNeed := calcReplacementNeedFloat("warm_storage", req.WarmStorageDemandTB, warmBaseNeed, warmScore, sceneAdmitThreshold(req, "warm_storage"), servers, pkgByConfig, originByConfig, nonBusinessPSAs)
-		if warmNeed > 0 {
-			p, e := buildStorageScenePurchasePlan("warm_storage", warmNeed, packages, originByConfig, sceneAdmitThreshold(req, "warm_storage"))
-			if e != nil {
-				return ResourcePlanningNewPurchasePlan{}, e
-			}
-			scenePlans = append(scenePlans, p)
-			totalPurchase += p.PurchaseAmountCNY
-			totalAnnualCost += p.AnnualCostCNY
-			totalAnnualBudget += p.AnnualBudgetCNY
-			coveredWarmByNew += p.CoveredStorageTB
-		}
+		scenePlans = append(scenePlans, p)
+		totalPurchase += p.PurchaseAmountCNY
+		totalAnnualCost += p.AnnualCostCNY
+		totalAnnualBudget += p.AnnualBudgetCNY
+		coveredWarmByNew += p.CoveredStorageTB
 	}
 
 	hotPkg, hotPkgErr := pickLatestScenePackage(packages, "hot_storage")
-	if hotPkgErr == nil {
-		hotScore := 0.0
-		if ov := originByConfig[hotPkg.ConfigType]; ov > 0 {
-			hotScore = 1.0 / ov
+	if hotPkgErr != nil {
+		return ResourcePlanningNewPurchasePlan{}, rpModuleErr("新机采购", "热存储场景选取最新套餐失败", hotPkgErr)
+	}
+	hotScore := 0.0
+	if ov := originByConfig[hotPkg.ConfigType]; ov > 0 {
+		hotScore = 1.0 / ov
+	}
+	hotNeed := calcReplacementNeedFloat("hot_storage", req.HotStorageDemandTB, hotBaseNeed, hotScore, sceneAdmitThreshold(req, "hot_storage"), servers, pkgByConfig, originByConfig, nonBusinessPSAs)
+	if hotNeed > 0 {
+		p, e := buildStorageScenePurchasePlan("hot_storage", hotNeed, packages, originByConfig, sceneAdmitThreshold(req, "hot_storage"))
+		if e != nil {
+			return ResourcePlanningNewPurchasePlan{}, rpModuleErr("新机采购", "热存储场景生成采购方案失败", e)
 		}
-		hotNeed := calcReplacementNeedFloat("hot_storage", req.HotStorageDemandTB, hotBaseNeed, hotScore, sceneAdmitThreshold(req, "hot_storage"), servers, pkgByConfig, originByConfig, nonBusinessPSAs)
-		if hotNeed > 0 {
-			p, e := buildStorageScenePurchasePlan("hot_storage", hotNeed, packages, originByConfig, sceneAdmitThreshold(req, "hot_storage"))
-			if e != nil {
-				return ResourcePlanningNewPurchasePlan{}, e
-			}
-			scenePlans = append(scenePlans, p)
-			totalPurchase += p.PurchaseAmountCNY
-			totalAnnualCost += p.AnnualCostCNY
-			totalAnnualBudget += p.AnnualBudgetCNY
-			coveredHotByNew += p.CoveredStorageTB
-		}
+		scenePlans = append(scenePlans, p)
+		totalPurchase += p.PurchaseAmountCNY
+		totalAnnualCost += p.AnnualCostCNY
+		totalAnnualBudget += p.AnnualBudgetCNY
+		coveredHotByNew += p.CoveredStorageTB
 	}
 
 	gpuBaseNeed := req.GPUDemandCards - reconfigPlan.CoveredGPUCards - quasi.CoveredGPUCards - availableGPU
@@ -592,23 +601,24 @@ func (s *ResourcePlanningService) calcNewPurchasePlan(req ResourcePlanningReques
 		gpuBaseNeed = 0
 	}
 	gpuPkg, gpuPkgErr := pickLatestScenePackage(packages, "gpu")
-	if gpuPkgErr == nil {
-		gpuScore := 0.0
-		if ov := originByConfig[gpuPkg.ConfigType]; ov > 0 {
-			gpuScore = 1.0 / ov
+	if gpuPkgErr != nil {
+		return ResourcePlanningNewPurchasePlan{}, rpModuleErr("新机采购", "GPU场景选取最新套餐失败", gpuPkgErr)
+	}
+	gpuScore := 0.0
+	if ov := originByConfig[gpuPkg.ConfigType]; ov > 0 {
+		gpuScore = 1.0 / ov
+	}
+	gpuNeed := calcReplacementNeedInt("gpu", req.GPUDemandCards, gpuBaseNeed, gpuScore, sceneAdmitThreshold(req, "gpu"), servers, pkgByConfig, originByConfig, nonBusinessPSAs)
+	if gpuNeed > 0 {
+		p, e := buildGPUScenePurchasePlan(gpuNeed, packages, originByConfig, sceneAdmitThreshold(req, "gpu"))
+		if e != nil {
+			return ResourcePlanningNewPurchasePlan{}, rpModuleErr("新机采购", "GPU场景生成采购方案失败", e)
 		}
-		gpuNeed := calcReplacementNeedInt("gpu", req.GPUDemandCards, gpuBaseNeed, gpuScore, sceneAdmitThreshold(req, "gpu"), servers, pkgByConfig, originByConfig, nonBusinessPSAs)
-		if gpuNeed > 0 {
-			p, e := buildGPUScenePurchasePlan(gpuNeed, packages, originByConfig, sceneAdmitThreshold(req, "gpu"))
-			if e != nil {
-				return ResourcePlanningNewPurchasePlan{}, e
-			}
-			scenePlans = append(scenePlans, p)
-			totalPurchase += p.PurchaseAmountCNY
-			totalAnnualCost += p.AnnualCostCNY
-			totalAnnualBudget += p.AnnualBudgetCNY
-			coveredGPUByNew += p.CoveredGPUCards
-		}
+		scenePlans = append(scenePlans, p)
+		totalPurchase += p.PurchaseAmountCNY
+		totalAnnualCost += p.AnnualCostCNY
+		totalAnnualBudget += p.AnnualBudgetCNY
+		coveredGPUByNew += p.CoveredGPUCards
 	}
 
 	_ = reconfigPlan
@@ -968,9 +978,9 @@ func loadLatestReconfigSnapshot(base string) (reconfigSnapshotLite, error) {
 	entries, err := os.ReadDir(base)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return reconfigSnapshotLite{}, fmt.Errorf("改配历史方案为空，请先生成改配方案")
+			return reconfigSnapshotLite{}, rpModuleErr("改配利旧", "改配历史方案为空，请先生成改配方案", nil)
 		}
-		return reconfigSnapshotLite{}, fmt.Errorf("读取改配历史方案失败: %w", err)
+		return reconfigSnapshotLite{}, rpModuleErr("改配利旧", "读取改配历史方案失败", err)
 	}
 	latest := reconfigSnapshotLite{}
 	found := false
@@ -1003,7 +1013,7 @@ func loadLatestReconfigSnapshot(base string) (reconfigSnapshotLite, error) {
 		}
 	}
 	if !found {
-		return reconfigSnapshotLite{}, fmt.Errorf("改配历史方案为空，请先生成改配方案")
+		return reconfigSnapshotLite{}, rpModuleErr("改配利旧", "改配历史方案为空，请先生成改配方案", nil)
 	}
 	if latest.PlanID == "" {
 		latest.PlanID = strconv.FormatInt(latest.CreatedAt.Unix(), 10)
@@ -1220,7 +1230,7 @@ func calcReplacementNeedFloat(scene string, demand float64, baseNeed float64, se
 		if origin <= 0 {
 			continue
 		}
-		if yearsSinceRP(srv.LaunchDate, time.Now()) < 5 {
+		if yearsSinceRP(srv.LaunchDate, time.Now()) <= 5 {
 			continue
 		}
 		eligibleScores = append(eligibleScores, 1.0/origin)
