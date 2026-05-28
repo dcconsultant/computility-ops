@@ -3,7 +3,6 @@ package mysql
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -25,7 +24,7 @@ func NewRenewalRepo(dsn string) *RenewalRepo {
 }
 
 func (r *RenewalRepo) SavePlan(ctx context.Context, plan domain.RenewalPlan) error {
-	payload, err := json.Marshal(plan)
+	payload, err := marshalJSONPayload(plan)
 	if err != nil {
 		return err
 	}
@@ -46,7 +45,7 @@ func (r *RenewalRepo) GetPlan(ctx context.Context, planID string) (domain.Renewa
 		return domain.RenewalPlan{}, err
 	}
 	var plan domain.RenewalPlan
-	if err := json.Unmarshal([]byte(payload), &plan); err != nil {
+	if err := unmarshalJSONPayload(payload, &plan); err != nil {
 		return domain.RenewalPlan{}, err
 	}
 	return plan, nil
@@ -65,7 +64,7 @@ func (r *RenewalRepo) ListPlans(ctx context.Context) ([]domain.RenewalPlan, erro
 			return nil, err
 		}
 		var p domain.RenewalPlan
-		if err := json.Unmarshal([]byte(payload), &p); err != nil {
+		if err := unmarshalJSONPayload(payload, &p); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -157,14 +156,14 @@ func (r *RenewalRepo) GetSettings(ctx context.Context) (domain.RenewalPlanSettin
 		return domain.RenewalPlanSettings{}, false, err
 	}
 	var out domain.RenewalPlanSettings
-	if err := json.Unmarshal([]byte(payload), &out); err != nil {
+	if err := unmarshalJSONPayload(payload, &out); err != nil {
 		return domain.RenewalPlanSettings{}, false, err
 	}
 	return out, true, nil
 }
 
 func (r *RenewalRepo) SaveSettings(ctx context.Context, settings domain.RenewalPlanSettings) error {
-	payload, err := json.Marshal(settings)
+	payload, err := marshalJSONPayload(settings)
 	if err != nil {
 		return err
 	}

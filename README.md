@@ -146,6 +146,15 @@ Windows 上有两种推荐方式。
 2. 使用 MySQL 客户端初始化数据库。
 3. PowerShell 中设置后端环境变量并启动：
 
+建议先确认 MySQL 大包参数，避免生成续保方案或导入大数据时触发 `max_allowed_packet` 限制：
+
+```powershell
+mysql -u root -p -e "SHOW VARIABLES LIKE 'max_allowed_packet';"
+mysql -u root -p -e "SET GLOBAL max_allowed_packet=67108864;"
+```
+
+如需永久生效，在 MySQL 配置文件的 `[mysqld]` 下增加 `max_allowed_packet=64M` 后重启 MySQL。
+
 ```powershell
 $env:STORAGE_DRIVER = "mysql"
 $env:MYSQL_DSN = "user:pass@tcp(127.0.0.1:3306)/computility_ops?parseTime=true&loc=Local&charset=utf8mb4"
