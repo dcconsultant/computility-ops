@@ -17,6 +17,7 @@ type CreatePlanInput struct {
 	TargetDate           string
 	ExcludedEnvironments []string
 	ExcludedPSAs         []string
+	IdleStoppedPSAs      []string
 	TargetCores          int
 	WarmTargetStorageTB  float64
 	HotTargetStorageTB   float64
@@ -132,6 +133,25 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		excludedPSACanonical = append(excludedPSACanonical, strings.TrimSpace(psa))
 	}
 
+	idleStoppedPSAMatcher := newPSAMatcher()
+	idleStoppedPSACanonical := make([]string, 0, len(in.IdleStoppedPSAs))
+	for _, psa := range in.IdleStoppedPSAs {
+		n := normalizeText(psa)
+		if n == "" {
+			continue
+		}
+		if !idleStoppedPSAMatcher.AddNormalized(n) {
+			continue
+		}
+		idleStoppedPSACanonical = append(idleStoppedPSACanonical, strings.TrimSpace(psa))
+	}
+
+	overallRates, err := s.datasetRepo.ListOverallFailureRates(ctx)
+	if err != nil {
+		return domain.RenewalPlan{}, err
+	}
+	minimalFailureRate, minimalFailureYear, hasMinimalFailureRate := findMinimalRenewalFailureRate(overallRates)
+
 	totalServersNoPSA := 0
 	domesticServersNoPSA := 0
 	indiaServersNoPSA := 0
@@ -230,7 +250,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 
 		cabinetCost := 0.0
 		if costParams.RatedPowerKW > 0 && costParams.CabinetUtilization > 0 {
-			cabinetCost = costParams.MonthlyRentCNY * (pkg.PowerWatts/1000.0) / (costParams.RatedPowerKW * costParams.CabinetUtilization)
+			cabinetCost = costParams.MonthlyRentCNY * (pkg.PowerWatts / 1000.0) / (costParams.RatedPowerKW * costParams.CabinetUtilization)
 		}
 		depreciation := 0.0
 		if costParams.DepreciationMonths > 0 {
@@ -284,11 +304,14 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	coveredWarmByRegion := map[string]float64{"domestic": 0, "india": 0}
 	coveredHotByRegion := map[string]float64{"domestic": 0, "india": 0}
 	gpuCoveredCardsByRegion := map[string]int{"domestic": 0, "india": 0}
+	currentComputeByRegion := map[string]int{"domestic": 0, "india": 0}
+	idleStoppedComputeByRegion := map[string]int{"domestic": 0, "india": 0}
 
 	for _, srv := range servers {
 		if excludedSet[normalizeEnv(srv.Environment)] {
 			continue
 		}
+		isIdleStoppedPSA := idleStoppedPSAMatcher.MatchRaw(srv.PSA)
 		if excludedPSAMatcher.MatchRaw(srv.PSA) {
 			nonRenewalItems = append(nonRenewalItems, domain.NonRenewalItem{
 				SN:           srv.SN,
@@ -335,6 +358,16 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		if bucket == "gpu" {
 			gpuCurrentCards += gpuCards
 			gpuCurrentServers++
+		}
+		if bucket == "compute" {
+			if isIdleStoppedPSA {
+				idleStoppedComputeByRegion[region] += cores
+			} else {
+				currentComputeByRegion[region] += cores
+			}
+		}
+		if isIdleStoppedPSA {
+			continue
 		}
 		if !wd.Before(targetDate) {
 			// 未过保：计入目标覆盖基线，但不进入续保方案列表
@@ -647,7 +680,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		}
 	}
 
-	appendRankingNonRenewals := func(bucket string, all []domain.RenewalItem, selected []domain.RenewalItem) {
+	appendRankingNonRenewals := func(out *[]domain.NonRenewalItem, bucket string, all []domain.RenewalItem, selected []domain.RenewalItem) {
 		selectedSet := make(map[string]bool, len(selected))
 		for _, item := range selected {
 			selectedSet[item.SN] = true
@@ -656,7 +689,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			if selectedSet[item.SN] {
 				continue
 			}
-			nonRenewalItems = append(nonRenewalItems, domain.NonRenewalItem{
+			*out = append(*out, domain.NonRenewalItem{
 				SN:           item.SN,
 				Bucket:       bucket,
 				Manufacturer: item.Manufacturer,
@@ -673,8 +706,10 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			})
 		}
 	}
+	baseNonRenewalItems := append([]domain.NonRenewalItem(nil), nonRenewalItems...)
+	fullNonRenewalItems := append([]domain.NonRenewalItem(nil), baseNonRenewalItems...)
 	for _, pair := range rankingPairs {
-		appendRankingNonRenewals(pair.bucket, pair.all, pair.selected)
+		appendRankingNonRenewals(&fullNonRenewalItems, pair.bucket, pair.all, pair.selected)
 	}
 	gpuCores := 0
 	gpuStorage := 0.0
@@ -684,15 +719,70 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		gpuStorage += item.StorageCapacityTB
 	}
 
-	sort.SliceStable(nonRenewalItems, func(i, j int) bool {
-		if nonRenewalItems[i].ReasonCode != nonRenewalItems[j].ReasonCode {
-			return nonRenewalItems[i].ReasonCode < nonRenewalItems[j].ReasonCode
+	minimalComputeItems := make([]domain.RenewalItem, 0)
+	minimalComputeCores := 0
+	minimalRequiredComputeCores := 0
+	minimalStats := domain.MinimalComputeStats{}
+	if hasMinimalFailureRate {
+		minimalStats.FailureRateYear = minimalFailureYear
+		minimalStats.FailureRate = minimalFailureRate
+		for _, region := range []string{"domestic", "india"} {
+			regionReq := req.Domestic.Compute
+			if region == "india" {
+				regionReq = req.India.Compute
+			}
+			regionCompute := filterItemsByRegion(bucketItems["compute"], region)
+			need := 0
+			currentCores := currentComputeByRegion[region]
+			idleCores := idleStoppedComputeByRegion[region]
+			reserveCores := 0
+			guaranteeCores := 0
+			if regionReq.Mode == domain.RenewalTargetModeMaximize {
+				need = sumCores(regionCompute)
+			} else {
+				target := int(regionReq.Target)
+				totalCores := currentCores + idleCores
+				reserveCores = maxInt(0, totalCores-target)
+				guaranteeCores = minInt(target, int(math.Floor(float64(reserveCores)/minimalFailureRate)))
+				need = maxInt(0, target-guaranteeCores)
+			}
+			selected, picked := selectByCores(regionCompute, need)
+			minimalComputeItems = append(minimalComputeItems, selected...)
+			minimalComputeCores += picked
+			minimalRequiredComputeCores += need
+			if region == "domestic" {
+				minimalStats.DomesticCurrentCores = currentCores
+				minimalStats.DomesticIdleStoppedCores = idleCores
+				minimalStats.DomesticReserveCores = reserveCores
+				minimalStats.DomesticGuaranteeCores = guaranteeCores
+				minimalStats.DomesticMinimalRenewCores = need
+			} else {
+				minimalStats.IndiaCurrentCores = currentCores
+				minimalStats.IndiaIdleStoppedCores = idleCores
+				minimalStats.IndiaReserveCores = reserveCores
+				minimalStats.IndiaGuaranteeCores = guaranteeCores
+				minimalStats.IndiaMinimalRenewCores = need
+			}
 		}
-		if nonRenewalItems[i].RankInBucket != nonRenewalItems[j].RankInBucket {
-			return nonRenewalItems[i].RankInBucket < nonRenewalItems[j].RankInBucket
-		}
-		return nonRenewalItems[i].SN < nonRenewalItems[j].SN
-	})
+		minimalStats.TotalCurrentCores = minimalStats.DomesticCurrentCores + minimalStats.IndiaCurrentCores
+		minimalStats.TotalIdleStoppedCores = minimalStats.DomesticIdleStoppedCores + minimalStats.IndiaIdleStoppedCores
+		minimalStats.TotalReserveCores = minimalStats.DomesticReserveCores + minimalStats.IndiaReserveCores
+		minimalStats.TotalGuaranteeCores = minimalStats.DomesticGuaranteeCores + minimalStats.IndiaGuaranteeCores
+		minimalStats.TotalMinimalRenewCores = minimalStats.DomesticMinimalRenewCores + minimalStats.IndiaMinimalRenewCores
+	}
+
+	sortNonRenewalItems := func(items []domain.NonRenewalItem) {
+		sort.SliceStable(items, func(i, j int) bool {
+			if items[i].ReasonCode != items[j].ReasonCode {
+				return items[i].ReasonCode < items[j].ReasonCode
+			}
+			if items[i].RankInBucket != items[j].RankInBucket {
+				return items[i].RankInBucket < items[j].RankInBucket
+			}
+			return items[i].SN < items[j].SN
+		})
+	}
+	sortNonRenewalItems(fullNonRenewalItems)
 
 	unmatchedConfigTypes := make([]string, 0, len(unmatchedConfigSet))
 	for cfg := range unmatchedConfigSet {
@@ -711,6 +801,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		TargetDate:           targetDate.Format("2006-01-02"),
 		ExcludedEnvironments: excludedCanonical,
 		ExcludedPSAs:         excludedPSACanonical,
+		IdleStoppedPSAs:      idleStoppedPSACanonical,
 		TargetCores:          int(targetComputeCores),
 		WarmTargetStorageTB:  targetWarmStorage,
 		HotTargetStorageTB:   targetHotStorage,
@@ -734,7 +825,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		GPUCoveredServers:    gpuCoveredServers,
 		GPURenewalCards:      gpuRenewalCards,
 		GPURenewalServers:    len(gpuItems),
-		NonRenewalItems:      nonRenewalItems,
+		NonRenewalItems:      fullNonRenewalItems,
 		Sections: []domain.RenewalPlanSection{
 			{
 				Bucket:        "compute",
@@ -802,6 +893,25 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		}
 	}
 
+	fullVariant := renewalVariantFromPlan("全量续保方案", plan)
+	unitPrices, err := s.renewalRepo.ListUnitPrices(ctx)
+	if err != nil {
+		return domain.RenewalPlan{}, err
+	}
+	normalizedUnitPrices, err := normalizeUnitPrices(unitPrices)
+	if err != nil {
+		return domain.RenewalPlan{}, err
+	}
+	plan.FullRenewal = &fullVariant
+	if hasMinimalFailureRate {
+		minimalVariant := buildMinimalRenewalVariant(plan, minimalComputeItems, minimalComputeCores, minimalRequiredComputeCores, gpuRenewalCards, gpuCores, gpuStorage, minimalStats)
+		comparison := buildRenewalComparison(fullVariant, minimalVariant, normalizedUnitPrices)
+		plan.MinimalRenewal = &minimalVariant
+		plan.Comparison = &comparison
+	} else {
+		plan.MinimalRenewalError = "缺少“2026年/生产/非存储/超5年故障率”，最小化续保方案未生成"
+	}
+
 	if err := s.renewalRepo.SavePlan(ctx, plan); err != nil {
 		return domain.RenewalPlan{}, err
 	}
@@ -809,6 +919,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		TargetDate:           plan.TargetDate,
 		ExcludedEnvironments: plan.ExcludedEnvironments,
 		ExcludedPSAs:         plan.ExcludedPSAs,
+		IdleStoppedPSAs:      plan.IdleStoppedPSAs,
 		Requirements:         plan.Requirements,
 		DomesticBudget:       plan.DomesticBudget,
 		IndiaBudget:          plan.IndiaBudget,
@@ -946,6 +1057,220 @@ func splitByWhitelist(items []domain.RenewalItem) (must []domain.RenewalItem, no
 	return must, normal
 }
 
+func renewalVariantFromPlan(name string, plan domain.RenewalPlan) domain.RenewalPlanVariant {
+	return domain.RenewalPlanVariant{
+		Name:                 name,
+		TargetCores:          plan.TargetCores,
+		RequiredComputeCores: plan.RequiredComputeCores,
+		CoveredComputeCores:  plan.CoveredComputeCores,
+		SelectedCores:        plan.SelectedCores,
+		SelectedStorageTB:    plan.SelectedStorageTB,
+		SelectedCount:        plan.SelectedCount,
+		GPURenewalCards:      plan.GPURenewalCards,
+		GPURenewalServers:    plan.GPURenewalServers,
+		Items:                cloneRenewalItems(plan.Items),
+		NonRenewalItems:      cloneNonRenewalItems(plan.NonRenewalItems),
+		Sections:             cloneRenewalSections(plan.Sections),
+	}
+}
+
+func buildMinimalRenewalVariant(plan domain.RenewalPlan, computeItems []domain.RenewalItem, computeCores int, requiredComputeCores int, gpuRenewalCards int, gpuCores int, gpuStorage float64, stats domain.MinimalComputeStats) domain.RenewalPlanVariant {
+	sections := cloneRenewalSections(plan.Sections)
+	allItems := make([]domain.RenewalItem, 0)
+	selectedStorage := 0.0
+	selectedCores := 0
+	for i := range sections {
+		switch sections[i].Bucket {
+		case "compute":
+			sections[i].RequiredCores = requiredComputeCores
+			sections[i].SelectedCores = computeCores
+			sections[i].SelectedCount = len(computeItems)
+			sections[i].Items = cloneRenewalItems(computeItems)
+		case "gpu":
+			sections[i].SelectedCores = gpuCores
+			sections[i].SelectedStorageTB = gpuStorage
+			sections[i].SelectedCount = len(sections[i].Items)
+		}
+		for _, item := range sections[i].Items {
+			item.Rank = len(allItems) + 1
+			allItems = append(allItems, item)
+			selectedCores += item.CPULogicalCores
+			selectedStorage += item.StorageCapacityTB
+		}
+	}
+	for si := range sections {
+		for ii := range sections[si].Items {
+			if idx := findPlanItemIndexBySN(allItems, sections[si].Items[ii].SN); idx >= 0 {
+				sections[si].Items[ii].Rank = allItems[idx].Rank
+			}
+		}
+	}
+	nonRenewals := buildMinimalNonRenewals(plan.NonRenewalItems, plan.Items, allItems)
+	sort.SliceStable(nonRenewals, func(i, j int) bool {
+		if nonRenewals[i].ReasonCode != nonRenewals[j].ReasonCode {
+			return nonRenewals[i].ReasonCode < nonRenewals[j].ReasonCode
+		}
+		if nonRenewals[i].RankInBucket != nonRenewals[j].RankInBucket {
+			return nonRenewals[i].RankInBucket < nonRenewals[j].RankInBucket
+		}
+		return nonRenewals[i].SN < nonRenewals[j].SN
+	})
+	return domain.RenewalPlanVariant{
+		Name:                  "最小化续保方案",
+		TargetCores:           plan.TargetCores,
+		RequiredComputeCores:  requiredComputeCores,
+		CoveredComputeCores:   plan.CoveredComputeCores,
+		SelectedCores:         selectedCores,
+		SelectedStorageTB:     selectedStorage,
+		SelectedCount:         len(allItems),
+		GPURenewalCards:       gpuRenewalCards,
+		GPURenewalServers:     plan.GPURenewalServers,
+		Items:                 allItems,
+		NonRenewalItems:       nonRenewals,
+		Sections:              sections,
+		MinimalComputeMetrics: &stats,
+	}
+}
+
+func buildMinimalNonRenewals(base []domain.NonRenewalItem, fullItems []domain.RenewalItem, minimalItems []domain.RenewalItem) []domain.NonRenewalItem {
+	out := cloneNonRenewalItems(base)
+	selected := map[string]bool{}
+	for _, item := range minimalItems {
+		selected[item.SN] = true
+	}
+	for _, item := range fullItems {
+		if selected[item.SN] {
+			continue
+		}
+		out = append(out, domain.NonRenewalItem{
+			SN:           item.SN,
+			Bucket:       item.Bucket,
+			Manufacturer: item.Manufacturer,
+			Model:        item.Model,
+			Environment:  item.Environment,
+			IDC:          item.IDC,
+			ConfigType:   item.ConfigType,
+			PSA:          item.PSA,
+			FinalScore:   item.FinalScore,
+			ReasonCode:   "minimal_reduction",
+			Reason:       "最小化续保减少",
+			ReasonDetail: "后备保障算力折算后不再续保",
+			RankInBucket: item.Rank,
+		})
+	}
+	return out
+}
+
+func buildRenewalComparison(full domain.RenewalPlanVariant, minimal domain.RenewalPlanVariant, prices []domain.RenewalUnitPrice) domain.RenewalComparison {
+	fullAmount := estimateRenewalAmount(full.Items, prices)
+	minimalAmount := estimateRenewalAmount(minimal.Items, prices)
+	reduced := buildReducedRenewalItems(full.Items, minimal.Items, prices)
+	saved := fullAmount - minimalAmount
+	if saved < 0 {
+		saved = 0
+	}
+	savedRatio := 0.0
+	if fullAmount > 0 {
+		savedRatio = saved / fullAmount
+	}
+	reducedCores := full.SelectedCores - minimal.SelectedCores
+	if reducedCores < 0 {
+		reducedCores = 0
+	}
+	return domain.RenewalComparison{
+		FullRenewalCount:    full.SelectedCount,
+		MinimalRenewalCount: minimal.SelectedCount,
+		ReducedCount:        len(reduced),
+		FullAmount:          fullAmount,
+		MinimalAmount:       minimalAmount,
+		SavedAmount:         saved,
+		SavedRatio:          savedRatio,
+		FullRenewalCores:    full.SelectedCores,
+		MinimalRenewalCores: minimal.SelectedCores,
+		ReducedRenewalCores: reducedCores,
+		ReducedRenewalItems: reduced,
+	}
+}
+
+func buildReducedRenewalItems(fullItems []domain.RenewalItem, minimalItems []domain.RenewalItem, prices []domain.RenewalUnitPrice) []domain.ReducedRenewalItem {
+	minimalSet := map[string]bool{}
+	for _, item := range minimalItems {
+		minimalSet[item.SN] = true
+	}
+	out := make([]domain.ReducedRenewalItem, 0)
+	for _, item := range fullItems {
+		if minimalSet[item.SN] {
+			continue
+		}
+		out = append(out, domain.ReducedRenewalItem{
+			SN:              item.SN,
+			IDC:             item.IDC,
+			PSA:             item.PSA,
+			ConfigType:      item.ConfigType,
+			CPULogicalCores: item.CPULogicalCores,
+			FullRank:        item.Rank,
+			Reason:          "后备保障算力折算后不再续保",
+			SavedAmount:     unitPriceForItem(item, prices),
+		})
+	}
+	return out
+}
+
+func estimateRenewalAmount(items []domain.RenewalItem, prices []domain.RenewalUnitPrice) float64 {
+	total := 0.0
+	for _, item := range items {
+		total += unitPriceForItem(item, prices)
+	}
+	return total
+}
+
+func unitPriceForItem(item domain.RenewalItem, prices []domain.RenewalUnitPrice) float64 {
+	country := "国内"
+	if isIndiaIDC(item.IDC) {
+		country = "印度"
+	}
+	scene := item.Bucket
+	if scene == "" {
+		scene = normalizeBucket(item.SceneCategory)
+	}
+	for _, price := range prices {
+		if price.Country == country && price.SceneCategory == scene {
+			return price.UnitPrice
+		}
+	}
+	return 0
+}
+
+func cloneRenewalItems(items []domain.RenewalItem) []domain.RenewalItem {
+	out := make([]domain.RenewalItem, len(items))
+	copy(out, items)
+	return out
+}
+
+func cloneNonRenewalItems(items []domain.NonRenewalItem) []domain.NonRenewalItem {
+	out := make([]domain.NonRenewalItem, len(items))
+	copy(out, items)
+	return out
+}
+
+func cloneRenewalSections(sections []domain.RenewalPlanSection) []domain.RenewalPlanSection {
+	out := make([]domain.RenewalPlanSection, len(sections))
+	for i := range sections {
+		out[i] = sections[i]
+		out[i].Items = cloneRenewalItems(sections[i].Items)
+	}
+	return out
+}
+
+func findMinimalRenewalFailureRate(rows []domain.FailureRateSummary) (float64, int, bool) {
+	for _, row := range rows {
+		if row.Period == "year" && row.Year == 2026 && row.Scope == "product" && row.Segment == "non_storage" && row.OverWarrantyRate > 0 {
+			return row.OverWarrantyRate, row.Year, true
+		}
+	}
+	return 0, 2026, false
+}
+
 func normalizeBucket(scene string) string {
 	n := normalizeText(scene)
 	switch n {
@@ -1008,6 +1333,13 @@ func findPlanItemIndexBySN(items []domain.RenewalItem, sn string) int {
 
 func maxInt(a, b int) int {
 	if a > b {
+		return a
+	}
+	return b
+}
+
+func minInt(a, b int) int {
+	if a < b {
 		return a
 	}
 	return b
@@ -1140,13 +1472,6 @@ func validateRequirements(req domain.RenewalRequirements) error {
 		return fmt.Errorf("at least one demand target is required")
 	}
 	return nil
-}
-
-func aggregateSceneTarget(domestic, india domain.RenewalSceneTarget) float64 {
-	if domestic.Mode == domain.RenewalTargetModeMaximize || india.Mode == domain.RenewalTargetModeMaximize {
-		return 1e12
-	}
-	return domestic.Target + india.Target
 }
 
 func containsNormalized(list []string, target string) bool {

@@ -258,6 +258,59 @@ func TestRenewalService_CreatePlan_ErrorWhenUnitPriceMissing(t *testing.T) {
 	}
 }
 
+func TestRenewalService_CreatePlan_BuildsMinimalRenewalComparison(t *testing.T) {
+	ctx := context.Background()
+	serverRepo := mem.NewServerRepo()
+	datasetRepo := mem.NewDatasetRepo()
+	renewalRepo := mem.NewRenewalRepo()
+	mustSeedUnitPrices(t, renewalRepo)
+
+	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
+		{SN: "ACTIVE", ConfigType: "c1", PSA: "/active", WarrantyEndDate: "2026-12-31", Environment: "生产"},
+		{SN: "IDLE", ConfigType: "c1", PSA: "/idle", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+		{SN: "R1", ConfigType: "c1", PSA: "/need", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+		{SN: "R2", ConfigType: "c1", PSA: "/need", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+	})
+	_ = datasetRepo.ReplaceHostPackages(ctx, []domain.HostPackageConfig{{ConfigType: "c1", SceneCategory: "计算型", CPULogicalCores: 100, ArchStandardizedFactor: 1}})
+	_ = datasetRepo.ReplaceOverallFailureRates(ctx, []domain.FailureRateSummary{{
+		Period:           "year",
+		Year:             2026,
+		Scope:            "product",
+		Segment:          "non_storage",
+		OverWarrantyRate: 0.5,
+	}})
+
+	svc := NewRenewalService(serverRepo, datasetRepo, renewalRepo)
+	plan, err := svc.CreatePlan(ctx, CreatePlanInput{
+		TargetDate:           "2026-01-01",
+		IdleStoppedPSAs:      []string{"/idle"},
+		ExcludedEnvironments: []string{},
+		Requirements: domain.RenewalRequirements{
+			Domestic: domain.RenewalRegionTargets{
+				Compute: domain.RenewalSceneTarget{Mode: domain.RenewalTargetModeManual, Target: 200},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreatePlan() error = %v", err)
+	}
+	if plan.FullRenewal == nil || plan.MinimalRenewal == nil || plan.Comparison == nil {
+		t.Fatalf("expected full/minimal/comparison, got full=%v minimal=%v comparison=%v", plan.FullRenewal, plan.MinimalRenewal, plan.Comparison)
+	}
+	if plan.FullRenewal.SelectedCount != 1 {
+		t.Fatalf("full selected count=%d, want 1", plan.FullRenewal.SelectedCount)
+	}
+	if plan.MinimalRenewal.SelectedCount != 0 {
+		t.Fatalf("minimal selected count=%d, want 0", plan.MinimalRenewal.SelectedCount)
+	}
+	if plan.Comparison.ReducedCount != 1 || len(plan.Comparison.ReducedRenewalItems) != 1 {
+		t.Fatalf("comparison reduced=%+v, want one reduced item", plan.Comparison)
+	}
+	if plan.MinimalRenewal.MinimalComputeMetrics == nil || plan.MinimalRenewal.MinimalComputeMetrics.TotalGuaranteeCores != 200 {
+		t.Fatalf("minimal metrics=%+v, want guarantee cores 200", plan.MinimalRenewal.MinimalComputeMetrics)
+	}
+}
+
 func TestRenewalService_ListUnitPrices_EmptyAllowed(t *testing.T) {
 	svc := NewRenewalService(mem.NewServerRepo(), mem.NewDatasetRepo(), mem.NewRenewalRepo())
 	prices, err := svc.ListUnitPrices(context.Background())

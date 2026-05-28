@@ -38,6 +38,7 @@ type RenewalPlan struct {
 	TargetDate           string               `json:"target_date,omitempty"`
 	ExcludedEnvironments []string             `json:"excluded_environments,omitempty"`
 	ExcludedPSAs         []string             `json:"excluded_psas,omitempty"`
+	IdleStoppedPSAs      []string             `json:"idle_stopped_psas,omitempty"`
 	TargetCores          int                  `json:"target_cores"`
 	WarmTargetStorageTB  float64              `json:"warm_target_storage_tb"`
 	HotTargetStorageTB   float64              `json:"hot_target_storage_tb"`
@@ -67,6 +68,10 @@ type RenewalPlan struct {
 	Items                []RenewalItem        `json:"items"`
 	NonRenewalItems      []NonRenewalItem     `json:"non_renewal_items,omitempty"`
 	Sections             []RenewalPlanSection `json:"sections,omitempty"`
+	FullRenewal          *RenewalPlanVariant  `json:"full_renewal,omitempty"`
+	MinimalRenewal       *RenewalPlanVariant  `json:"minimal_renewal,omitempty"`
+	MinimalRenewalError  string               `json:"minimal_renewal_error,omitempty"`
+	Comparison           *RenewalComparison   `json:"comparison,omitempty"`
 }
 
 type RenewalPlanSection struct {
@@ -82,6 +87,67 @@ type RenewalPlanSection struct {
 	SelectedStorageTB float64       `json:"selected_storage_tb,omitempty"`
 	SelectedCount     int           `json:"selected_count"`
 	Items             []RenewalItem `json:"items"`
+}
+
+type RenewalPlanVariant struct {
+	Name                  string               `json:"name"`
+	TargetCores           int                  `json:"target_cores"`
+	RequiredComputeCores  int                  `json:"required_compute_cores,omitempty"`
+	CoveredComputeCores   int                  `json:"covered_compute_cores,omitempty"`
+	SelectedCores         int                  `json:"selected_cores"`
+	SelectedStorageTB     float64              `json:"selected_storage_tb"`
+	SelectedCount         int                  `json:"selected_count"`
+	GPURenewalCards       int                  `json:"gpu_renewal_cards,omitempty"`
+	GPURenewalServers     int                  `json:"gpu_renewal_servers,omitempty"`
+	Items                 []RenewalItem        `json:"items"`
+	NonRenewalItems       []NonRenewalItem     `json:"non_renewal_items,omitempty"`
+	Sections              []RenewalPlanSection `json:"sections,omitempty"`
+	MinimalComputeMetrics *MinimalComputeStats `json:"minimal_compute_metrics,omitempty"`
+}
+
+type MinimalComputeStats struct {
+	FailureRateYear           int     `json:"failure_rate_year"`
+	FailureRate               float64 `json:"failure_rate"`
+	DomesticCurrentCores      int     `json:"domestic_current_cores"`
+	DomesticIdleStoppedCores  int     `json:"domestic_idle_stopped_cores"`
+	DomesticReserveCores      int     `json:"domestic_reserve_cores"`
+	DomesticGuaranteeCores    int     `json:"domestic_guarantee_cores"`
+	DomesticMinimalRenewCores int     `json:"domestic_minimal_renew_cores"`
+	IndiaCurrentCores         int     `json:"india_current_cores"`
+	IndiaIdleStoppedCores     int     `json:"india_idle_stopped_cores"`
+	IndiaReserveCores         int     `json:"india_reserve_cores"`
+	IndiaGuaranteeCores       int     `json:"india_guarantee_cores"`
+	IndiaMinimalRenewCores    int     `json:"india_minimal_renew_cores"`
+	TotalCurrentCores         int     `json:"total_current_cores"`
+	TotalIdleStoppedCores     int     `json:"total_idle_stopped_cores"`
+	TotalReserveCores         int     `json:"total_reserve_cores"`
+	TotalGuaranteeCores       int     `json:"total_guarantee_cores"`
+	TotalMinimalRenewCores    int     `json:"total_minimal_renew_cores"`
+}
+
+type RenewalComparison struct {
+	FullRenewalCount    int                  `json:"full_renewal_count"`
+	MinimalRenewalCount int                  `json:"minimal_renewal_count"`
+	ReducedCount        int                  `json:"reduced_count"`
+	FullAmount          float64              `json:"full_amount"`
+	MinimalAmount       float64              `json:"minimal_amount"`
+	SavedAmount         float64              `json:"saved_amount"`
+	SavedRatio          float64              `json:"saved_ratio"`
+	FullRenewalCores    int                  `json:"full_renewal_cores"`
+	MinimalRenewalCores int                  `json:"minimal_renewal_cores"`
+	ReducedRenewalCores int                  `json:"reduced_renewal_cores"`
+	ReducedRenewalItems []ReducedRenewalItem `json:"reduced_renewal_items,omitempty"`
+}
+
+type ReducedRenewalItem struct {
+	SN              string    `json:"sn"`
+	IDC             string    `json:"idc,omitempty"`
+	PSA             PSAString `json:"psa,omitempty"`
+	ConfigType      string    `json:"config_type,omitempty"`
+	CPULogicalCores int       `json:"cpu_logical_cores"`
+	FullRank        int       `json:"full_rank,omitempty"`
+	Reason          string    `json:"reason"`
+	SavedAmount     float64   `json:"saved_amount"`
 }
 
 type RenewalItem struct {

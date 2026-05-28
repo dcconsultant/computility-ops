@@ -28,6 +28,7 @@ type RenewalPlanSettings struct {
 	TargetDate           string              `json:"target_date"`
 	ExcludedEnvironments []string            `json:"excluded_environments"`
 	ExcludedPSAs         []string            `json:"excluded_psas"`
+	IdleStoppedPSAs      []string            `json:"idle_stopped_psas,omitempty"`
 	Requirements         RenewalRequirements `json:"requirements"`
 	DomesticBudget       float64             `json:"domestic_budget"`
 	IndiaBudget          float64             `json:"india_budget"`

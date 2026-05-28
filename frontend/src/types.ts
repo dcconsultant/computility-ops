@@ -362,6 +362,7 @@ export interface RenewalPlanSettings {
   target_date: string;
   excluded_environments: string[];
   excluded_psas: string[];
+  idle_stopped_psas?: string[];
   requirements: RenewalRequirements;
   domestic_budget: number;
   india_budget: number;
@@ -378,6 +379,7 @@ export interface RenewalPlan {
   target_date?: string;
   excluded_environments?: string[];
   excluded_psas?: string[];
+  idle_stopped_psas?: string[];
   target_cores: number;
   warm_target_storage_tb?: number;
   hot_target_storage_tb?: number;
@@ -407,6 +409,71 @@ export interface RenewalPlan {
   items: PlanItem[];
   non_renewal_items?: NonRenewalItem[];
   sections?: RenewalPlanSection[];
+  full_renewal?: RenewalPlanVariant;
+  minimal_renewal?: RenewalPlanVariant;
+  minimal_renewal_error?: string;
+  comparison?: RenewalComparison;
+}
+
+export interface MinimalComputeStats {
+  failure_rate_year: number;
+  failure_rate: number;
+  domestic_current_cores: number;
+  domestic_idle_stopped_cores: number;
+  domestic_reserve_cores: number;
+  domestic_guarantee_cores: number;
+  domestic_minimal_renew_cores: number;
+  india_current_cores: number;
+  india_idle_stopped_cores: number;
+  india_reserve_cores: number;
+  india_guarantee_cores: number;
+  india_minimal_renew_cores: number;
+  total_current_cores: number;
+  total_idle_stopped_cores: number;
+  total_reserve_cores: number;
+  total_guarantee_cores: number;
+  total_minimal_renew_cores: number;
+}
+
+export interface RenewalPlanVariant {
+  name: string;
+  target_cores: number;
+  required_compute_cores?: number;
+  covered_compute_cores?: number;
+  selected_cores: number;
+  selected_storage_tb?: number;
+  selected_count: number;
+  gpu_renewal_cards?: number;
+  gpu_renewal_servers?: number;
+  items: PlanItem[];
+  non_renewal_items?: NonRenewalItem[];
+  sections?: RenewalPlanSection[];
+  minimal_compute_metrics?: MinimalComputeStats;
+}
+
+export interface ReducedRenewalItem {
+  sn: string;
+  idc?: string;
+  psa?: string;
+  config_type?: string;
+  cpu_logical_cores: number;
+  full_rank?: number;
+  reason: string;
+  saved_amount: number;
+}
+
+export interface RenewalComparison {
+  full_renewal_count: number;
+  minimal_renewal_count: number;
+  reduced_count: number;
+  full_amount: number;
+  minimal_amount: number;
+  saved_amount: number;
+  saved_ratio: number;
+  full_renewal_cores: number;
+  minimal_renewal_cores: number;
+  reduced_renewal_cores: number;
+  reduced_renewal_items?: ReducedRenewalItem[];
 }
 
 export interface ContractAttachment {

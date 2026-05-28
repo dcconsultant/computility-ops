@@ -276,7 +276,7 @@ export default function PlanPage() {
     }
   }
 
-  function onSettingListChange(field: 'excluded_environments' | 'excluded_psas', raw: string) {
+  function onSettingListChange(field: 'excluded_environments' | 'excluded_psas' | 'idle_stopped_psas', raw: string) {
     const values = raw.split(/[，,]/).map((x) => x.trim()).filter(Boolean);
     setSettings((prev) => ({ ...prev, [field]: values }));
   }
@@ -668,6 +668,15 @@ export default function PlanPage() {
                     )}
                   </Space>
 
+                  <Space wrap>
+                    <Text>闲置停用PSA</Text>
+                    {settingsEditing ? (
+                      <Input style={{ width: 300 }} value={(settings.idle_stopped_psas || []).join(',')} onChange={(e) => onSettingListChange('idle_stopped_psas', e.target.value)} placeholder="仅用于最小化续保后备算力" />
+                    ) : (
+                      <Text>{(settings.idle_stopped_psas || []).join('、') || '-'}</Text>
+                    )}
+                  </Space>
+
                   <Table
                     pagination={false}
                     rowKey={(r) => `${r.region}-${r.scene}`}
@@ -1017,6 +1026,7 @@ function defaultRenewalSettings(): RenewalPlanSettings {
     target_date: dayjs().format('YYYY-MM-DD'),
     excluded_environments: ['开发', '测试'],
     excluded_psas: [],
+    idle_stopped_psas: [],
     requirements: {
       domestic: {
         compute: { mode: 'manual', target: 1200 },
@@ -1042,6 +1052,7 @@ function normalizeSettings(input?: RenewalPlanSettings): RenewalPlanSettings {
   return {
     ...base,
     ...input,
+    idle_stopped_psas: input.idle_stopped_psas || [],
     requirements: {
       domestic: { ...base.requirements.domestic, ...(input.requirements?.domestic || {}) },
       india: { ...base.requirements.india, ...(input.requirements?.india || {}) }
