@@ -97,6 +97,45 @@ func TestRenewalService_CreatePlan_TargetIncludesUnexpiredButOutputExcludesUnexp
 	}
 }
 
+func TestRenewalService_CreatePlan_UsesNormalizedConfigTypeForValueScore(t *testing.T) {
+	ctx := context.Background()
+	serverRepo := mem.NewServerRepo()
+	datasetRepo := mem.NewDatasetRepo()
+	renewalRepo := mem.NewRenewalRepo()
+	mustSeedUnitPrices(t, renewalRepo)
+
+	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
+		{SN: "A", ConfigType: "compute-a\u00a0", PSA: "10", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+	})
+	_ = datasetRepo.ReplaceHostPackages(ctx, []domain.HostPackageConfig{
+		{ConfigType: "Compute-A", SceneCategory: "计算型", CPULogicalCores: 10, MemoryCapacityGB: 80, ArchStandardizedFactor: 1},
+	})
+	_ = datasetRepo.SetValueScoreCostParams(ctx, domain.ValueScoreCostParams{
+		NetworkDeviceShareCNY: 300,
+	})
+	_ = datasetRepo.ReplaceValueScorePerformanceParams(ctx, []domain.ValueScorePerformanceParam{
+		{ConfigType: "Compute-A", PerformanceScore: 2277},
+	})
+	_ = datasetRepo.ReplaceValueScoreOriginalValues(ctx, []domain.ValueScoreOriginalValue{
+		{ConfigType: "Compute-A", ServerOriginalCNY: 10000},
+	})
+
+	svc := NewRenewalService(serverRepo, datasetRepo, renewalRepo)
+	plan, err := svc.CreatePlan(ctx, CreatePlanInput{TargetDate: "2026-01-01", TargetCores: 10})
+	if err != nil {
+		t.Fatalf("CreatePlan() error = %v", err)
+	}
+	if len(plan.Items) != 1 {
+		t.Fatalf("items=%+v, want one selected item", plan.Items)
+	}
+	if plan.Items[0].FinalScore <= 0 || plan.Items[0].FinalScore > 2 {
+		t.Fatalf("FinalScore=%f, want normalized value score around 1 instead of fallback", plan.Items[0].FinalScore)
+	}
+	if plan.Items[0].ValueScoreV1 != plan.Items[0].FinalScore {
+		t.Fatalf("ValueScoreV1=%f FinalScore=%f, want value score applied", plan.Items[0].ValueScoreV1, plan.Items[0].FinalScore)
+	}
+}
+
 func TestRenewalService_CreatePlan_ExcludePSA(t *testing.T) {
 	ctx := context.Background()
 	serverRepo := mem.NewServerRepo()

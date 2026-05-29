@@ -180,7 +180,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	}
 	pkgRecentByYear := map[string]pkgRecentSnapshot{}
 	for _, p := range packageRates {
-		cfg := strings.TrimSpace(p.ConfigType)
+		cfg := normalizeConfigTypeKey(p.ConfigType)
 		if cfg == "" {
 			continue
 		}
@@ -201,7 +201,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 
 	perfByConfig := map[string]domain.ValueScorePerformanceParam{}
 	for _, p := range perfParams {
-		k := strings.TrimSpace(p.ConfigType)
+		k := normalizeConfigTypeKey(p.ConfigType)
 		if k == "" {
 			continue
 		}
@@ -209,7 +209,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	}
 	origByConfig := map[string]float64{}
 	for _, r := range originalRows {
-		k := strings.TrimSpace(r.ConfigType)
+		k := normalizeConfigTypeKey(r.ConfigType)
 		if k == "" {
 			continue
 		}
@@ -221,7 +221,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	}
 	valueScoreV1ByConfig := map[string]float64{}
 	for _, pkg := range packages {
-		cfg := strings.TrimSpace(pkg.ConfigType)
+		cfg := normalizeConfigTypeKey(pkg.ConfigType)
 		if cfg == "" {
 			continue
 		}
@@ -335,7 +335,8 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			return domain.RenewalPlan{}, fmt.Errorf("invalid warranty_end_date for sn=%s: %v", srv.SN, err)
 		}
 
-		pkg, ok := pkgMap[normalizeConfigTypeKey(srv.ConfigType)]
+		serverConfigKey := normalizeConfigTypeKey(srv.ConfigType)
+		pkg, ok := pkgMap[serverConfigKey]
 		if !ok {
 			unmatchedConfigSet[strings.TrimSpace(srv.ConfigType)] = true
 			continue
@@ -407,7 +408,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			CPULogicalCores:        cores,
 			GPUCardCount:           gpuCards,
 			StorageCapacityTB:      pkg.StorageCapacityTB,
-			Recent1YFailureRate:    pkgRecent1Y[strings.TrimSpace(srv.ConfigType)],
+			Recent1YFailureRate:    pkgRecent1Y[serverConfigKey],
 			PSA:                    domain.PSAString(strings.TrimSpace(srv.PSA)),
 			ArchStandardizedFactor: coef,
 			BaseScore:              baseScore,
@@ -415,13 +416,13 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		}
 
 		if bucket == "warm_storage" || bucket == "hot_storage" {
-			afrAvg := pkgAFRAvg[strings.TrimSpace(srv.ConfigType)]
+			afrAvg := pkgAFRAvg[serverConfigKey]
 			if afrAvg > 0 {
 				item.AFRAvg = afrAvg
 				item.FailureAdjustFactor = 1 / afrAvg
 			}
 		}
-		if v1, ok := valueScoreV1ByConfig[strings.TrimSpace(srv.ConfigType)]; ok {
+		if v1, ok := valueScoreV1ByConfig[serverConfigKey]; ok {
 			item.ValueScoreV1 = v1
 			item.FinalScore = v1
 		} else {
