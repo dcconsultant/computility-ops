@@ -332,14 +332,6 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			})
 			continue
 		}
-		if strings.TrimSpace(srv.WarrantyEndDate) == "" {
-			continue
-		}
-		wd, err := parseDate(srv.WarrantyEndDate)
-		if err != nil {
-			return domain.RenewalPlan{}, fmt.Errorf("invalid warranty_end_date for sn=%s: %v", srv.SN, err)
-		}
-
 		serverConfigKey := normalizeConfigTypeKey(srv.ConfigType)
 		pkg, ok := pkgMap[serverConfigKey]
 		if !ok {
@@ -360,20 +352,28 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		if isIndiaIDC(srv.IDC) {
 			region = "india"
 		}
+		if isIdleStoppedPSA {
+			if bucket == "compute" {
+				idleStoppedComputeByRegion[region] += cores
+			}
+			continue
+		}
+
+		if strings.TrimSpace(srv.WarrantyEndDate) == "" {
+			continue
+		}
+		wd, err := parseDate(srv.WarrantyEndDate)
+		if err != nil {
+			return domain.RenewalPlan{}, fmt.Errorf("invalid warranty_end_date for sn=%s: %v", srv.SN, err)
+		}
+
 		gpuCards := pkg.GPUCardCount
 		if bucket == "gpu" {
 			gpuCurrentCards += gpuCards
 			gpuCurrentServers++
 		}
 		if bucket == "compute" {
-			if isIdleStoppedPSA {
-				idleStoppedComputeByRegion[region] += cores
-			} else {
-				currentComputeByRegion[region] += cores
-			}
-		}
-		if isIdleStoppedPSA {
-			continue
+			currentComputeByRegion[region] += cores
 		}
 		if !wd.Before(targetDate) {
 			// 未过保：计入目标覆盖基线，但不进入续保方案列表

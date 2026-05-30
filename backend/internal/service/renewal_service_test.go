@@ -306,7 +306,7 @@ func TestRenewalService_CreatePlan_BuildsMinimalRenewalComparison(t *testing.T) 
 
 	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
 		{SN: "ACTIVE", ConfigType: "c1", PSA: "/active", WarrantyEndDate: "2026-12-31", Environment: "生产"},
-		{SN: "IDLE", ConfigType: "c1", PSA: "/idle/sub", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+		{SN: "IDLE", ConfigType: "c1", PSA: "/idle/sub", Environment: "生产"},
 		{SN: "R1", ConfigType: "c1", PSA: "/need", WarrantyEndDate: "2025-01-01", Environment: "生产"},
 		{SN: "R2", ConfigType: "c1", PSA: "/need", WarrantyEndDate: "2025-01-01", Environment: "生产"},
 	})
