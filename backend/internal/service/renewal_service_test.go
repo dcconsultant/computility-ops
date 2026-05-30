@@ -306,7 +306,7 @@ func TestRenewalService_CreatePlan_BuildsMinimalRenewalComparison(t *testing.T) 
 
 	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
 		{SN: "ACTIVE", ConfigType: "c1", PSA: "/active", WarrantyEndDate: "2026-12-31", Environment: "生产"},
-		{SN: "IDLE", ConfigType: "c1", PSA: "/idle", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+		{SN: "IDLE", ConfigType: "c1", PSA: "/idle/sub", WarrantyEndDate: "2025-01-01", Environment: "生产"},
 		{SN: "R1", ConfigType: "c1", PSA: "/need", WarrantyEndDate: "2025-01-01", Environment: "生产"},
 		{SN: "R2", ConfigType: "c1", PSA: "/need", WarrantyEndDate: "2025-01-01", Environment: "生产"},
 	})
@@ -322,13 +322,13 @@ func TestRenewalService_CreatePlan_BuildsMinimalRenewalComparison(t *testing.T) 
 	svc := NewRenewalService(serverRepo, datasetRepo, renewalRepo)
 	plan, err := svc.CreatePlan(ctx, CreatePlanInput{
 		TargetDate:           "2026-01-01",
-		IdleStoppedPSAs:      []string{"/idle"},
 		ExcludedEnvironments: []string{},
 		Requirements: domain.RenewalRequirements{
 			Domestic: domain.RenewalRegionTargets{
 				Compute: domain.RenewalSceneTarget{Mode: domain.RenewalTargetModeManual, Target: 200},
 			},
 		},
+		IdleStoppedPSAs: []string{"/idle/"},
 	})
 	if err != nil {
 		t.Fatalf("CreatePlan() error = %v", err)
@@ -347,6 +347,9 @@ func TestRenewalService_CreatePlan_BuildsMinimalRenewalComparison(t *testing.T) 
 	}
 	if plan.MinimalRenewal.MinimalComputeMetrics == nil || plan.MinimalRenewal.MinimalComputeMetrics.TotalGuaranteeCores != 200 {
 		t.Fatalf("minimal metrics=%+v, want guarantee cores 200", plan.MinimalRenewal.MinimalComputeMetrics)
+	}
+	if plan.MinimalRenewal.MinimalComputeMetrics.TotalIdleStoppedCores != 100 {
+		t.Fatalf("minimal idle stopped cores=%d, want 100", plan.MinimalRenewal.MinimalComputeMetrics.TotalIdleStoppedCores)
 	}
 }
 

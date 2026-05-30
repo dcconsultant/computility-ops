@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"sort"
@@ -123,27 +124,31 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	excludedPSAMatcher := newPSAMatcher()
 	excludedPSACanonical := make([]string, 0, len(in.ExcludedPSAs))
 	for _, psa := range in.ExcludedPSAs {
-		n := normalizeText(psa)
-		if n == "" {
-			continue
+		added := false
+		for _, n := range splitPSATokens(psa) {
+			if !excludedPSAMatcher.AddNormalized(n) {
+				continue
+			}
+			added = true
 		}
-		if !excludedPSAMatcher.AddNormalized(n) {
-			continue
+		if added {
+			excludedPSACanonical = append(excludedPSACanonical, strings.TrimSpace(psa))
 		}
-		excludedPSACanonical = append(excludedPSACanonical, strings.TrimSpace(psa))
 	}
 
 	idleStoppedPSAMatcher := newPSAMatcher()
 	idleStoppedPSACanonical := make([]string, 0, len(in.IdleStoppedPSAs))
 	for _, psa := range in.IdleStoppedPSAs {
-		n := normalizeText(psa)
-		if n == "" {
-			continue
+		added := false
+		for _, n := range splitPSATokens(psa) {
+			if !idleStoppedPSAMatcher.AddNormalized(n) {
+				continue
+			}
+			added = true
 		}
-		if !idleStoppedPSAMatcher.AddNormalized(n) {
-			continue
+		if added {
+			idleStoppedPSACanonical = append(idleStoppedPSACanonical, strings.TrimSpace(psa))
 		}
-		idleStoppedPSACanonical = append(idleStoppedPSACanonical, strings.TrimSpace(psa))
 	}
 
 	overallRates, err := s.datasetRepo.ListOverallFailureRates(ctx)
@@ -1389,9 +1394,27 @@ func (m *psaMatcher) MatchRaw(raw string) bool {
 }
 
 func splitPSATokens(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	if strings.HasPrefix(raw, "[") && strings.HasSuffix(raw, "]") {
+		var arr []string
+		if err := json.Unmarshal([]byte(raw), &arr); err == nil {
+			out := make([]string, 0, len(arr))
+			for _, p := range arr {
+				if n := normalizePSAToken(p); n != "" {
+					out = append(out, n)
+				}
+			}
+			if len(out) > 0 {
+				return out
+			}
+		}
+	}
 	parts := strings.FieldsFunc(raw, func(r rune) bool {
 		switch r {
-		case ',', '，', ';', '；':
+		case ',', '，', ';', '；', '\n', '\t':
 			return true
 		default:
 			return false
@@ -1399,12 +1422,33 @@ func splitPSATokens(raw string) []string {
 	})
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
-		n := normalizeText(p)
+		n := normalizePSAToken(p)
 		if n != "" {
 			out = append(out, n)
 		}
 	}
 	return out
+}
+
+func normalizePSAToken(v string) string {
+	n := strings.ToLower(strings.TrimSpace(v))
+	n = strings.Trim(n, "\"'")
+	n = strings.ReplaceAll(n, "\\", "/")
+	n = strings.ReplaceAll(n, " ", "")
+	n = strings.ReplaceAll(n, "_", "")
+	n = strings.ReplaceAll(n, "-", "")
+	for strings.Contains(n, "//") {
+		n = strings.ReplaceAll(n, "//", "/")
+	}
+	if strings.Contains(n, "/") {
+		if !strings.HasPrefix(n, "/") {
+			n = "/" + n
+		}
+		if len(n) > 1 {
+			n = strings.TrimRight(n, "/")
+		}
+	}
+	return n
 }
 
 func defaultPlanSettings() domain.RenewalPlanSettings {
