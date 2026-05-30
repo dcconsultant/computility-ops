@@ -214,6 +214,7 @@ export default function PlanPage() {
         target_date: settings.target_date,
         excluded_environments: settings.excluded_environments,
         excluded_psas: settings.excluded_psas,
+        idle_stopped_psas: settings.idle_stopped_psas,
         requirements: settings.requirements,
         domestic_budget: settings.domestic_budget,
         india_budget: settings.india_budget
