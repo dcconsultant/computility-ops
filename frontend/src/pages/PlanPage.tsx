@@ -343,7 +343,7 @@ export default function PlanPage() {
       width: 180
     },
     {
-      title: '排除环境',
+      title: '续保排除环境',
       dataIndex: 'excluded_environments',
       render: (v: string[]) => (v && v.length ? v.join('、') : '-'),
       width: 160
@@ -652,7 +652,7 @@ export default function PlanPage() {
                   </Space>
 
                   <Space wrap>
-                    <Text>排除环境</Text>
+                    <Text>续保排除环境</Text>
                     {settingsEditing ? (
                       <Input style={{ width: 300 }} value={(settings.excluded_environments || []).join(',')} onChange={(e) => onSettingListChange('excluded_environments', e.target.value)} placeholder="开发,测试" />
                     ) : (
@@ -670,9 +670,9 @@ export default function PlanPage() {
                   </Space>
 
                   <Space wrap>
-                    <Text>闲置停用PSA</Text>
+                    <Text>L0级Buffer PSA</Text>
                     {settingsEditing ? (
-                      <Input style={{ width: 300 }} value={(settings.idle_stopped_psas || []).join(',')} onChange={(e) => onSettingListChange('idle_stopped_psas', e.target.value)} placeholder="仅用于最小化续保后备算力" />
+                      <Input style={{ width: 300 }} value={(settings.idle_stopped_psas || []).join(',')} onChange={(e) => onSettingListChange('idle_stopped_psas', e.target.value)} placeholder="仅用于最小化续保L0级Buffer算力" />
                     ) : (
                       <Text>{(settings.idle_stopped_psas || []).join('、') || '-'}</Text>
                     )}
@@ -756,7 +756,7 @@ export default function PlanPage() {
                       style={{ width: 140 }}
                       value={queryExcludedEnv}
                       onChange={(e) => setQueryExcludedEnv(e.target.value)}
-                      placeholder="排除环境"
+                      placeholder="续保排除环境"
                       allowClear
                     />
                     <Button type="primary" onClick={reloadPlans} loading={listLoading}>搜索</Button>

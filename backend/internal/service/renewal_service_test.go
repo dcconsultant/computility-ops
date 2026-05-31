@@ -362,6 +362,7 @@ func TestRenewalService_CreatePlan_CountsIdleStoppedPSAOutsideExcludedEnvironmen
 
 	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
 		{SN: "ACTIVE", ConfigType: "c1", PSA: "/active", WarrantyEndDate: "2026-12-31", Environment: "生产"},
+		{SN: "DEV", ConfigType: "c1", PSA: "/dev", WarrantyEndDate: "2026-12-31", Environment: "开发"},
 		{SN: "IDLE", ConfigType: "c1", PSA: "/idle/sub", Environment: "开发"},
 		{SN: "R1", ConfigType: "c1", PSA: "/need", WarrantyEndDate: "2025-01-01", Environment: "生产"},
 	})
@@ -393,6 +394,12 @@ func TestRenewalService_CreatePlan_CountsIdleStoppedPSAOutsideExcludedEnvironmen
 	}
 	if got := plan.MinimalRenewal.MinimalComputeMetrics.TotalIdleStoppedCores; got != 100 {
 		t.Fatalf("idle stopped cores=%d, want 100", got)
+	}
+	if got := plan.MinimalRenewal.MinimalComputeMetrics.TotalCurrentCores; got != 300 {
+		t.Fatalf("current cores=%d, want excluded environment compute counted in current total", got)
+	}
+	if plan.CoveredComputeCores != 100 {
+		t.Fatalf("covered compute cores=%d, want excluded environment kept out of renewal target coverage", plan.CoveredComputeCores)
 	}
 }
 

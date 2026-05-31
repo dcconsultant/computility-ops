@@ -139,7 +139,7 @@ export default function ResultPage() {
 
           <Space direction="vertical" size={4}>
             <Text type="secondary">
-              排除环境：{(plan.excluded_environments || []).join('、') || '无'}
+              续保排除环境：{(plan.excluded_environments || []).join('、') || '无'}
             </Text>
             <Text type="secondary">
               排除PSA：{(plan.excluded_psas || []).join('、') || '无'}

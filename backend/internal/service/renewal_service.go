@@ -334,9 +334,7 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			}
 			continue
 		}
-		if excludedSet[normalizeEnv(srv.Environment)] {
-			continue
-		}
+		isRenewalExcludedEnv := excludedSet[normalizeEnv(srv.Environment)]
 		if excludedPSAMatcher.MatchRaw(srv.PSA) {
 			nonRenewalItems = append(nonRenewalItems, domain.NonRenewalItem{
 				SN:           srv.SN,
@@ -381,12 +379,15 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		}
 
 		gpuCards := pkg.GPUCardCount
+		if bucket == "compute" {
+			currentComputeByRegion[region] += cores
+		}
+		if isRenewalExcludedEnv {
+			continue
+		}
 		if bucket == "gpu" {
 			gpuCurrentCards += gpuCards
 			gpuCurrentServers++
-		}
-		if bucket == "compute" {
-			currentComputeByRegion[region] += cores
 		}
 		if !wd.Before(targetDate) {
 			// 未过保：计入目标覆盖基线，但不进入续保方案列表

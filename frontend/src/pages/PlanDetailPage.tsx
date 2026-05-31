@@ -92,7 +92,7 @@ export default function PlanDetailPage() {
               {minimalVariant && <Tag color="green">最小化入选台数: {formatInt(minimalVariant.selected_count)}</Tag>}
             </Space>
             <div style={{ marginTop: 12 }}>
-              <Text type="secondary">排除环境：{(plan.excluded_environments || []).join('、') || '-'}；排除PSA：{(plan.excluded_psas || []).join('、') || '-'}；闲置停用PSA：{(plan.idle_stopped_psas || []).join('、') || '-'}</Text>
+              <Text type="secondary">续保排除环境：{(plan.excluded_environments || []).join('、') || '-'}；排除PSA：{(plan.excluded_psas || []).join('、') || '-'}；L0级Buffer PSA：{(plan.idle_stopped_psas || []).join('、') || '-'}</Text>
             </div>
           </Card>
 
@@ -145,8 +145,8 @@ function VariantView({ plan, variant, variantKey, unitPrices, loading }: { plan:
           <Row gutter={12} style={{ marginTop: 12 }}>
             <Col span={6}><Statistic title="国内最小化续保算力" value={formatInt(metrics.domestic_minimal_renew_cores)} suffix="核" /></Col>
             <Col span={6}><Statistic title="印度最小化续保算力" value={formatInt(metrics.india_minimal_renew_cores)} suffix="核" /></Col>
-            <Col span={6}><Statistic title="闲置停用算力" value={formatInt(metrics.total_idle_stopped_cores)} suffix="核" /></Col>
-            <Col span={6}><Statistic title="现有算力总量" value={formatInt(metrics.total_current_cores)} suffix="核" /></Col>
+            <Col span={6}><Statistic title="L0级Buffer算力" value={formatInt(metrics.total_idle_stopped_cores)} suffix="核" /></Col>
+            <Col span={6}><Statistic title="在用算力总量" value={formatInt(metrics.total_current_cores)} suffix="核" /></Col>
           </Row>
         </Card>
       )}
