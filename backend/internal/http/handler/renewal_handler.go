@@ -172,9 +172,16 @@ func (h *RenewalHandler) ExportPlan(c *gin.Context) {
 		return
 	}
 
-	filename := exportFilename(plan, format)
+	variantName := c.DefaultQuery("variant", "full")
+	exportPlan, err := selectRenewalExportVariant(plan, variantName)
+	if err != nil {
+		fail(c, 40001, err.Error())
+		return
+	}
+
+	filename := exportFilename(exportPlan, format, variantName)
 	if format == "csv" {
-		buf, err := buildCSV(plan)
+		buf, err := buildCSV(exportPlan)
 		if err != nil {
 			fail(c, 50001, err.Error())
 			return
@@ -184,7 +191,7 @@ func (h *RenewalHandler) ExportPlan(c *gin.Context) {
 		return
 	}
 
-	buf, err := buildXLSX(plan)
+	buf, err := buildXLSX(exportPlan)
 	if err != nil {
 		fail(c, 50001, err.Error())
 		return
@@ -205,12 +212,44 @@ func (h *RenewalHandler) ExportNonRenewal(c *gin.Context) {
 		fail(c, 50001, err.Error())
 		return
 	}
-	buf, err := buildNonRenewalXLSX(plan)
+	variantName := c.DefaultQuery("variant", "full")
+	exportPlan, err := selectRenewalExportVariant(plan, variantName)
+	if err != nil {
+		fail(c, 40001, err.Error())
+		return
+	}
+	buf, err := buildNonRenewalXLSX(exportPlan)
 	if err != nil {
 		fail(c, 50001, err.Error())
 		return
 	}
-	filename := fmt.Sprintf("renewal_non_renewal_%s.xlsx", sanitizeFilenameToken(plan.PlanID))
+	filename := fmt.Sprintf("renewal_non_renewal_%s_%s.xlsx", sanitizeFilenameToken(variantName), sanitizeFilenameToken(plan.PlanID))
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buf.Bytes())
+}
+
+func (h *RenewalHandler) ExportComparisonReduced(c *gin.Context) {
+	c.Set("audit_action", "renewals.export_comparison_reduced")
+	planID := c.Param("plan_id")
+	plan, err := h.service.GetPlan(c.Request.Context(), planID)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			fail(c, 40401, err.Error())
+			return
+		}
+		fail(c, 50001, err.Error())
+		return
+	}
+	if plan.Comparison == nil {
+		fail(c, 40001, "comparison is not available")
+		return
+	}
+	buf, err := buildComparisonReducedXLSX(plan)
+	if err != nil {
+		fail(c, 50001, err.Error())
+		return
+	}
+	filename := fmt.Sprintf("renewal_comparison_reduced_%s.xlsx", sanitizeFilenameToken(plan.PlanID))
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buf.Bytes())
 }
@@ -260,6 +299,45 @@ func buildCSV(plan domain.RenewalPlan) (*bytes.Buffer, error) {
 		return nil, err
 	}
 	return buf, nil
+}
+
+func selectRenewalExportVariant(plan domain.RenewalPlan, variantName string) (domain.RenewalPlan, error) {
+	name := strings.ToLower(strings.TrimSpace(variantName))
+	if name == "" {
+		name = "full"
+	}
+	switch name {
+	case "full":
+		if plan.FullRenewal == nil {
+			return plan, nil
+		}
+		return renewalPlanFromVariant(plan, *plan.FullRenewal), nil
+	case "minimal":
+		if plan.MinimalRenewal == nil {
+			return domain.RenewalPlan{}, fmt.Errorf("minimal renewal variant is not available")
+		}
+		return renewalPlanFromVariant(plan, *plan.MinimalRenewal), nil
+	default:
+		return domain.RenewalPlan{}, fmt.Errorf("unsupported variant: %s", variantName)
+	}
+}
+
+func renewalPlanFromVariant(base domain.RenewalPlan, variant domain.RenewalPlanVariant) domain.RenewalPlan {
+	out := base
+	if variant.TargetCores > 0 {
+		out.TargetCores = variant.TargetCores
+	}
+	out.RequiredComputeCores = variant.RequiredComputeCores
+	out.CoveredComputeCores = variant.CoveredComputeCores
+	out.SelectedCores = variant.SelectedCores
+	out.SelectedStorageTB = variant.SelectedStorageTB
+	out.SelectedCount = variant.SelectedCount
+	out.GPURenewalCards = variant.GPURenewalCards
+	out.GPURenewalServers = variant.GPURenewalServers
+	out.Items = append([]domain.RenewalItem(nil), variant.Items...)
+	out.NonRenewalItems = append([]domain.NonRenewalItem(nil), variant.NonRenewalItems...)
+	out.Sections = append([]domain.RenewalPlanSection(nil), variant.Sections...)
+	return out
 }
 
 func buildXLSX(plan domain.RenewalPlan) (*bytes.Buffer, error) {
@@ -444,7 +522,35 @@ func buildNonRenewalXLSX(plan domain.RenewalPlan) (*bytes.Buffer, error) {
 	return buf, nil
 }
 
-func exportFilename(plan domain.RenewalPlan, format string) string {
+func buildComparisonReducedXLSX(plan domain.RenewalPlan) (*bytes.Buffer, error) {
+	f := excelize.NewFile()
+	defer func() { _ = f.Close() }()
+	sheet := f.GetSheetName(0)
+	if err := f.SetSheetRow(sheet, "A1", &[]string{"plan_id", "target_date", "full_renewal_count", "minimal_renewal_count", "reduced_count", "saved_amount", "saved_ratio"}); err != nil {
+		return nil, err
+	}
+	cmp := plan.Comparison
+	if err := f.SetSheetRow(sheet, "A2", &[]any{plan.PlanID, plan.TargetDate, cmp.FullRenewalCount, cmp.MinimalRenewalCount, cmp.ReducedCount, cmp.SavedAmount, cmp.SavedRatio}); err != nil {
+		return nil, err
+	}
+	headers := []string{"sn", "idc", "psa", "config_type", "cpu_logical_cores", "full_rank", "reason", "saved_amount"}
+	if err := f.SetSheetRow(sheet, "A4", &headers); err != nil {
+		return nil, err
+	}
+	for i, item := range cmp.ReducedRenewalItems {
+		cell, _ := excelize.CoordinatesToCellName(1, i+5)
+		if err := f.SetSheetRow(sheet, cell, &[]any{item.SN, item.IDC, item.PSA, item.ConfigType, item.CPULogicalCores, item.FullRank, item.Reason, item.SavedAmount}); err != nil {
+			return nil, err
+		}
+	}
+	buf, err := f.WriteToBuffer()
+	if err != nil {
+		return nil, err
+	}
+	return buf, nil
+}
+
+func exportFilename(plan domain.RenewalPlan, format string, variantName string) string {
 	ts := time.Now().Format("200601021504")
 	if unixSec, err := strconv.ParseInt(strings.TrimSpace(plan.PlanID), 10, 64); err == nil {
 		ts = time.Unix(unixSec, 0).Format("200601021504")
@@ -459,7 +565,7 @@ func exportFilename(plan domain.RenewalPlan, format string) string {
 		plan.TargetCores,
 		safeNumberToken(plan.WarmTargetStorageTB),
 		safeNumberToken(plan.HotTargetStorageTB),
-		sanitizeFilenameToken(plan.PlanID),
+		sanitizeFilenameToken(plan.PlanID)+"_"+sanitizeFilenameToken(variantName),
 		ts,
 		format,
 	)

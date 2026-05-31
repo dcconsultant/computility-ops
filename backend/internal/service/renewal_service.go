@@ -313,10 +313,30 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	idleStoppedComputeByRegion := map[string]int{"domestic": 0, "india": 0}
 
 	for _, srv := range servers {
+		isIdleStoppedPSA := idleStoppedPSAMatcher.MatchRaw(srv.PSA)
+		if isIdleStoppedPSA {
+			serverConfigKey := normalizeConfigTypeKey(srv.ConfigType)
+			pkg, ok := pkgMap[serverConfigKey]
+			if !ok {
+				unmatchedConfigSet[strings.TrimSpace(srv.ConfigType)] = true
+				continue
+			}
+			cores := pkg.CPULogicalCores
+			if cores <= 0 {
+				return domain.RenewalPlan{}, fmt.Errorf("invalid cpu_logical_cores for config_type=%s", srv.ConfigType)
+			}
+			if normalizeBucket(pkg.SceneCategory) == "compute" {
+				region := "domestic"
+				if isIndiaIDC(srv.IDC) {
+					region = "india"
+				}
+				idleStoppedComputeByRegion[region] += cores
+			}
+			continue
+		}
 		if excludedSet[normalizeEnv(srv.Environment)] {
 			continue
 		}
-		isIdleStoppedPSA := idleStoppedPSAMatcher.MatchRaw(srv.PSA)
 		if excludedPSAMatcher.MatchRaw(srv.PSA) {
 			nonRenewalItems = append(nonRenewalItems, domain.NonRenewalItem{
 				SN:           srv.SN,
@@ -352,13 +372,6 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		if isIndiaIDC(srv.IDC) {
 			region = "india"
 		}
-		if isIdleStoppedPSA {
-			if bucket == "compute" {
-				idleStoppedComputeByRegion[region] += cores
-			}
-			continue
-		}
-
 		if strings.TrimSpace(srv.WarrantyEndDate) == "" {
 			continue
 		}

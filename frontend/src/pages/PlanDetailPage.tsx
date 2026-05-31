@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Card, Col, Row, Space, Statistic, Table, Tabs, Tag, Typography, message } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
-import { exportNonRenewalPlan, exportPlan, getPlan, listRenewalUnitPrices } from '../api';
+import { exportComparisonReducedPlan, exportNonRenewalPlan, exportPlan, getPlan, listRenewalUnitPrices } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
 import type { NonRenewalItem, PlanItem, ReducedRenewalItem, RenewalPlan, RenewalPlanVariant, RenewalUnitPrice } from '../types';
 
@@ -101,13 +101,13 @@ export default function PlanDetailPage() {
               {
                 key: 'full',
                 label: '全量续保方案',
-                children: <VariantView plan={plan} variant={fullVariant} unitPrices={unitPrices} loading={loading} allowExport />
+                children: <VariantView plan={plan} variant={fullVariant} variantKey="full" unitPrices={unitPrices} loading={loading} />
               },
               {
                 key: 'minimal',
                 label: '最小化续保方案',
                 children: minimalVariant
-                  ? <VariantView plan={plan} variant={minimalVariant} unitPrices={unitPrices} loading={loading} />
+                  ? <VariantView plan={plan} variant={minimalVariant} variantKey="minimal" unitPrices={unitPrices} loading={loading} />
                   : <Alert type="warning" showIcon message="最小化续保方案未生成" description={plan.minimal_renewal_error || '缺少计算最小化续保所需的故障率数据。'} />
               },
               {
@@ -125,7 +125,7 @@ export default function PlanDetailPage() {
   );
 }
 
-function VariantView({ plan, variant, unitPrices, loading, allowExport = false }: { plan: RenewalPlan; variant: RenewalPlanVariant; unitPrices: RenewalUnitPrice[]; loading: boolean; allowExport?: boolean }) {
+function VariantView({ plan, variant, variantKey, unitPrices, loading }: { plan: RenewalPlan; variant: RenewalPlanVariant; variantKey: 'full' | 'minimal'; unitPrices: RenewalUnitPrice[]; loading: boolean }) {
   const summaryRows = useMemo(() => buildSummaryRows(plan, variant), [plan, variant]);
   const costRows = useMemo(() => buildCostRows(variant.items || [], unitPrices), [variant, unitPrices]);
   const totalRenewalAmount = useMemo(() => costRows.reduce((sum, r) => sum + r.amount, 0), [costRows]);
@@ -204,7 +204,7 @@ function VariantView({ plan, variant, unitPrices, loading, allowExport = false }
         </Space>
       </Card>
 
-      <Card title="续保清单" loading={loading} extra={allowExport ? <Button onClick={() => exportPlan(plan.plan_id, 'xlsx')}>下载Excel</Button> : null}>
+      <Card title="续保清单" loading={loading} extra={<Button icon={<DownloadOutlined />} onClick={() => exportPlan(plan.plan_id, 'xlsx', variantKey)}>下载Excel</Button>}>
         <Table
           rowKey="sn"
           dataSource={variant.items || []}
@@ -217,7 +217,7 @@ function VariantView({ plan, variant, unitPrices, loading, allowExport = false }
       <Card
         title="不续保清单（含原因）"
         loading={loading}
-        extra={allowExport ? <Button onClick={() => exportNonRenewalPlan(plan.plan_id)}>下载Excel</Button> : null}
+        extra={<Button icon={<DownloadOutlined />} onClick={() => exportNonRenewalPlan(plan.plan_id, variantKey)}>下载Excel</Button>}
       >
         <Table
           rowKey={(r: NonRenewalItem) => `${r.sn}-${r.reason_code}-${r.rank_in_bucket || 0}`}
@@ -255,7 +255,10 @@ function ComparisonView({ plan }: { plan: RenewalPlan }) {
           ]}
         />
       </Card>
-      <Card title={`减少续保清单（${formatInt((cmp.reduced_renewal_items || []).length)}）`}>
+      <Card
+        title={`减少续保清单（${formatInt((cmp.reduced_renewal_items || []).length)}）`}
+        extra={<Button icon={<DownloadOutlined />} onClick={() => exportComparisonReducedPlan(plan.plan_id)}>下载Excel</Button>}
+      >
         <Table<ReducedRenewalItem>
           rowKey="sn"
           dataSource={cmp.reduced_renewal_items || []}

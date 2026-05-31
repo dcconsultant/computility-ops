@@ -353,6 +353,49 @@ func TestRenewalService_CreatePlan_BuildsMinimalRenewalComparison(t *testing.T) 
 	}
 }
 
+func TestRenewalService_CreatePlan_CountsIdleStoppedPSAOutsideExcludedEnvironment(t *testing.T) {
+	ctx := context.Background()
+	serverRepo := mem.NewServerRepo()
+	datasetRepo := mem.NewDatasetRepo()
+	renewalRepo := mem.NewRenewalRepo()
+	mustSeedUnitPrices(t, renewalRepo)
+
+	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
+		{SN: "ACTIVE", ConfigType: "c1", PSA: "/active", WarrantyEndDate: "2026-12-31", Environment: "生产"},
+		{SN: "IDLE", ConfigType: "c1", PSA: "/idle/sub", Environment: "开发"},
+		{SN: "R1", ConfigType: "c1", PSA: "/need", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+	})
+	_ = datasetRepo.ReplaceHostPackages(ctx, []domain.HostPackageConfig{{ConfigType: "c1", SceneCategory: "计算型", CPULogicalCores: 100, ArchStandardizedFactor: 1}})
+	_ = datasetRepo.ReplaceOverallFailureRates(ctx, []domain.FailureRateSummary{{
+		Period:           "year",
+		Year:             2026,
+		Scope:            "product",
+		Segment:          "non_storage",
+		OverWarrantyRate: 0.5,
+	}})
+
+	svc := NewRenewalService(serverRepo, datasetRepo, renewalRepo)
+	plan, err := svc.CreatePlan(ctx, CreatePlanInput{
+		TargetDate:           "2026-01-01",
+		ExcludedEnvironments: []string{"开发"},
+		Requirements: domain.RenewalRequirements{
+			Domestic: domain.RenewalRegionTargets{
+				Compute: domain.RenewalSceneTarget{Mode: domain.RenewalTargetModeManual, Target: 200},
+			},
+		},
+		IdleStoppedPSAs: []string{"/idle"},
+	})
+	if err != nil {
+		t.Fatalf("CreatePlan() error = %v", err)
+	}
+	if plan.MinimalRenewal == nil || plan.MinimalRenewal.MinimalComputeMetrics == nil {
+		t.Fatalf("expected minimal renewal metrics, got %+v", plan.MinimalRenewal)
+	}
+	if got := plan.MinimalRenewal.MinimalComputeMetrics.TotalIdleStoppedCores; got != 100 {
+		t.Fatalf("idle stopped cores=%d, want 100", got)
+	}
+}
+
 func TestRenewalService_ListPlans_ReturnsSummaryWithoutHeavyDetails(t *testing.T) {
 	ctx := context.Background()
 	renewalRepo := mem.NewRenewalRepo()

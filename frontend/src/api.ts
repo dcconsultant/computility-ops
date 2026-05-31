@@ -398,12 +398,18 @@ export async function deletePlan(planId: string) {
   return data;
 }
 
-export function exportPlan(planId: string, format: 'xlsx' | 'csv') {
-  window.open(`/api/v1/renewals/plans/${planId}/export?format=${format}`, '_blank');
+export function exportPlan(planId: string, format: 'xlsx' | 'csv', variant: 'full' | 'minimal' = 'full') {
+  const params = new URLSearchParams({ format, variant });
+  window.open(`/api/v1/renewals/plans/${planId}/export?${params.toString()}`, '_blank');
 }
 
-export function exportNonRenewalPlan(planId: string) {
-  window.open(`/api/v1/renewals/plans/${planId}/non-renewal/export`, '_blank');
+export function exportNonRenewalPlan(planId: string, variant: 'full' | 'minimal' = 'full') {
+  const params = new URLSearchParams({ variant });
+  window.open(`/api/v1/renewals/plans/${planId}/non-renewal/export?${params.toString()}`, '_blank');
+}
+
+export function exportComparisonReducedPlan(planId: string) {
+  window.open(`/api/v1/renewals/plans/${planId}/comparison/reduced/export`, '_blank');
 }
 
 export async function listRenewalUnitPrices() {
