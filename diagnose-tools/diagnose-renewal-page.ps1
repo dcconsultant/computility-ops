@@ -39,6 +39,12 @@ function Test-Api {
     $body = [string]$resp.Content
     $apiCode = ""
     $apiMessage = ""
+    $dataTotal = ""
+    $dataListCount = ""
+    $contentPreview = ($body -replace '\s+', ' ').Trim()
+    if ($contentPreview.Length -gt 160) {
+      $contentPreview = $contentPreview.Substring(0, 160)
+    }
     try {
       $json = $body | ConvertFrom-Json
       if ($null -ne $json.code) {
@@ -47,11 +53,14 @@ function Test-Api {
       if ($null -ne $json.message) {
         $apiMessage = [string]$json.message
       }
-    } catch {
-      $apiMessage = ($body -replace '\s+', ' ').Trim()
-      if ($apiMessage.Length -gt 120) {
-        $apiMessage = $apiMessage.Substring(0, 120)
+      if ($null -ne $json.data -and $null -ne $json.data.total) {
+        $dataTotal = [string]$json.data.total
       }
+      if ($null -ne $json.data -and $null -ne $json.data.list) {
+        $dataListCount = [string]@($json.data.list).Count
+      }
+    } catch {
+      $apiMessage = $contentPreview
     }
     return [PSCustomObject]@{
       Url = $url
@@ -59,21 +68,26 @@ function Test-Api {
       Status = $status
       ApiCode = $apiCode
       Message = $apiMessage
+      DataTotal = $dataTotal
+      DataListCount = $dataListCount
+      ContentPreview = $contentPreview
       Error = ""
     }
   } catch {
     $status = ""
     $message = $_.Exception.Message
+    $contentPreview = ""
     if ($_.Exception.Response) {
       try {
         $status = [int]$_.Exception.Response.StatusCode
         $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
         $body = $reader.ReadToEnd()
         if (![string]::IsNullOrWhiteSpace($body)) {
-          $message = ($body -replace '\s+', ' ').Trim()
-          if ($message.Length -gt 120) {
-            $message = $message.Substring(0, 120)
+          $contentPreview = ($body -replace '\s+', ' ').Trim()
+          if ($contentPreview.Length -gt 160) {
+            $contentPreview = $contentPreview.Substring(0, 160)
           }
+          $message = $contentPreview
         }
       } catch {}
     }
@@ -83,6 +97,9 @@ function Test-Api {
       Status = $status
       ApiCode = ""
       Message = ""
+      DataTotal = ""
+      DataListCount = ""
+      ContentPreview = $contentPreview
       Error = $message
     }
   }
@@ -92,10 +109,33 @@ function Print-Api-Result {
   param([object]$Result)
   $state = if ($Result.Ok -and ($Result.ApiCode -eq "" -or $Result.ApiCode -eq "0")) { "OK" } else { "FAIL" }
   $detail = if ($Result.Error) { $Result.Error } else { $Result.Message }
-  Write-Host ("{0} status={1} api_code={2} path={3}" -f $state, $Result.Status, $Result.ApiCode, ([Uri]$Result.Url).PathAndQuery)
-  if (![string]::IsNullOrWhiteSpace($detail) -and $detail -ne "ok") {
+  $apiMsg = if ([string]::IsNullOrWhiteSpace($Result.Message)) { "-" } else { $Result.Message }
+  $listInfo = ""
+  if (![string]::IsNullOrWhiteSpace($Result.DataListCount) -or ![string]::IsNullOrWhiteSpace($Result.DataTotal)) {
+    $listInfo = " list_count=$($Result.DataListCount) total=$($Result.DataTotal)"
+  }
+  Write-Host ("{0} status={1} api_code={2} api_msg={3}{4} path={5}" -f $state, $Result.Status, $Result.ApiCode, $apiMsg, $listInfo, ([Uri]$Result.Url).PathAndQuery)
+  if ($state -eq "FAIL" -and ![string]::IsNullOrWhiteSpace($detail) -and $detail -ne "ok") {
     Write-Host ("  detail: {0}" -f $detail)
   }
+}
+
+function Find-ResultByPath {
+  param(
+    [object[]]$Results,
+    [string]$Path
+  )
+  foreach ($result in $Results) {
+    if (([Uri]$result.Url).PathAndQuery -eq $Path) {
+      return $result
+    }
+  }
+  return $null
+}
+
+function Is-Api-Ok {
+  param([object]$Result)
+  return ($null -ne $Result -and $Result.Ok -and ($Result.ApiCode -eq "" -or $Result.ApiCode -eq "0"))
 }
 
 $paths = @(
@@ -195,6 +235,8 @@ if (![string]::IsNullOrWhiteSpace($LogPath)) {
 Write-Section "Summary"
 $frontendFail = @($frontendResults | Where-Object { -not $_.Ok -or ($_.ApiCode -ne "" -and $_.ApiCode -ne "0") }).Count
 $backendFail = @($backendResults | Where-Object { -not $_.Ok -or ($_.ApiCode -ne "" -and $_.ApiCode -ne "0") }).Count
+$frontendPlans = Find-ResultByPath -Results $frontendResults -Path "/api/v1/renewals/plans"
+$backendPlans = Find-ResultByPath -Results $backendResults -Path "/api/v1/renewals/plans"
 if ($backendFail -eq 0 -and $frontendFail -gt 0) {
   Write-Host "LIKELY frontend proxy/static deployment problem: backend direct APIs are OK, proxied APIs failed."
 } elseif ($backendFail -gt 0) {
@@ -203,4 +245,21 @@ if ($backendFail -eq 0 -and $frontendFail -gt 0) {
   Write-Host "APIs look OK from this host. If browser still fails, check browser Network tab for actual host/base URL."
 } else {
   Write-Host "Mixed result. Share Stage 1/2 status lines only."
+}
+
+Write-Host ""
+Write-Host "Focused /api/v1/renewals/plans diagnosis:"
+if ((Is-Api-Ok $backendPlans) -and -not (Is-Api-Ok $frontendPlans)) {
+  Write-Host "PLANS_PROBLEM=frontend_proxy_or_base_url"
+  Write-Host "Share: Stage 1 renewals/plans line and the frontend URL in the browser address bar."
+} elseif (-not (Is-Api-Ok $backendPlans)) {
+  Write-Host "PLANS_PROBLEM=backend_or_plan_payload"
+  Write-Host ("Backend plans detail: status={0} api_code={1} api_msg={2} detail={3}" -f $backendPlans.Status, $backendPlans.ApiCode, $backendPlans.Message, $backendPlans.Error)
+  Write-Host "If api_msg mentions invalid character, gz64, gzip, compressed json, max_allowed_packet, or unmarshal, it is likely historical plan payload compatibility/corruption."
+} elseif ((Is-Api-Ok $backendPlans) -and (Is-Api-Ok $frontendPlans)) {
+  Write-Host "PLANS_PROBLEM=not_reproduced_by_script"
+  Write-Host ("Backend list_count={0} total={1}; Frontend list_count={2} total={3}" -f $backendPlans.DataListCount, $backendPlans.DataTotal, $frontendPlans.DataListCount, $frontendPlans.DataTotal)
+  Write-Host "If the page still fails, check browser Network for the actual request host and path."
+} else {
+  Write-Host "PLANS_PROBLEM=mixed_or_unknown"
 }
