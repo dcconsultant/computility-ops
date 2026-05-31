@@ -23,9 +23,9 @@ type ResourcePlanningService struct {
 }
 
 const (
-	resourcePlanningLogDir      = "backend/logs/resource-planning"
-	resourcePlanningConfigFile  = "config.latest.json"
-	resourcePlanningResultFile  = "result.latest.json"
+	resourcePlanningLogDir     = "backend/logs/resource-planning"
+	resourcePlanningConfigFile = "config.latest.json"
+	resourcePlanningResultFile = "result.latest.json"
 )
 
 func NewResourcePlanningService(serverRepo repository.ServerRepo, datasetRepo repository.DatasetRepo, renewalRepo repository.RenewalPlanRepo) *ResourcePlanningService {
@@ -46,9 +46,9 @@ type ResourcePlanningRequest struct {
 	HotStorageDemandTB           float64 `json:"hot_storage_demand_tb"`
 	GPUDemandCards               int     `json:"gpu_demand_cards"`
 	CabinetAndOtherCostCNY       float64 `json:"cabinet_and_other_cost_cny"`
-	AnnualDepreciationCNY     float64  `json:"annual_depreciation_cny"`
-	DisposalPSAs              string   `json:"disposal_psas"`
-	NonBusinessPSAs           string   `json:"non_business_psas"`
+	AnnualDepreciationCNY        float64 `json:"annual_depreciation_cny"`
+	DisposalPSAs                 string  `json:"disposal_psas"`
+	NonBusinessPSAs              string  `json:"non_business_psas"`
 	// UI persistence fields (3.2 改配利旧：按场景手工录入)
 	ReconfigComputeServerCount *int     `json:"reconfig_compute_server_count,omitempty"`
 	ReconfigComputeCapacity    *int     `json:"reconfig_compute_capacity,omitempty"`
@@ -76,36 +76,36 @@ type ResourcePlanningRequest struct {
 	QuasiGPUCapacity        *int     `json:"quasi_gpu_capacity,omitempty"`
 	QuasiGPUCost            *float64 `json:"quasi_gpu_cost,omitempty"`
 	// UI persistence fields (已执行项目-新机采购：按场景手工录入)
-	ExecutedNewComputeServerCount *int     `json:"executed_new_compute_server_count,omitempty"`
-	ExecutedNewComputeCapacity    *int     `json:"executed_new_compute_capacity,omitempty"`
-	ExecutedNewComputeCost        *float64 `json:"executed_new_compute_cost,omitempty"`
-	ExecutedNewWarmServerCount    *int     `json:"executed_new_warm_server_count,omitempty"`
-	ExecutedNewWarmCapacity       *float64 `json:"executed_new_warm_capacity,omitempty"`
-	ExecutedNewWarmCost           *float64 `json:"executed_new_warm_cost,omitempty"`
-	ExecutedNewHotServerCount     *int     `json:"executed_new_hot_server_count,omitempty"`
-	ExecutedNewHotCapacity        *float64 `json:"executed_new_hot_capacity,omitempty"`
-	ExecutedNewHotCost            *float64 `json:"executed_new_hot_cost,omitempty"`
-	ExecutedNewGPUServerCount     *int     `json:"executed_new_gpu_server_count,omitempty"`
-	ExecutedNewGPUCapacity        *int     `json:"executed_new_gpu_capacity,omitempty"`
-	ExecutedNewGPUCost            *float64 `json:"executed_new_gpu_cost,omitempty"`
+	ExecutedNewComputeServerCount   *int     `json:"executed_new_compute_server_count,omitempty"`
+	ExecutedNewComputeCapacity      *int     `json:"executed_new_compute_capacity,omitempty"`
+	ExecutedNewComputeCost          *float64 `json:"executed_new_compute_cost,omitempty"`
+	ExecutedNewWarmServerCount      *int     `json:"executed_new_warm_server_count,omitempty"`
+	ExecutedNewWarmCapacity         *float64 `json:"executed_new_warm_capacity,omitempty"`
+	ExecutedNewWarmCost             *float64 `json:"executed_new_warm_cost,omitempty"`
+	ExecutedNewHotServerCount       *int     `json:"executed_new_hot_server_count,omitempty"`
+	ExecutedNewHotCapacity          *float64 `json:"executed_new_hot_capacity,omitempty"`
+	ExecutedNewHotCost              *float64 `json:"executed_new_hot_cost,omitempty"`
+	ExecutedNewGPUServerCount       *int     `json:"executed_new_gpu_server_count,omitempty"`
+	ExecutedNewGPUCapacity          *int     `json:"executed_new_gpu_capacity,omitempty"`
+	ExecutedNewGPUCost              *float64 `json:"executed_new_gpu_cost,omitempty"`
 	ExecutedNewPurchaseServerCount  int      `json:"executed_new_purchase_server_count"`
 	ExecutedNewPurchaseLogicalCores int      `json:"executed_new_purchase_logical_cores"`
 	ExecutedNewPurchaseWarmTB       float64  `json:"executed_new_purchase_warm_storage_tb"`
 	ExecutedNewPurchaseHotTB        float64  `json:"executed_new_purchase_hot_storage_tb"`
 	ExecutedNewPurchaseGPUCards     int      `json:"executed_new_purchase_gpu_cards"`
 	ExecutedNewPurchaseCostCNY      float64  `json:"executed_new_purchase_cost_cny"`
-	ReconfigDoneServerCount   *int     `json:"reconfig_done_server_count"`
-	ReconfigDoneLogicalCores  *int     `json:"reconfig_done_logical_cores"`
-	ReconfigDoneWarmStorageTB *float64 `json:"reconfig_done_warm_storage_tb"`
-	ReconfigDoneHotStorageTB  *float64 `json:"reconfig_done_hot_storage_tb"`
-	ReconfigDoneGPUCards      *int     `json:"reconfig_done_gpu_cards"`
-	ReconfigDoneCostCNY       *float64 `json:"reconfig_done_cost_cny"`
-	QuasiPurchaseServerCount  int      `json:"quasi_purchase_server_count"`
-	QuasiPurchaseLogicalCores int      `json:"quasi_purchase_logical_cores"`
-	QuasiPurchaseWarmTB       float64  `json:"quasi_purchase_warm_storage_tb"`
-	QuasiPurchaseHotTB        float64  `json:"quasi_purchase_hot_storage_tb"`
-	QuasiPurchaseGPUCards     int      `json:"quasi_purchase_gpu_cards"`
-	QuasiPurchaseCostCNY      float64  `json:"quasi_purchase_cost_cny"`
+	ReconfigDoneServerCount         *int     `json:"reconfig_done_server_count"`
+	ReconfigDoneLogicalCores        *int     `json:"reconfig_done_logical_cores"`
+	ReconfigDoneWarmStorageTB       *float64 `json:"reconfig_done_warm_storage_tb"`
+	ReconfigDoneHotStorageTB        *float64 `json:"reconfig_done_hot_storage_tb"`
+	ReconfigDoneGPUCards            *int     `json:"reconfig_done_gpu_cards"`
+	ReconfigDoneCostCNY             *float64 `json:"reconfig_done_cost_cny"`
+	QuasiPurchaseServerCount        int      `json:"quasi_purchase_server_count"`
+	QuasiPurchaseLogicalCores       int      `json:"quasi_purchase_logical_cores"`
+	QuasiPurchaseWarmTB             float64  `json:"quasi_purchase_warm_storage_tb"`
+	QuasiPurchaseHotTB              float64  `json:"quasi_purchase_hot_storage_tb"`
+	QuasiPurchaseGPUCards           int      `json:"quasi_purchase_gpu_cards"`
+	QuasiPurchaseCostCNY            float64  `json:"quasi_purchase_cost_cny"`
 }
 
 type ResourcePlanningResponse struct {
@@ -159,21 +159,21 @@ type ResourcePlanningScenePurchasePlan struct {
 }
 
 type ResourcePlanningNewPurchasePlan struct {
-	PackageConfigType       string                             `json:"package_config_type"`
-	PackageReleaseYear      int                                `json:"package_release_year"`
-	ServerCount             int                                `json:"server_count"`
-	CoveredLogicalCores     int                                `json:"covered_logical_cores"`
-	CoveredWarmStorageTB    float64                            `json:"covered_warm_storage_tb"`
-	CoveredHotStorageTB     float64                            `json:"covered_hot_storage_tb"`
-	CoveredGPUCards         int                                `json:"covered_gpu_cards"`
-	BaseDemandCores         int                                `json:"base_demand_cores"`
-	RoutineReplacementCores int                                `json:"routine_replacement_cores"`
-	ExtraReplacementCores   int                                `json:"extra_replacement_cores"`
-	TotalReplacementCores   int                                `json:"total_replacement_cores"`
-	PurchaseAmountCNY       float64                            `json:"purchase_amount_cny"`
-	AnnualCostCNY           float64                            `json:"annual_cost_cny"`
-	AnnualBudgetCNY         float64                            `json:"annual_budget_cny"`
-	ValueScore              float64                            `json:"value_score"`
+	PackageConfigType       string                              `json:"package_config_type"`
+	PackageReleaseYear      int                                 `json:"package_release_year"`
+	ServerCount             int                                 `json:"server_count"`
+	CoveredLogicalCores     int                                 `json:"covered_logical_cores"`
+	CoveredWarmStorageTB    float64                             `json:"covered_warm_storage_tb"`
+	CoveredHotStorageTB     float64                             `json:"covered_hot_storage_tb"`
+	CoveredGPUCards         int                                 `json:"covered_gpu_cards"`
+	BaseDemandCores         int                                 `json:"base_demand_cores"`
+	RoutineReplacementCores int                                 `json:"routine_replacement_cores"`
+	ExtraReplacementCores   int                                 `json:"extra_replacement_cores"`
+	TotalReplacementCores   int                                 `json:"total_replacement_cores"`
+	PurchaseAmountCNY       float64                             `json:"purchase_amount_cny"`
+	AnnualCostCNY           float64                             `json:"annual_cost_cny"`
+	AnnualBudgetCNY         float64                             `json:"annual_budget_cny"`
+	ValueScore              float64                             `json:"value_score"`
 	ScenePlans              []ResourcePlanningScenePurchasePlan `json:"scene_plans,omitempty"`
 }
 
@@ -257,6 +257,7 @@ type ResourcePlanningResultAnalysis struct {
 	AvailableCompute  int                                      `json:"available_compute_cores"`
 	AvailableWarmTB   float64                                  `json:"available_warm_storage_tb"`
 	AvailableHotTB    float64                                  `json:"available_hot_storage_tb"`
+	AvailableGPUCards int                                      `json:"available_gpu_cards"`
 }
 
 type reconfigSnapshotLite struct {
@@ -915,16 +916,17 @@ func calcResultAnalysis(req ResourcePlanningRequest, servers []domain.Server, pk
 	gpu.TotalCards = gpu.ReconfigCards + gpu.QuasiPurchaseCards + gpu.NewPurchaseCards + gpu.StockContinueCards
 
 	return ResourcePlanningResultAnalysis{
-		Amount:          amount,
-		Cost:            cost,
-		ComputeCapacity: compute,
-		WarmStorage:     warm,
-		HotStorage:      hot,
-		GPUCapacity:     gpu,
-		NonBusinessPSAs: nonBusinessPSAs,
-		AvailableCompute: availableCompute,
-		AvailableWarmTB:  round2RP(availableWarm),
-		AvailableHotTB:   round2RP(availableHot),
+		Amount:            amount,
+		Cost:              cost,
+		ComputeCapacity:   compute,
+		WarmStorage:       warm,
+		HotStorage:        hot,
+		GPUCapacity:       gpu,
+		NonBusinessPSAs:   nonBusinessPSAs,
+		AvailableCompute:  availableCompute,
+		AvailableWarmTB:   round2RP(availableWarm),
+		AvailableHotTB:    round2RP(availableHot),
+		AvailableGPUCards: availableGPU,
 	}
 }
 

@@ -592,18 +592,60 @@ export interface ResourcePlanningRequest {
   annual_depreciation_cny: number;
   disposal_psas: string;
   non_business_psas: string;
+  reconfig_compute_server_count?: number;
+  reconfig_compute_capacity?: number;
+  reconfig_compute_cost?: number;
+  reconfig_warm_server_count?: number;
+  reconfig_warm_capacity?: number;
+  reconfig_warm_cost?: number;
+  reconfig_hot_server_count?: number;
+  reconfig_hot_capacity?: number;
+  reconfig_hot_cost?: number;
+  reconfig_gpu_server_count?: number;
+  reconfig_gpu_capacity?: number;
+  reconfig_gpu_cost?: number;
   reconfig_done_server_count?: number;
   reconfig_done_logical_cores?: number;
   reconfig_done_warm_storage_tb?: number;
   reconfig_done_hot_storage_tb?: number;
   reconfig_done_gpu_cards?: number;
   reconfig_done_cost_cny?: number;
+  quasi_compute_server_count?: number;
+  quasi_compute_capacity?: number;
+  quasi_compute_cost?: number;
+  quasi_warm_server_count?: number;
+  quasi_warm_capacity?: number;
+  quasi_warm_cost?: number;
+  quasi_hot_server_count?: number;
+  quasi_hot_capacity?: number;
+  quasi_hot_cost?: number;
+  quasi_gpu_server_count?: number;
+  quasi_gpu_capacity?: number;
+  quasi_gpu_cost?: number;
   quasi_purchase_server_count: number;
   quasi_purchase_logical_cores: number;
   quasi_purchase_warm_storage_tb?: number;
   quasi_purchase_hot_storage_tb?: number;
   quasi_purchase_gpu_cards?: number;
   quasi_purchase_cost_cny: number;
+  executed_new_compute_server_count?: number;
+  executed_new_compute_capacity?: number;
+  executed_new_compute_cost?: number;
+  executed_new_warm_server_count?: number;
+  executed_new_warm_capacity?: number;
+  executed_new_warm_cost?: number;
+  executed_new_hot_server_count?: number;
+  executed_new_hot_capacity?: number;
+  executed_new_hot_cost?: number;
+  executed_new_gpu_server_count?: number;
+  executed_new_gpu_capacity?: number;
+  executed_new_gpu_cost?: number;
+  executed_new_purchase_server_count?: number;
+  executed_new_purchase_logical_cores?: number;
+  executed_new_purchase_warm_storage_tb?: number;
+  executed_new_purchase_hot_storage_tb?: number;
+  executed_new_purchase_gpu_cards?: number;
+  executed_new_purchase_cost_cny?: number;
 }
 
 export interface ResourcePlanningConfigState {
@@ -732,6 +774,11 @@ export interface ResourcePlanningResponse {
       stock_continue_cards: number;
       total_cards: number;
     };
+    non_business_psas?: string[];
+    available_compute_cores?: number;
+    available_warm_storage_tb?: number;
+    available_hot_storage_tb?: number;
+    available_gpu_cards?: number;
   };
 }
 

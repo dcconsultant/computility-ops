@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Col, Form, Input, InputNumber, Row, Space, Statistic, Tabs, Typography, message } from 'antd';
+import { Alert, Button, Card, Col, Form, Input, InputNumber, Row, Space, Statistic, Table, Tabs, Typography, message } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { calculateResourcePlanning, getLatestResourcePlanningResult, getResourcePlanningConfig, saveResourcePlanningConfig } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
@@ -29,6 +29,17 @@ type ShareItem = {
   name: string;
   value: number;
   color: string;
+};
+
+type CurrentResourceRow = {
+  key: string;
+  scene: string;
+  unit: string;
+  total: number;
+  reconfig: number;
+  quasi: number;
+  newPurchase: number;
+  stock: number;
 };
 
 function toPct(value: number, total: number) {
@@ -100,6 +111,120 @@ function StackedShareBar({ title, unit, items }: { title: string; unit: string; 
       </div>
       <div style={{ marginTop: 8 }}><Text strong>合计：{thousandFormatter(total)} {unit}</Text></div>
     </Card>
+  );
+}
+
+const currentResourceColumns = [
+  { title: '场景大类', dataIndex: 'scene', key: 'scene', fixed: 'left' as const },
+  { title: '单位', dataIndex: 'unit', key: 'unit', width: 80 },
+  { title: '资源总量', dataIndex: 'total', key: 'total', align: 'right' as const, render: (value: number) => thousandFormatter(value) },
+  { title: '改配利旧', dataIndex: 'reconfig', key: 'reconfig', align: 'right' as const, render: (value: number) => thousandFormatter(value) },
+  { title: '准系统采购利旧', dataIndex: 'quasi', key: 'quasi', align: 'right' as const, render: (value: number) => thousandFormatter(value) },
+  { title: '新机采购', dataIndex: 'newPurchase', key: 'newPurchase', align: 'right' as const, render: (value: number) => thousandFormatter(value) },
+  { title: '存量', dataIndex: 'stock', key: 'stock', align: 'right' as const, render: (value: number) => thousandFormatter(value) }
+];
+
+const currentResourceColors = {
+  reconfig: '#1677ff',
+  quasi: '#13c2c2',
+  newPurchase: '#52c41a',
+  stock: '#faad14'
+};
+
+function safeNumber(value: unknown) {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function toCurrentResourceRow(input: Omit<CurrentResourceRow, 'stock'>): CurrentResourceRow {
+  const consumed = input.reconfig + input.quasi + input.newPurchase;
+  return {
+    ...input,
+    stock: Number((input.total - consumed).toFixed(2))
+  };
+}
+
+function buildCurrentResourceRows(result: ResourcePlanningResponse): CurrentResourceRow[] {
+  const cfg = result.config;
+  const analysis = result.result_analysis;
+
+  return [
+    toCurrentResourceRow({
+      key: 'compute',
+      scene: '计算',
+      unit: '核',
+      total: safeNumber(analysis.available_compute_cores ?? analysis.compute_capacity.total_cores),
+      reconfig: safeNumber(result.reconfig_plan.logical_cores),
+      quasi: safeNumber(result.quasi_purchase_plan.logical_cores),
+      newPurchase: safeNumber(cfg.executed_new_purchase_logical_cores ?? cfg.executed_new_compute_capacity)
+    }),
+    toCurrentResourceRow({
+      key: 'warm_storage',
+      scene: '温存储',
+      unit: 'TB',
+      total: safeNumber(analysis.available_warm_storage_tb ?? analysis.warm_storage_capacity.total_tb),
+      reconfig: safeNumber(result.reconfig_plan.covered_warm_storage_tb),
+      quasi: safeNumber(result.quasi_purchase_plan.covered_warm_storage_tb),
+      newPurchase: safeNumber(cfg.executed_new_purchase_warm_storage_tb ?? cfg.executed_new_warm_capacity)
+    }),
+    toCurrentResourceRow({
+      key: 'hot_storage',
+      scene: '热存储',
+      unit: 'TB',
+      total: safeNumber(analysis.available_hot_storage_tb ?? analysis.hot_storage_capacity.total_tb),
+      reconfig: safeNumber(result.reconfig_plan.covered_hot_storage_tb),
+      quasi: safeNumber(result.quasi_purchase_plan.covered_hot_storage_tb),
+      newPurchase: safeNumber(cfg.executed_new_purchase_hot_storage_tb ?? cfg.executed_new_hot_capacity)
+    }),
+    toCurrentResourceRow({
+      key: 'gpu',
+      scene: 'GPU',
+      unit: '卡',
+      total: safeNumber(analysis.available_gpu_cards ?? analysis.gpu_capacity.total_cards),
+      reconfig: safeNumber(result.reconfig_plan.covered_gpu_cards),
+      quasi: safeNumber(result.quasi_purchase_plan.covered_gpu_cards),
+      newPurchase: safeNumber(cfg.executed_new_purchase_gpu_cards ?? cfg.executed_new_gpu_capacity)
+    })
+  ];
+}
+
+function CurrentResourceOverview({ result }: { result: ResourcePlanningResponse }) {
+  const rows = buildCurrentResourceRows(result);
+  return (
+    <>
+      <Alert
+        type="info"
+        showIcon
+        message="当前资源概览"
+        description="存量 = 资源总量 - 改配利旧 - 准系统采购利旧 - 已执行新机采购；资源总量按业务可用资源口径统计。"
+      />
+
+      <Card title="分场景当前资源表" style={{ marginTop: 16 }}>
+        <Table<CurrentResourceRow>
+          rowKey="key"
+          columns={currentResourceColumns}
+          dataSource={rows}
+          pagination={false}
+          scroll={{ x: 920 }}
+        />
+      </Card>
+
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        {rows.map((row) => (
+          <Col key={row.key} xs={24} lg={12}>
+            <PieShareChart
+              title={`${row.scene}资源构成（${row.unit}）`}
+              items={[
+                { name: '改配利旧', value: row.reconfig, color: currentResourceColors.reconfig },
+                { name: '准系统采购利旧', value: row.quasi, color: currentResourceColors.quasi },
+                { name: '新机采购', value: row.newPurchase, color: currentResourceColors.newPurchase },
+                { name: '存量', value: Math.max(0, row.stock), color: currentResourceColors.stock }
+              ]}
+            />
+          </Col>
+        ))}
+      </Row>
+    </>
   );
 }
 
@@ -430,6 +555,21 @@ export default function ResourcePlanningPage() {
             )
           },
           {
+            key: 'current-resource',
+            label: '当前资源概览',
+            children: (
+              <>
+      {result ? (
+        <CurrentResourceOverview result={result} />
+      ) : (
+        <Card>
+          <Text type="secondary">请先在“规划配置”Tab中点击“生成资源规划”。</Text>
+        </Card>
+      )}
+              </>
+            )
+          },
+          {
             key: 'overview',
             label: '资源规划概览',
             children: (
@@ -601,33 +741,3 @@ export default function ResourcePlanningPage() {
     </Space>
   );
 }
-          <Card type="inner" title="新机采购" style={{ marginTop: 12 }}>
-            <Row gutter={8} style={{ fontWeight: 600, marginBottom: 8 }}>
-              <Col span={6}>场景</Col><Col span={6}>服务器数</Col><Col span={6}>算力</Col><Col span={6}>费用(CNY)</Col>
-            </Row>
-            <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
-              <Col span={6}><Text>计算（核）</Text></Col>
-              <Col span={6}><Form.Item name="executed_new_compute_server_count" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-              <Col span={6}><Form.Item name="executed_new_compute_capacity" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-              <Col span={6}><Form.Item name="executed_new_compute_cost" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            </Row>
-            <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
-              <Col span={6}><Text>温存储（TB）</Text></Col>
-              <Col span={6}><Form.Item name="executed_new_warm_server_count" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-              <Col span={6}><Form.Item name="executed_new_warm_capacity" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-              <Col span={6}><Form.Item name="executed_new_warm_cost" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            </Row>
-            <Row gutter={8} align="middle" style={{ marginBottom: 8 }}>
-              <Col span={6}><Text>热存储（TB）</Text></Col>
-              <Col span={6}><Form.Item name="executed_new_hot_server_count" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-              <Col span={6}><Form.Item name="executed_new_hot_capacity" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-              <Col span={6}><Form.Item name="executed_new_hot_cost" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            </Row>
-            <Row gutter={8} align="middle">
-              <Col span={6}><Text>GPU（卡）</Text></Col>
-              <Col span={6}><Form.Item name="executed_new_gpu_server_count" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-              <Col span={6}><Form.Item name="executed_new_gpu_capacity" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-              <Col span={6}><Form.Item name="executed_new_gpu_cost" style={{ marginBottom: 0 }}><InputNumber min={0} {...numberProps} /></Form.Item></Col>
-            </Row>
-          </Card>
-
