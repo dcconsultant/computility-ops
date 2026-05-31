@@ -990,9 +990,26 @@ func (s *RenewalService) ListPlans(ctx context.Context, filter ListPlansFilter) 
 				continue
 			}
 		}
-		out = append(out, p)
+		out = append(out, summarizeRenewalPlanForList(p))
 	}
 	return out, nil
+}
+
+func summarizeRenewalPlanForList(p domain.RenewalPlan) domain.RenewalPlan {
+	p.Items = nil
+	p.NonRenewalItems = nil
+	p.FullRenewal = nil
+	p.MinimalRenewal = nil
+	p.Comparison = nil
+
+	if len(p.Sections) > 0 {
+		sections := append([]domain.RenewalPlanSection(nil), p.Sections...)
+		for i := range sections {
+			sections[i].Items = nil
+		}
+		p.Sections = sections
+	}
+	return p
 }
 
 func (s *RenewalService) DeletePlan(ctx context.Context, planID string) error {

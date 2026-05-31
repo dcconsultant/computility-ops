@@ -353,6 +353,76 @@ func TestRenewalService_CreatePlan_BuildsMinimalRenewalComparison(t *testing.T) 
 	}
 }
 
+func TestRenewalService_ListPlans_ReturnsSummaryWithoutHeavyDetails(t *testing.T) {
+	ctx := context.Background()
+	renewalRepo := mem.NewRenewalRepo()
+	plan := domain.RenewalPlan{
+		PlanID:        "100",
+		TargetDate:    "2026-12-31",
+		TargetCores:   128,
+		SelectedCores: 64,
+		SelectedCount: 1,
+		Items: []domain.RenewalItem{{
+			SN:              "SN-1",
+			CPULogicalCores: 64,
+		}},
+		NonRenewalItems: []domain.NonRenewalItem{{SN: "SN-2"}},
+		Sections: []domain.RenewalPlanSection{{
+			Bucket:        "compute",
+			SelectedCores: 64,
+			SelectedCount: 1,
+			Items:         []domain.RenewalItem{{SN: "SN-1"}},
+		}},
+		FullRenewal: &domain.RenewalPlanVariant{
+			Name:          "全量续保方案",
+			SelectedCores: 64,
+			SelectedCount: 1,
+			Items:         []domain.RenewalItem{{SN: "SN-1"}},
+		},
+		MinimalRenewal: &domain.RenewalPlanVariant{
+			Name:          "最小化续保方案",
+			SelectedCores: 32,
+			SelectedCount: 1,
+			Items:         []domain.RenewalItem{{SN: "SN-3"}},
+		},
+		Comparison: &domain.RenewalComparison{
+			FullRenewalCount:    1,
+			MinimalRenewalCount: 1,
+			ReducedRenewalItems: []domain.ReducedRenewalItem{{SN: "SN-1"}},
+		},
+	}
+	if err := renewalRepo.SavePlan(ctx, plan); err != nil {
+		t.Fatalf("SavePlan() error = %v", err)
+	}
+
+	svc := NewRenewalService(mem.NewServerRepo(), mem.NewDatasetRepo(), renewalRepo)
+	list, err := svc.ListPlans(ctx, ListPlansFilter{})
+	if err != nil {
+		t.Fatalf("ListPlans() error = %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("len(ListPlans())=%d, want 1", len(list))
+	}
+	summary := list[0]
+	if len(summary.Items) != 0 || len(summary.NonRenewalItems) != 0 {
+		t.Fatalf("summary should omit heavy item arrays, got items=%d non_renewal=%d", len(summary.Items), len(summary.NonRenewalItems))
+	}
+	if summary.FullRenewal != nil || summary.MinimalRenewal != nil || summary.Comparison != nil {
+		t.Fatalf("summary should omit variants/comparison, got full=%v minimal=%v comparison=%v", summary.FullRenewal, summary.MinimalRenewal, summary.Comparison)
+	}
+	if len(summary.Sections) != 1 || len(summary.Sections[0].Items) != 0 || summary.Sections[0].SelectedCores != 64 {
+		t.Fatalf("summary sections not preserved as aggregate only: %+v", summary.Sections)
+	}
+
+	full, err := svc.GetPlan(ctx, "100")
+	if err != nil {
+		t.Fatalf("GetPlan() error = %v", err)
+	}
+	if len(full.Items) != 1 || len(full.Sections[0].Items) != 1 || full.FullRenewal == nil || full.Comparison == nil {
+		t.Fatalf("GetPlan() should still return full details: %+v", full)
+	}
+}
+
 func TestRenewalService_ListUnitPrices_EmptyAllowed(t *testing.T) {
 	svc := NewRenewalService(mem.NewServerRepo(), mem.NewDatasetRepo(), mem.NewRenewalRepo())
 	prices, err := svc.ListUnitPrices(context.Background())

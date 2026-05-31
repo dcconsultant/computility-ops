@@ -53,3 +53,44 @@ func TestJSONPayloadRoundTripSupportsCompressedAndPlainPayloads(t *testing.T) {
 		t.Fatalf("large round trip mismatch: plan_id=%s items=%d", decodedLarge.PlanID, len(decodedLarge.Items))
 	}
 }
+
+func TestUnmarshalRenewalPlanListSummaryOmitsHeavyDetails(t *testing.T) {
+	plan := domain.RenewalPlan{
+		PlanID:        "summary",
+		Status:        "effective",
+		EffectiveAt:   "2026-01-01T00:00:00Z",
+		TargetDate:    "2026-12-31",
+		TargetCores:   128,
+		SelectedCores: 64,
+		SelectedCount: 1,
+		Items:         []domain.RenewalItem{{SN: strings.Repeat("SN", 128), CPULogicalCores: 64}},
+		Sections: []domain.RenewalPlanSection{{
+			Bucket:        "compute",
+			SelectedCores: 64,
+			SelectedCount: 1,
+			Items:         []domain.RenewalItem{{SN: strings.Repeat("SEC", 128)}},
+		}},
+		FullRenewal:     &domain.RenewalPlanVariant{Items: []domain.RenewalItem{{SN: strings.Repeat("FULL", 128)}}},
+		MinimalRenewal:  &domain.RenewalPlanVariant{Items: []domain.RenewalItem{{SN: strings.Repeat("MIN", 128)}}},
+		NonRenewalItems: []domain.NonRenewalItem{{SN: strings.Repeat("NON", 128)}},
+		Comparison:      &domain.RenewalComparison{ReducedRenewalItems: []domain.ReducedRenewalItem{{SN: strings.Repeat("RED", 128)}}},
+	}
+	payload, err := marshalJSONPayload(plan)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	summary, err := unmarshalRenewalPlanListSummary(payload)
+	if err != nil {
+		t.Fatalf("unmarshal summary: %v", err)
+	}
+	if summary.PlanID != plan.PlanID || summary.Status != plan.Status || summary.SelectedCores != plan.SelectedCores {
+		t.Fatalf("summary scalar fields mismatch: %+v", summary)
+	}
+	if len(summary.Items) != 0 || len(summary.NonRenewalItems) != 0 || summary.FullRenewal != nil || summary.MinimalRenewal != nil || summary.Comparison != nil {
+		t.Fatalf("summary should omit heavy fields: %+v", summary)
+	}
+	if len(summary.Sections) != 1 || summary.Sections[0].SelectedCores != 64 || len(summary.Sections[0].Items) != 0 {
+		t.Fatalf("summary sections should keep aggregate fields only: %+v", summary.Sections)
+	}
+}

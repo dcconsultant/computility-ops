@@ -1139,7 +1139,7 @@ function analyzeAnomalies(plan: RenewalPlan): { blockers: string[]; warnings: st
     blockers.push(`热存储缺口未补齐（要求 ${hot?.required_storage_tb || 0}TB，已选 ${hot?.selected_storage_tb || 0}TB）`);
   }
 
-  if (!plan.items?.length) {
+  if (!(plan.items?.length || plan.selected_count || 0)) {
     warnings.push('方案列表为空，请检查输入与过滤条件');
   }
 

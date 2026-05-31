@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"strings"
 )
 
@@ -51,9 +50,5 @@ func unmarshalJSONPayload(payload string, v any) error {
 		return fmt.Errorf("open compressed json payload: %w", err)
 	}
 	defer zr.Close()
-	raw, err := io.ReadAll(zr)
-	if err != nil {
-		return fmt.Errorf("read compressed json payload: %w", err)
-	}
-	return json.Unmarshal(raw, v)
+	return json.NewDecoder(zr).Decode(v)
 }

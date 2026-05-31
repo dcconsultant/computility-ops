@@ -52,20 +52,24 @@ func (r *RenewalRepo) GetPlan(ctx context.Context, planID string) (domain.Renewa
 }
 
 func (r *RenewalRepo) ListPlans(ctx context.Context) ([]domain.RenewalPlan, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT payload_json FROM ops_renewal_plans ORDER BY updated_at DESC`)
+	rows, err := r.db.QueryContext(ctx, `SELECT plan_id, payload_json FROM ops_renewal_plans ORDER BY updated_at DESC`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := make([]domain.RenewalPlan, 0)
 	for rows.Next() {
+		var planID string
 		var payload string
-		if err := rows.Scan(&payload); err != nil {
+		if err := rows.Scan(&planID, &payload); err != nil {
 			return nil, err
 		}
-		var p domain.RenewalPlan
-		if err := unmarshalJSONPayload(payload, &p); err != nil {
+		p, err := unmarshalRenewalPlanListSummary(payload)
+		if err != nil {
 			return nil, err
+		}
+		if p.PlanID == "" {
+			p.PlanID = planID
 		}
 		out = append(out, p)
 	}

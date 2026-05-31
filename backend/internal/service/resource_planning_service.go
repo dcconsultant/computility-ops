@@ -440,9 +440,13 @@ func (s *ResourcePlanningService) calcRenewalPlan(ctx context.Context) (Resource
 	if len(plans) == 0 {
 		return ResourcePlanningRenewalPlan{}, rpModuleErr("续保规划", "续保方案为空，请先生成续保方案", nil)
 	}
-	latest, ok := selectLatestEffectiveRenewalPlan(plans)
+	latestSummary, ok := selectLatestEffectiveRenewalPlan(plans)
 	if !ok {
 		return ResourcePlanningRenewalPlan{}, rpModuleErr("续保规划", "未找到已生效续保方案，请先生效续保方案", nil)
+	}
+	latest, err := s.renewalRepo.GetPlan(ctx, latestSummary.PlanID)
+	if err != nil {
+		return ResourcePlanningRenewalPlan{}, err
 	}
 	budget := 0.0
 	manualBudget := 0.0
