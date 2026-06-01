@@ -128,12 +128,12 @@ type ValueScorePerformanceImportRow struct {
 }
 
 type ValueScorePerformanceImportResult struct {
-	Total        int                                `json:"total"`
-	NewCount     int                                `json:"new_count"`
-	UpdatedCount int                                `json:"updated_count"`
-	Failed       int                                `json:"failed"`
+	Total        int                                   `json:"total"`
+	NewCount     int                                   `json:"new_count"`
+	UpdatedCount int                                   `json:"updated_count"`
+	Failed       int                                   `json:"failed"`
 	Errors       []ValueScorePerformanceImportRowError `json:"errors"`
-	Rows         []ValueScorePerformanceImportRow    `json:"rows,omitempty"`
+	Rows         []ValueScorePerformanceImportRow      `json:"rows,omitempty"`
 }
 
 func (s *ValueScoreSetupService) ListPerformanceParams(ctx context.Context) ([]domain.ValueScorePerformanceParam, error) {
@@ -430,12 +430,12 @@ func (s *ValueScoreSetupService) CalculateMonthlyTCO(ctx context.Context, req do
 		otherFixed := round4(networkDevice + serverRenewal)
 		totalTCO := round4(cabCost + depreciation + networkDevice + networkCabinetShare + serverRenewal)
 		item := domain.ValueScoreTCOItem{
-			ConfigType:          p.ConfigType,
-			PowerWatts:          round4(powerW),
-			PowerKW:             powerKW,
-			CabinetCostMonthly:  cabCost,
-			ServerOriginalCNY:   original,
-			DepreciationMonthly: depreciation,
+			ConfigType:            p.ConfigType,
+			PowerWatts:            round4(powerW),
+			PowerKW:               powerKW,
+			CabinetCostMonthly:    cabCost,
+			ServerOriginalCNY:     original,
+			DepreciationMonthly:   depreciation,
 			NetworkDeviceMonthly:  networkDevice,
 			NetworkCabinetMonthly: networkCabinetShare,
 			ServerRenewalMonthly:  serverRenewal,
@@ -462,6 +462,159 @@ func (s *ValueScoreSetupService) CalculateMonthlyTCO(ctx context.Context, req do
 		res.Note = baseline.Note
 	}
 	return res, nil
+}
+
+func (s *ValueScoreSetupService) CalculateTableItems(ctx context.Context) ([]domain.ValueScoreTableItem, error) {
+	perf, err := s.CalculatePerformance(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tco, err := s.CalculateMonthlyTCO(ctx, domain.ValueScoreTCOCalculateRequest{})
+	if err != nil {
+		return nil, err
+	}
+	pkgs, err := s.repo.ListHostPackages(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tcoByType := make(map[string]domain.ValueScoreTCOItem, len(tco.Items))
+	for _, item := range tco.Items {
+		tcoByType[item.ConfigType] = item
+	}
+	pkgByType := make(map[string]domain.HostPackageConfig, len(pkgs))
+	for _, pkg := range pkgs {
+		pkgByType[pkg.ConfigType] = pkg
+	}
+
+	items := make([]domain.ValueScoreTableItem, 0, len(perf.Items))
+	for _, p := range perf.Items {
+		t := tcoByType[p.ConfigType]
+		pkg := pkgByType[p.ConfigType]
+		sceneType := classifyValueScoreScene(pkg)
+		totalTCO := t.TotalTCOMonthly
+		availableCores := float64(p.AvailableCores)
+		overallRatio := p.OverallPerformanceRatio
+		storageTB := pkg.StorageCapacityTB
+		gpuCount := pkg.GPUCardCount
+
+		unitTCO := 0.0
+		convertedUnitTCO := 0.0
+		switch sceneType {
+		case "gpu":
+			if gpuCount > 0 {
+				unitTCO = totalTCO / float64(gpuCount)
+			}
+			convertedUnitTCO = unitTCO
+			overallRatio = 1
+		case "warm_storage", "hot_storage":
+			if storageTB > 0 {
+				unitTCO = totalTCO / storageTB
+			}
+			convertedUnitTCO = unitTCO
+			overallRatio = 1
+		default:
+			if availableCores > 0 {
+				unitTCO = totalTCO / availableCores
+			}
+			convertedUnitTCO = unitTCO * overallRatio
+		}
+		valueScoreV1 := unitTCO
+		if sceneType == "compute" {
+			valueScoreV1 = convertedUnitTCO / 30
+		}
+
+		if !isFinite(unitTCO) {
+			unitTCO = 0
+		}
+		if !isFinite(valueScoreV1) {
+			valueScoreV1 = 0
+		}
+
+		items = append(items, domain.ValueScoreTableItem{
+			ConfigType:              p.ConfigType,
+			SceneCategory:           pkg.SceneCategory,
+			SceneType:               sceneType,
+			CPULogicalCores:         p.CPULogicalCores,
+			MemoryCapacityGB:        p.MemoryCapacityGB,
+			CapacityStorageTB:       storageTB,
+			CountGPU:                gpuCount,
+			UnavailableCores:        p.UnavailableCores,
+			UnavailableMemoryGB:     p.UnavailableMemoryGB,
+			PerformanceScore:        p.PerformanceScore,
+			AvailableCores:          p.AvailableCores,
+			AvailableMemoryGB:       p.AvailableMemoryGB,
+			StandardScore:           p.StandardScore,
+			CPUPerformanceFactor:    p.CPUPerformanceFactor,
+			MemoryRatio:             p.MemoryRatio,
+			MemoryRatioFactor:       p.MemoryRatioFactor,
+			OverallPerformanceRatio: overallRatio,
+			PowerWatts:              t.PowerWatts,
+			PowerKW:                 t.PowerKW,
+			CabinetCostMonthly:      t.CabinetCostMonthly,
+			ServerOriginalCNY:       t.ServerOriginalCNY,
+			DepreciationMonthly:     t.DepreciationMonthly,
+			NetworkDeviceMonthly:    t.NetworkDeviceMonthly,
+			NetworkCabinetMonthly:   t.NetworkCabinetMonthly,
+			ServerRenewalMonthly:    t.ServerRenewalMonthly,
+			OtherFixedCostMonthly:   t.OtherFixedCostMonthly,
+			TotalTCOMonthly:         t.TotalTCOMonthly,
+			UnitTCO:                 round4(unitTCO),
+			ValueScoreV1:            round4(valueScoreV1),
+		})
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].SceneType == items[j].SceneType {
+			return items[i].ConfigType < items[j].ConfigType
+		}
+		return sceneOrder(items[i].SceneType) < sceneOrder(items[j].SceneType)
+	})
+	return items, nil
+}
+
+func classifyValueScoreScene(pkg domain.HostPackageConfig) string {
+	scene := strings.TrimSpace(pkg.SceneCategory)
+	switch scene {
+	case "GPU":
+		return "gpu"
+	case "温存储":
+		return "warm_storage"
+	case "热存储":
+		return "hot_storage"
+	case "计算":
+		return "compute"
+	}
+	lower := strings.ToLower(scene)
+	switch {
+	case pkg.GPUCardCount > 0 || strings.Contains(lower, "gpu"):
+		return "gpu"
+	case strings.Contains(lower, "warm") || strings.Contains(scene, "温"):
+		return "warm_storage"
+	case strings.Contains(lower, "hot") || strings.Contains(scene, "热"):
+		return "hot_storage"
+	default:
+		return "compute"
+	}
+}
+
+func sceneOrder(scene string) int {
+	switch scene {
+	case "compute":
+		return 0
+	case "warm_storage":
+		return 1
+	case "hot_storage":
+		return 2
+	case "gpu":
+		return 3
+	default:
+		return 4
+	}
+}
+
+func isFinite(v float64) bool {
+	return !math.IsNaN(v) && !math.IsInf(v, 0)
 }
 
 func round4(v float64) float64 {

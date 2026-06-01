@@ -84,6 +84,7 @@ export default function ImportPage() {
   const [performanceLoading, setPerformanceLoading] = useState(false);
   const [valueConfigVisible, setValueConfigVisible] = useState(false);
   const [valueSceneTab, setValueSceneTab] = useState<'compute' | 'warm_storage' | 'hot_storage' | 'gpu'>('compute');
+  const [valueConfigKeyword, setValueConfigKeyword] = useState('');
 
   async function reloadAll() {
     try {
@@ -97,8 +98,8 @@ export default function ImportPage() {
         listValueScorePerformanceParams(),
         calculateValueScorePerformance()
       ]);
-      setServers((ensureApiOk(s1) as any).data.list);
-      setPackages((ensureApiOk(s2) as any).data.list);
+      setServers((ensureApiOk(s1) as any).data.list || []);
+      setPackages((ensureApiOk(s2) as any).data.list || []);
       setCabinetUtilization((ensureApiOk(s3) as any).data.utilization || 1);
       setCabinetRows((ensureApiOk(s4) as any).data.list || []);
       setCabinetBaseline((ensureApiOk(s5) as any).data);
@@ -245,6 +246,21 @@ export default function ImportPage() {
     hot_storage: mergedScoreRows.filter((r: any) => r.scene_type === 'hot_storage'),
     gpu: mergedScoreRows.filter((r: any) => r.scene_type === 'gpu')
   }), [mergedScoreRows]);
+
+  const filteredSceneScoreRows = useMemo(() => {
+    const q = valueConfigKeyword.trim().toLowerCase();
+    if (!q) return sceneScoreRows;
+    const filterByConfig = (rows: any[]) => rows.filter((r) => String(r.config_type || '').toLowerCase().includes(q));
+    return {
+      compute: filterByConfig(sceneScoreRows.compute),
+      warm_storage: filterByConfig(sceneScoreRows.warm_storage),
+      hot_storage: filterByConfig(sceneScoreRows.hot_storage),
+      gpu: filterByConfig(sceneScoreRows.gpu)
+    };
+  }, [sceneScoreRows, valueConfigKeyword]);
+
+  const textSorter = (key: string) => (a: any, b: any) => String(a[key] || '').localeCompare(String(b[key] || ''), 'zh-Hans-CN');
+  const numberSorter = (key: string) => (a: any, b: any) => Number(a[key] || 0) - Number(b[key] || 0);
 
   function makeUploadProps(kind: 'servers' | 'packages'): UploadProps {
     const importer = {
@@ -469,6 +485,7 @@ export default function ImportPage() {
                       style={{ flex: '0 0 auto' }}
                     />
                     <Space style={{ marginLeft: 'auto' }}>
+                      <Input.Search allowClear placeholder="配置类型" value={valueConfigKeyword} onChange={(e) => setValueConfigKeyword(e.target.value)} style={{ width: 220 }} />
                       <Button onClick={() => setValueConfigVisible((v) => !v)}>参数配置</Button>
                       <Button onClick={exportValueScoreTCO}>导出Excel</Button>
                       <Button loading={performanceLoading || tcoLoading} onClick={async () => {
@@ -582,36 +599,37 @@ export default function ImportPage() {
 
                 <Card>
                   {performanceResult?.alert_count ? <Alert type="warning" showIcon message={`检测到 ${performanceResult.alert_count} 条告警`} description={(performanceResult.items || []).flatMap((it: any) => (it.alerts || []).map((a: any) => `${a.config_type} | ${a.error_code} | ${a.field} | ${a.current_value} | ${a.suggestion}`)).slice(0, 10).join('；') || '请检查配置类型、性能跑分、可用核数/内存等数据'} style={{ marginBottom: 12 }} /> : null}
-                  <Table rowKey="config_type" dataSource={(sceneScoreRows as any)[valueSceneTab] || []} scroll={{ x: 2800 }} pagination={withTotalPagination(10)} columns={[
-                    { title: '配置类型', dataIndex: 'config_type', fixed: 'left', width: 160 },
-                    { title: '场景', dataIndex: 'scene_category', width: 120, render: (v: string) => v || '-' },
-                    { title: 'CPU逻辑核数', dataIndex: 'cpu_logical_cores', render: (v: number) => formatInt(v) },
-                    { title: '内存容量(GB)', dataIndex: 'memory_capacity_gb', render: (v: number) => formatFloat(v) },
-                    { title: '存储容量(TB)', dataIndex: 'capacity_storage_tb', render: (v: number) => formatFloat(v) },
-                    { title: 'GPU卡数', dataIndex: 'count_gpu', render: (v: number) => formatInt(v) },
-                    { title: '不可用核数', dataIndex: 'unavailable_cores', render: (v: number) => formatInt(v) },
-                    { title: '不可用内存(GB)', dataIndex: 'unavailable_memory_gb', render: (v: number) => formatFloat(v) },
-                    { title: '性能跑分', dataIndex: 'performance_score', render: (v: number) => formatFloat(v) },
-                    { title: '可用核数', dataIndex: 'available_cores', render: (v: number) => formatInt(v) },
-                    { title: '可用内存(GB)', dataIndex: 'available_memory_gb', render: (v: number) => formatFloat(v) },
-                    { title: '标准跑分', dataIndex: 'standard_score', render: (v: number) => formatFloat(v) },
-                    { title: 'CPU性能折算系数', dataIndex: 'cpu_performance_factor', render: (v: number) => formatFloat(v) },
-                    { title: '内存配比', dataIndex: 'memory_ratio', render: (v: number) => formatFloat(v) },
-                    { title: '内存配比系数', dataIndex: 'memory_ratio_factor', render: (v: number) => formatFloat(v) },
-                    { title: '整体性能折算比', dataIndex: 'overall_performance_ratio', render: (v: number) => formatFloat(v) },
-                    { title: '功率(W)', dataIndex: 'power_watts', render: (v: number) => formatFloat(v) },
-                    { title: '功率(KW)', dataIndex: 'power_kw', render: (v: number) => formatFloat(v) },
-                    { title: '机柜费/月', dataIndex: 'cabinet_cost_monthly', render: (v: number) => formatFloat(v) },
-                    { title: '原值(CNY)', dataIndex: 'server_original_cny', render: (v: number) => formatFloat(v) },
-                    { title: '折旧/月', dataIndex: 'depreciation_monthly', render: (v: number) => formatFloat(v) },
-                    { title: '网络设备分摊/月', dataIndex: 'network_device_monthly', render: (v: number) => formatFloat(v) },
-                    { title: '网络机柜等分摊/月', dataIndex: 'network_cabinet_monthly', render: (v: number) => formatFloat(v) },
-                    { title: '服务器续保费/月', dataIndex: 'server_renewal_monthly', render: (v: number) => formatFloat(v) },
-                    { title: '其他固定成本/月', dataIndex: 'other_fixed_cost_monthly', render: (v: number) => formatFloat(v) },
-                    { title: '月TCO', dataIndex: 'total_tco_monthly', render: (v: number) => formatFloat(v) },
+                  <Table rowKey="config_type" dataSource={(filteredSceneScoreRows as any)[valueSceneTab] || []} scroll={{ x: 2800 }} pagination={withTotalPagination(10)} columns={[
+                    { title: '配置类型', dataIndex: 'config_type', fixed: 'left', width: 160, sorter: textSorter('config_type') },
+                    { title: '场景', dataIndex: 'scene_category', width: 120, sorter: textSorter('scene_category'), render: (v: string) => v || '-' },
+                    { title: 'CPU逻辑核数', dataIndex: 'cpu_logical_cores', sorter: numberSorter('cpu_logical_cores'), render: (v: number) => formatInt(v) },
+                    { title: '内存容量(GB)', dataIndex: 'memory_capacity_gb', sorter: numberSorter('memory_capacity_gb'), render: (v: number) => formatFloat(v) },
+                    { title: '存储容量(TB)', dataIndex: 'capacity_storage_tb', sorter: numberSorter('capacity_storage_tb'), render: (v: number) => formatFloat(v) },
+                    { title: 'GPU卡数', dataIndex: 'count_gpu', sorter: numberSorter('count_gpu'), render: (v: number) => formatInt(v) },
+                    { title: '不可用核数', dataIndex: 'unavailable_cores', sorter: numberSorter('unavailable_cores'), render: (v: number) => formatInt(v) },
+                    { title: '不可用内存(GB)', dataIndex: 'unavailable_memory_gb', sorter: numberSorter('unavailable_memory_gb'), render: (v: number) => formatFloat(v) },
+                    { title: '性能跑分', dataIndex: 'performance_score', sorter: numberSorter('performance_score'), render: (v: number) => formatFloat(v) },
+                    { title: '可用核数', dataIndex: 'available_cores', sorter: numberSorter('available_cores'), render: (v: number) => formatInt(v) },
+                    { title: '可用内存(GB)', dataIndex: 'available_memory_gb', sorter: numberSorter('available_memory_gb'), render: (v: number) => formatFloat(v) },
+                    { title: '标准跑分', dataIndex: 'standard_score', sorter: numberSorter('standard_score'), render: (v: number) => formatFloat(v) },
+                    { title: 'CPU性能折算系数', dataIndex: 'cpu_performance_factor', sorter: numberSorter('cpu_performance_factor'), render: (v: number) => formatFloat(v) },
+                    { title: '内存配比', dataIndex: 'memory_ratio', sorter: numberSorter('memory_ratio'), render: (v: number) => formatFloat(v) },
+                    { title: '内存配比系数', dataIndex: 'memory_ratio_factor', sorter: numberSorter('memory_ratio_factor'), render: (v: number) => formatFloat(v) },
+                    { title: '整体性能折算比', dataIndex: 'overall_performance_ratio', sorter: numberSorter('overall_performance_ratio'), render: (v: number) => formatFloat(v) },
+                    { title: '功率(W)', dataIndex: 'power_watts', sorter: numberSorter('power_watts'), render: (v: number) => formatFloat(v) },
+                    { title: '功率(KW)', dataIndex: 'power_kw', sorter: numberSorter('power_kw'), render: (v: number) => formatFloat(v) },
+                    { title: '机柜费/月', dataIndex: 'cabinet_cost_monthly', sorter: numberSorter('cabinet_cost_monthly'), render: (v: number) => formatFloat(v) },
+                    { title: '原值(CNY)', dataIndex: 'server_original_cny', sorter: numberSorter('server_original_cny'), render: (v: number) => formatFloat(v) },
+                    { title: '折旧/月', dataIndex: 'depreciation_monthly', sorter: numberSorter('depreciation_monthly'), render: (v: number) => formatFloat(v) },
+                    { title: '网络设备分摊/月', dataIndex: 'network_device_monthly', sorter: numberSorter('network_device_monthly'), render: (v: number) => formatFloat(v) },
+                    { title: '网络机柜等分摊/月', dataIndex: 'network_cabinet_monthly', sorter: numberSorter('network_cabinet_monthly'), render: (v: number) => formatFloat(v) },
+                    { title: '服务器续保费/月', dataIndex: 'server_renewal_monthly', sorter: numberSorter('server_renewal_monthly'), render: (v: number) => formatFloat(v) },
+                    { title: '其他固定成本/月', dataIndex: 'other_fixed_cost_monthly', sorter: numberSorter('other_fixed_cost_monthly'), render: (v: number) => formatFloat(v) },
+                    { title: '月TCO', dataIndex: 'total_tco_monthly', sorter: numberSorter('total_tco_monthly'), render: (v: number) => formatFloat(v) },
                     {
                       title: '单位月TCO',
                       dataIndex: 'unit_tco',
+                      sorter: numberSorter('unit_tco'),
                       render: (v: number, row: any) => {
                         if (row.scene_type === 'gpu') return `${formatFloat(v)} /GPU卡`;
                         if (row.scene_type === 'warm_storage' || row.scene_type === 'hot_storage') return `${formatFloat(v)} /TB`;
@@ -619,7 +637,7 @@ export default function ImportPage() {
                       }
                     },
 
-                    { title: '价值分v1', dataIndex: 'value_score_v1', render: (v: number) => formatFloat(v) }
+                    { title: '价值分v1', dataIndex: 'value_score_v1', sorter: numberSorter('value_score_v1'), render: (v: number) => formatFloat(v) }
                   ]} />
                 </Card>
               </Space>

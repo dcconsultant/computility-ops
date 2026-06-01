@@ -344,21 +344,21 @@ func (h *ValueScoreSetupHandler) readPerformanceRows(c *gin.Context) ([]string, 
 
 func performanceHeaderMap() map[string]string {
 	return map[string]string{
-		"配置类型": "config_type",
-		"套餐": "config_type",
-		"config_type": "config_type",
-		"不可用核数": "unavailable_cores",
-		"不可用cpu核数": "unavailable_cores",
-		"unavailable_cores": "unavailable_cores",
-		"不可用内存容量(gb)": "unavailable_memory_gb",
-		"不可用内存容量（gb）": "unavailable_memory_gb",
+		"配置类型":                  "config_type",
+		"套餐":                    "config_type",
+		"config_type":           "config_type",
+		"不可用核数":                 "unavailable_cores",
+		"不可用cpu核数":              "unavailable_cores",
+		"unavailable_cores":     "unavailable_cores",
+		"不可用内存容量(gb)":           "unavailable_memory_gb",
+		"不可用内存容量（gb）":           "unavailable_memory_gb",
 		"unavailable_memory_gb": "unavailable_memory_gb",
-		"性能跑分": "performance_score",
-		"performance_score": "performance_score",
-		"原值(cny)": "server_original_cny",
-		"原值（cny）": "server_original_cny",
-		"原值": "server_original_cny",
-		"server_original_cny": "server_original_cny",
+		"性能跑分":                  "performance_score",
+		"performance_score":     "performance_score",
+		"原值(cny)":               "server_original_cny",
+		"原值（cny）":               "server_original_cny",
+		"原值":                    "server_original_cny",
+		"server_original_cny":   "server_original_cny",
 	}
 }
 
@@ -438,51 +438,80 @@ func (h *ValueScoreSetupHandler) CalculatePerformance(c *gin.Context) {
 
 func (h *ValueScoreSetupHandler) ExportMonthlyTCO(c *gin.Context) {
 	c.Set("audit_action", "value_score.tco.export")
-	res, err := h.svc.CalculateMonthlyTCO(c.Request.Context(), domain.ValueScoreTCOCalculateRequest{})
+	rows, err := h.svc.CalculateTableItems(c.Request.Context())
 	if err != nil {
 		fail(c, 50001, "导出失败")
 		return
 	}
 
 	xf := excelize.NewFile()
-	sheet := "TCO"
+	sheet := "价值分"
 	xf.SetSheetName("Sheet1", sheet)
-	_ = xf.SetCellValue(sheet, "A1", "目标机房")
-	_ = xf.SetCellValue(sheet, "B1", res.IDC)
-	_ = xf.SetCellValue(sheet, "A2", "机柜利用率")
-	_ = xf.SetCellValue(sheet, "B2", res.CabinetUtilization)
-	_ = xf.SetCellValue(sheet, "A3", "最低额定功率(KW)")
-	_ = xf.SetCellValue(sheet, "B3", res.MinRatedPowerKW)
-	_ = xf.SetCellValue(sheet, "A4", "机柜月租(CNY)")
-	_ = xf.SetCellValue(sheet, "B4", res.MonthlyRentCNY)
-	_ = xf.SetCellValue(sheet, "A5", "折旧月数")
-	_ = xf.SetCellValue(sheet, "B5", res.DepreciationMonths)
-	_ = xf.SetCellValue(sheet, "A6", "公式")
-	_ = xf.SetCellValue(sheet, "B6", res.Formula)
 
-	headers := []string{"配置类型", "功率(W)", "功率(KW)", "机柜费/月", "原值(CNY)", "折旧/月", "网络设备分摊/月", "网络机柜等分摊/月", "服务器续保费/月", "其他固定成本/月", "月TCO"}
+	headers := []string{
+		"配置类型",
+		"场景",
+		"CPU逻辑核数",
+		"内存容量(GB)",
+		"存储容量(TB)",
+		"GPU卡数",
+		"不可用核数",
+		"不可用内存(GB)",
+		"性能跑分",
+		"可用核数",
+		"可用内存(GB)",
+		"标准跑分",
+		"CPU性能折算系数",
+		"内存配比",
+		"内存配比系数",
+		"整体性能折算比",
+		"功率(W)",
+		"功率(KW)",
+		"机柜费/月",
+		"原值(CNY)",
+		"折旧/月",
+		"网络设备分摊/月",
+		"网络机柜等分摊/月",
+		"服务器续保费/月",
+		"其他固定成本/月",
+		"月TCO",
+		"单位月TCO",
+		"价值分v1",
+	}
 	for i, h := range headers {
-		cell, _ := excelize.CoordinatesToCellName(i+1, 8)
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		_ = xf.SetCellValue(sheet, cell, h)
 	}
-	for idx, item := range res.Items {
-		row := idx + 9
+	for idx, item := range rows {
+		row := idx + 2
 		_ = xf.SetCellValue(sheet, fmt.Sprintf("A%d", row), item.ConfigType)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("B%d", row), item.PowerWatts)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("C%d", row), item.PowerKW)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("D%d", row), item.CabinetCostMonthly)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("E%d", row), item.ServerOriginalCNY)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("F%d", row), item.DepreciationMonthly)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("G%d", row), item.NetworkDeviceMonthly)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("H%d", row), item.NetworkCabinetMonthly)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("I%d", row), item.ServerRenewalMonthly)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("J%d", row), item.OtherFixedCostMonthly)
-		_ = xf.SetCellValue(sheet, fmt.Sprintf("K%d", row), item.TotalTCOMonthly)
-	}
-
-	if res.Note != "" {
-		_ = xf.SetCellValue(sheet, "A7", "备注")
-		_ = xf.SetCellValue(sheet, "B7", res.Note)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("B%d", row), item.SceneCategory)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("C%d", row), item.CPULogicalCores)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("D%d", row), item.MemoryCapacityGB)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("E%d", row), item.CapacityStorageTB)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("F%d", row), item.CountGPU)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("G%d", row), item.UnavailableCores)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("H%d", row), item.UnavailableMemoryGB)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("I%d", row), item.PerformanceScore)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("J%d", row), item.AvailableCores)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("K%d", row), item.AvailableMemoryGB)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("L%d", row), item.StandardScore)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("M%d", row), item.CPUPerformanceFactor)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("N%d", row), item.MemoryRatio)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("O%d", row), item.MemoryRatioFactor)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("P%d", row), item.OverallPerformanceRatio)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("Q%d", row), item.PowerWatts)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("R%d", row), item.PowerKW)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("S%d", row), item.CabinetCostMonthly)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("T%d", row), item.ServerOriginalCNY)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("U%d", row), item.DepreciationMonthly)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("V%d", row), item.NetworkDeviceMonthly)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("W%d", row), item.NetworkCabinetMonthly)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("X%d", row), item.ServerRenewalMonthly)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("Y%d", row), item.OtherFixedCostMonthly)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("Z%d", row), item.TotalTCOMonthly)
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("AA%d", row), fmt.Sprintf("%.2f %s", item.UnitTCO, valueScoreUnitLabel(item.SceneType)))
+		_ = xf.SetCellValue(sheet, fmt.Sprintf("AB%d", row), item.ValueScoreV1)
 	}
 
 	buf, err := xf.WriteToBuffer()
@@ -490,8 +519,18 @@ func (h *ValueScoreSetupHandler) ExportMonthlyTCO(c *gin.Context) {
 		fail(c, 50001, "导出失败")
 		return
 	}
-	filename := "value-score-monthly-tco.xlsx"
+	filename := "value-score.xlsx"
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buf.Bytes())
 }
 
+func valueScoreUnitLabel(sceneType string) string {
+	switch sceneType {
+	case "gpu":
+		return "/GPU卡"
+	case "warm_storage", "hot_storage":
+		return "/TB"
+	default:
+		return "/核"
+	}
+}
