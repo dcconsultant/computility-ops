@@ -24,8 +24,11 @@ import {
   previewValueScorePerformanceParams,
   listValueScorePerformanceParams,
   exportCabinetTemplate,
+  getRenewalSettings,
   listCabinetConfigs,
   listHostPackages,
+  listMetaModels,
+  listMetaRecords,
   listServers,
   updateCabinetConfig,
   updateCabinetUtilization
@@ -35,6 +38,8 @@ import type {
   CabinetConfig,
   HostPackageConfig,
   ImportResult,
+  MetaRecord,
+  RenewalPlanSettings,
   ServerItem,
   ValueScoreCabinetBaseline,
   ValueScoreCostParams,
@@ -85,10 +90,14 @@ export default function ImportPage() {
   const [valueConfigVisible, setValueConfigVisible] = useState(false);
   const [valueSceneTab, setValueSceneTab] = useState<'compute' | 'warm_storage' | 'hot_storage' | 'gpu'>('compute');
   const [valueConfigKeyword, setValueConfigKeyword] = useState('');
+  const [assetMetaServers, setAssetMetaServers] = useState<MetaRecord[]>([]);
+  const [assetMetaRacks, setAssetMetaRacks] = useState<MetaRecord[]>([]);
+  const [assetMetaConfigs, setAssetMetaConfigs] = useState<MetaRecord[]>([]);
+  const [renewalSettings, setRenewalSettings] = useState<RenewalPlanSettings | null>(null);
 
   async function reloadAll() {
     try {
-      const [s1, s2, s3, s4, s5, s6, s7, s8] = await Promise.all([
+      const [s1, s2, s3, s4, s5, s6, s7, s8, s9, s10] = await Promise.all([
         listServers(),
         listHostPackages(),
         getCabinetUtilization(),
@@ -96,7 +105,9 @@ export default function ImportPage() {
         getValueScoreCabinetBaseline(),
         getValueScoreCostParams(),
         listValueScorePerformanceParams(),
-        calculateValueScorePerformance()
+        calculateValueScorePerformance(),
+        getRenewalSettings(),
+        loadAssetMetaRecords()
       ]);
       setServers((ensureApiOk(s1) as any).data.list || []);
       setPackages((ensureApiOk(s2) as any).data.list || []);
@@ -106,6 +117,10 @@ export default function ImportPage() {
       setCostParams((ensureApiOk(s6) as any).data);
       setPerformancePreview((ensureApiOk(s7) as any).data);
       setPerformanceResult((ensureApiOk(s8) as any).data);
+      setRenewalSettings((ensureApiOk(s9) as any).data);
+      setAssetMetaServers(s10.servers);
+      setAssetMetaRacks(s10.racks);
+      setAssetMetaConfigs(s10.configs);
       try {
         const tco = ensureApiOk(await calculateValueScoreTCO());
         setTcoResult(tco.data);
@@ -115,6 +130,24 @@ export default function ImportPage() {
     } catch (e) {
       message.error(parseApiError(e, '加载失败'));
     }
+  }
+
+  async function loadAssetMetaRecords() {
+    const modelsResp = ensureApiOk(await listMetaModels());
+    const models = modelsResp.data.list || [];
+    const serverModel = models.find((m) => m.model_code === 'server');
+    const rackModel = models.find((m) => m.model_code === 'rack');
+    const configModel = models.find((m) => m.model_code === 'config_type');
+    const [serverRows, rackRows, configRows] = await Promise.all([
+      serverModel ? listMetaRecords(serverModel.id) : Promise.resolve(null),
+      rackModel ? listMetaRecords(rackModel.id) : Promise.resolve(null),
+      configModel ? listMetaRecords(configModel.id) : Promise.resolve(null)
+    ]);
+    return {
+      servers: serverRows ? ensureApiOk(serverRows).data.list || [] : [],
+      racks: rackRows ? ensureApiOk(rackRows).data.list || [] : [],
+      configs: configRows ? ensureApiOk(configRows).data.list || [] : []
+    };
   }
 
   useEffect(() => {
@@ -157,7 +190,15 @@ export default function ImportPage() {
     ].some((v) => String(v ?? '').toLowerCase().includes(q)));
   }, [packages, packageKeyword]);
 
-  const assetAnalysis = useMemo(() => buildAssetAnalysis(servers), [servers]);
+  const assetAnalysis = useMemo(() => buildAssetAnalysis({
+    legacyServers: servers,
+    metaServers: assetMetaServers,
+    metaRacks: assetMetaRacks,
+    metaConfigs: assetMetaConfigs,
+    valuePackages: packages,
+    performanceItems: performanceResult?.items || [],
+    idleStoppedPSAs: renewalSettings?.idle_stopped_psas || []
+  }), [servers, assetMetaServers, assetMetaRacks, assetMetaConfigs, packages, performanceResult, renewalSettings]);
 
   const section = searchParams.get('section') || '';
   const requestedTab = (searchParams.get('tab') as DataKey | null) || null;
@@ -648,6 +689,32 @@ export default function ImportPage() {
             label: '资产分析',
             children: (
               <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                <Card title="国内计算服务器闲置率">
+                  <Row gutter={[16, 16]}>
+                    <Col xs={12} md={6}><StatisticBlock title="在用数量" value={assetAnalysis.idleSummary.active} /></Col>
+                    <Col xs={12} md={6}><StatisticBlock title="闲置数量" value={assetAnalysis.idleSummary.idle} /></Col>
+                    <Col xs={12} md={6}><StatisticBlock title="闲置率" value={`${assetAnalysis.idleSummary.idleRate.toFixed(2)}%`} /></Col>
+                    <Col xs={12} md={6}><StatisticBlock title="未匹配机柜" value={assetAnalysis.idleSummary.unmatchedRack} /></Col>
+                  </Row>
+                  <Space direction="vertical" size={12} style={{ width: '100%', marginTop: 16 }}>
+                    <IdleStackedBarChart rows={assetAnalysis.idleRows} />
+                    <Table
+                      rowKey="configType"
+                      dataSource={assetAnalysis.idleRows}
+                      pagination={withTotalPagination(10)}
+                      size="small"
+                      columns={[
+                        { title: '配置类型', dataIndex: 'configType' },
+                        { title: '性能跑分', dataIndex: 'performanceScore', render: (v: number) => formatFloat(v), sorter: (a, b) => a.performanceScore - b.performanceScore },
+                        { title: '在用数量', dataIndex: 'activeCount', render: (v: number) => formatInt(v), sorter: (a, b) => a.activeCount - b.activeCount },
+                        { title: '闲置数量', dataIndex: 'idleCount', render: (v: number) => formatInt(v), sorter: (a, b) => a.idleCount - b.idleCount },
+                        { title: '合计', dataIndex: 'totalCount', render: (v: number) => formatInt(v), sorter: (a, b) => a.totalCount - b.totalCount },
+                        { title: '闲置率', dataIndex: 'idleRate', render: (v: number) => `${v.toFixed(2)}%`, sorter: (a, b) => a.idleRate - b.idleRate }
+                      ]}
+                    />
+                    <Text type="secondary">口径：server.rack 关联 rack.sn 获取 rack.datacenter；未匹配机柜不纳入本指标统计。国内为 rack.datacenter 非 IN 开头；仅统计场景=计算的配置类型；L0级Buffer PSA 复用续保配置。</Text>
+                  </Space>
+                </Card>
                 <Card title="国内/印度保内保外概览">
                   <Table rowKey={(r) => `${r.region}-${r.snapshotDate}`} dataSource={assetAnalysis.snapshotRows} pagination={false} size="small" columns={[
                     { title: '地区', dataIndex: 'region' },
@@ -671,24 +738,38 @@ export default function ImportPage() {
   );
 }
 
-// Keep existing helper implementations below unchanged.
 type RegionKey = 'domestic' | 'india';
 interface AssetSnapshotRow { region: '国内' | '印度'; snapshotLabel: string; snapshotDate: string; inWarranty: number; outWarranty: number; total: number; outWarrantyRatio: number; }
 interface AssetTrendPoint { year: number; outCount: number; cumulativeOutCount: number; cumulativeOutRatio: number; }
-function buildAssetAnalysis(servers: ServerItem[]) {
+interface AssetServerRow { sn: string; psa: string; configType: string; rack: string; idc: string; warrantyEndDate: string; }
+interface AssetIdleRow { configType: string; activeCount: number; idleCount: number; totalCount: number; idleRate: number; performanceScore: number; }
+interface AssetIdleSummary { active: number; idle: number; idleRate: number; unmatchedRack: number; }
+interface AssetAnalysisInput {
+  legacyServers: ServerItem[];
+  metaServers: MetaRecord[];
+  metaRacks: MetaRecord[];
+  metaConfigs: MetaRecord[];
+  valuePackages: HostPackageConfig[];
+  performanceItems: ValueScorePerformanceCalcItem[];
+  idleStoppedPSAs: string[];
+}
+
+function buildAssetAnalysis(input: AssetAnalysisInput) {
   const now = new Date();
   const nextYear0630 = new Date(now.getFullYear() + 1, 5, 30);
   const snapshots = [{ label: '当前时间', date: now }, { label: '次年6月30日', date: nextYear0630 }];
   const totals: Record<RegionKey, number> = { domestic: 0, india: 0 };
   const snapshotRows: AssetSnapshotRow[] = [];
   const trends: Record<RegionKey, AssetTrendPoint[]> = { domestic: [], india: [] };
+  const assetServers = normalizeAssetServers(input);
+
   (['domestic', 'india'] as RegionKey[]).forEach((region) => {
-    const list = servers.filter((s) => resolveRegion(s.idc) === region);
+    const list = assetServers.filter((s) => resolveRegion(s.idc) === region);
     totals[region] = list.length;
     for (const snap of snapshots) {
       let outWarranty = 0;
       for (const item of list) {
-        const end = parseYMD(item.warranty_end_date);
+        const end = parseYMD(item.warrantyEndDate);
         if (!end || end.getTime() < snap.date.getTime()) outWarranty += 1;
       }
       const total = list.length;
@@ -696,7 +777,7 @@ function buildAssetAnalysis(servers: ServerItem[]) {
     }
     const yearMap = new Map<number, number>();
     for (const item of list) {
-      const end = parseYMD(item.warranty_end_date);
+      const end = parseYMD(item.warrantyEndDate);
       if (!end) continue;
       const y = end.getFullYear();
       yearMap.set(y, (yearMap.get(y) || 0) + 1);
@@ -707,7 +788,188 @@ function buildAssetAnalysis(servers: ServerItem[]) {
       return { year, outCount, cumulativeOutCount: cumulative, cumulativeOutRatio: list.length > 0 ? (cumulative * 100) / list.length : 0 };
     });
   });
-  return { snapshotRows, trends, totals };
+
+  const idleAnalysis = buildIdleAnalysis(assetServers, input);
+  return { snapshotRows, trends, totals, ...idleAnalysis };
+}
+
+function normalizeAssetServers(input: AssetAnalysisInput): AssetServerRow[] {
+  if (input.metaServers.length) {
+    const rackIDC = new Map<string, string>();
+    for (const r of input.metaRacks) {
+      const data = r.data || {};
+      const rackNo = pickMeta(data, 'sn', 'rack', '机柜编号');
+      if (rackNo) rackIDC.set(rackNo, pickMeta(data, 'datacenter', 'idc', '机房'));
+    }
+    return input.metaServers.map((r) => {
+      const data = r.data || {};
+      const rack = pickMeta(data, 'rack', '机柜', '机柜编号');
+      return {
+        sn: pickMeta(data, 'sn', 'SN'),
+        psa: pickMeta(data, 'psa', 'PSA'),
+        configType: pickMeta(data, 'config_type', '配置类型'),
+        rack,
+        idc: rackIDC.get(rack) || '',
+        warrantyEndDate: pickMeta(data, 'server_warranty_last_date', 'warranty_end_date', '保修结束日期')
+      };
+    });
+  }
+  return input.legacyServers.map((s) => ({
+    sn: s.sn,
+    psa: s.psa,
+    configType: s.config_type,
+    rack: '',
+    idc: s.idc || '',
+    warrantyEndDate: s.warranty_end_date || ''
+  }));
+}
+
+function buildIdleAnalysis(assetServers: AssetServerRow[], input: AssetAnalysisInput): { idleRows: AssetIdleRow[]; idleSummary: AssetIdleSummary } {
+  const computeConfigs = new Set<string>();
+  for (const pkg of input.valuePackages) {
+    const scene = String((pkg as any).application_category || pkg.scene_category || '').trim();
+    if (pkg.config_type && isComputeScene(scene)) computeConfigs.add(pkg.config_type);
+  }
+  for (const r of input.metaConfigs) {
+    const data = r.data || {};
+    const configType = pickMeta(data, 'config_type', '配置类型');
+    const scene = pickMeta(data, 'application_category', 'scene_category', '场景大类');
+    if (configType && isComputeScene(scene)) computeConfigs.add(configType);
+  }
+  if (!computeConfigs.size) {
+    for (const item of input.performanceItems) {
+      if (item.config_type) computeConfigs.add(item.config_type);
+    }
+  }
+
+  const performanceByConfig = new Map<string, number>();
+  for (const item of input.performanceItems) {
+    performanceByConfig.set(String(item.config_type || '').trim(), Number(item.performance_score || 0));
+  }
+
+  const idlePatterns = normalizePSAPatterns(input.idleStoppedPSAs);
+  const byConfig = new Map<string, AssetIdleRow>();
+  let unmatchedRack = 0;
+  for (const s of assetServers) {
+    const configType = s.configType.trim();
+    if (!configType || !computeConfigs.has(configType)) continue;
+    if (!s.rack || !s.idc) {
+      unmatchedRack += 1;
+      continue;
+    }
+    if (resolveRegion(s.idc) !== 'domestic') continue;
+
+    const row = byConfig.get(configType) || {
+      configType,
+      activeCount: 0,
+      idleCount: 0,
+      totalCount: 0,
+      idleRate: 0,
+      performanceScore: performanceByConfig.get(configType) || 0
+    };
+    const isIdle = matchPSA(s.psa, idlePatterns);
+    const isActive = !isIdle && !s.rack.toUpperCase().includes('SPR');
+    if (isIdle) row.idleCount += 1;
+    if (isActive) row.activeCount += 1;
+    row.totalCount = row.activeCount + row.idleCount;
+    row.idleRate = row.totalCount > 0 ? (row.idleCount * 100) / row.totalCount : 0;
+    byConfig.set(configType, row);
+  }
+
+  const idleRows = [...byConfig.values()].sort((a, b) => {
+    if (b.performanceScore !== a.performanceScore) return b.performanceScore - a.performanceScore;
+    return a.configType.localeCompare(b.configType, 'zh-Hans-CN');
+  });
+  const active = idleRows.reduce((sum, r) => sum + r.activeCount, 0);
+  const idle = idleRows.reduce((sum, r) => sum + r.idleCount, 0);
+  return {
+    idleRows,
+    idleSummary: {
+      active,
+      idle,
+      unmatchedRack,
+      idleRate: active + idle > 0 ? (idle * 100) / (active + idle) : 0
+    }
+  };
+}
+
+function pickMeta(data: Record<string, any>, ...keys: string[]) {
+  for (const key of keys) {
+    const v = data[key];
+    if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
+  }
+  return '';
+}
+
+function isComputeScene(raw: string) {
+  const scene = String(raw || '').trim().toLowerCase();
+  return ['计算', '计算型', 'compute'].includes(scene);
+}
+
+function normalizePSAPatterns(values: string[]) {
+  return values.flatMap((raw) => String(raw || '').split(/[,\n，]/)).map(normalizePSA).filter(Boolean);
+}
+
+function normalizePSA(v: string) {
+  return String(v || '').trim().replace(/\/+$/, '').toLowerCase();
+}
+
+function matchPSA(raw: string, patterns: string[]) {
+  const tokens = String(raw || '').split(/[,\n，]/).map(normalizePSA).filter(Boolean);
+  if (!tokens.length || !patterns.length) return false;
+  return tokens.some((token) => patterns.some((pattern) => token === pattern || token.startsWith(`${pattern}/`)));
+}
+
+function StatisticBlock({ title, value }: { title: string; value: string | number }) {
+  return (
+    <div style={{ border: '1px solid #f0f0f0', borderRadius: 6, padding: 12, background: '#fff' }}>
+      <Text type="secondary">{title}</Text>
+      <div style={{ marginTop: 6, fontSize: 22, fontWeight: 600 }}>{typeof value === 'number' ? formatInt(value) : value}</div>
+    </div>
+  );
+}
+
+function IdleStackedBarChart({ rows }: { rows: AssetIdleRow[] }) {
+  if (!rows.length) return <Text type="secondary">暂无可用于绘图的国内计算服务器闲置数据。</Text>;
+  const width = 920;
+  const height = 340;
+  const m = { left: 52, right: 24, top: 28, bottom: 78 };
+  const innerW = width - m.left - m.right;
+  const innerH = height - m.top - m.bottom;
+  const maxTotal = Math.max(1, ...rows.map((r) => r.totalCount));
+  const barW = Math.max(18, Math.min(42, innerW / Math.max(rows.length, 1) * 0.52));
+  const x = (idx: number) => m.left + ((idx + 0.5) * innerW) / rows.length;
+  const barH = (v: number) => (v / maxTotal) * innerH;
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', background: '#fff', border: '1px solid #f0f0f0', borderRadius: 6 }}>
+      <g>
+        <rect x={m.left} y={8} width="12" height="12" fill="#69b1ff" rx="2" />
+        <text x={m.left + 18} y={18} fontSize="11" fill="#666">在用</text>
+        <rect x={m.left + 72} y={8} width="12" height="12" fill="#ffa940" rx="2" />
+        <text x={m.left + 90} y={18} fontSize="11" fill="#666">闲置</text>
+      </g>
+      {[0, 0.25, 0.5, 0.75, 1].map((p) => {
+        const y = m.top + innerH - p * innerH;
+        return <g key={p}><line x1={m.left} x2={width - m.right} y1={y} y2={y} stroke="#f0f0f0" /><text x={10} y={y + 4} fontSize="10" fill="#888">{formatInt(maxTotal * p)}</text></g>;
+      })}
+      {rows.map((row, i) => {
+        const activeH = barH(row.activeCount);
+        const idleH = barH(row.idleCount);
+        const baseY = m.top + innerH;
+        const activeY = baseY - activeH;
+        const idleY = activeY - idleH;
+        return (
+          <g key={row.configType}>
+            <rect x={x(i) - barW / 2} y={activeY} width={barW} height={activeH} fill="#69b1ff" rx="3" />
+            <rect x={x(i) - barW / 2} y={idleY} width={barW} height={idleH} fill="#ffa940" rx="3" />
+            <text x={x(i)} y={Math.max(14, idleY - 6)} textAnchor="middle" fontSize="10" fill="#595959">{formatInt(row.totalCount)}</text>
+            <text x={x(i)} y={height - 42} textAnchor="end" fontSize="10" fill="#666" transform={`rotate(-35 ${x(i)} ${height - 42})`}>{row.configType}</text>
+            <title>{`${row.configType}：在用 ${row.activeCount}，闲置 ${row.idleCount}，闲置率 ${row.idleRate.toFixed(2)}%，性能跑分 ${formatFloat(row.performanceScore)}`}</title>
+          </g>
+        );
+      })}
+    </svg>
+  );
 }
 function resolveRegion(idc?: string): RegionKey { const norm = (idc || '').trim().toUpperCase(); return norm.startsWith('IN') ? 'india' : 'domestic'; }
 function parseYMD(v?: string) { if (!v) return null; const m = /^\s*(\d{4})-(\d{2})-(\d{2})\s*$/.exec(v); if (!m) return null; const y = Number(m[1]); const mon = Number(m[2]); const d = Number(m[3]); if (!Number.isFinite(y) || mon < 1 || mon > 12 || d < 1 || d > 31) return null; return new Date(y, mon - 1, d); }
