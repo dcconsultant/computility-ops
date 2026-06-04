@@ -896,9 +896,41 @@ function buildIdleAnalysis(assetServers: AssetServerRow[], input: AssetAnalysisI
 function pickMeta(data: Record<string, any>, ...keys: string[]) {
   for (const key of keys) {
     const v = data[key];
-    if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
+    const text = metaValueToText(v);
+    if (text) return text;
   }
   return '';
+}
+
+function metaValueToText(value: any): string {
+  if (value === undefined || value === null) return '';
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const text = metaValueToText(item);
+      if (text) return text;
+    }
+    return '';
+  }
+  if (typeof value === 'object') {
+    for (const key of ['sn', 'SN', 'rack', 'config_type', 'value', 'label', 'name', 'text', 'id']) {
+      const text = metaValueToText(value[key]);
+      if (text) return text;
+    }
+    return '';
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return '';
+  if ((raw.startsWith('{') && raw.endsWith('}')) || (raw.startsWith('[') && raw.endsWith(']'))) {
+    try {
+      const parsed = JSON.parse(raw);
+      const text = metaValueToText(parsed);
+      if (text) return text;
+    } catch {
+      // Use raw text when it is not valid JSON.
+    }
+  }
+  return raw;
 }
 
 function isComputeScene(raw: string) {
@@ -907,15 +939,39 @@ function isComputeScene(raw: string) {
 }
 
 function normalizePSAPatterns(values: string[]) {
-  return values.flatMap((raw) => String(raw || '').split(/[,\n，]/)).map(normalizePSA).filter(Boolean);
+  return values.flatMap(splitPSATokens);
 }
 
 function normalizePSA(v: string) {
-  return String(v || '').trim().replace(/\/+$/, '').toLowerCase();
+  let n = String(v || '').trim().toLowerCase();
+  n = n.replace(/^["']+|["']+$/g, '');
+  n = n.replace(/\\/g, '/');
+  n = n.replace(/\s+/g, '');
+  n = n.replace(/\/+$/, '');
+  return n;
+}
+
+function splitPSATokens(raw: string) {
+  const text = String(raw || '').trim();
+  if (!text) return [];
+
+  if (text.startsWith('[') && text.endsWith(']')) {
+    try {
+      const arr = JSON.parse(text);
+      if (Array.isArray(arr)) {
+        const out = arr.map((x) => normalizePSA(String(x || ''))).filter(Boolean);
+        if (out.length) return out;
+      }
+    } catch {
+      // Fall through to delimiter based parsing.
+    }
+  }
+
+  return text.split(/[,\n，;；\t]/).map(normalizePSA).filter(Boolean);
 }
 
 function matchPSA(raw: string, patterns: string[]) {
-  const tokens = String(raw || '').split(/[,\n，]/).map(normalizePSA).filter(Boolean);
+  const tokens = splitPSATokens(raw);
   if (!tokens.length || !patterns.length) return false;
   return tokens.some((token) => patterns.some((pattern) => token === pattern || token.startsWith(`${pattern}/`)));
 }
