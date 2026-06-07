@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { Alert, Button, Card, Col, Input, InputNumber, Modal, Popconfirm, Row, message, Space, Table, Tabs, Typography, Upload } from 'antd';
 import type { UploadProps } from 'antd';
-import { UploadOutlined } from '@ant-design/icons';
+import { DownloadOutlined, UploadOutlined } from '@ant-design/icons';
 import {
   createCabinetConfig,
   deleteCabinetConfig,
@@ -199,6 +199,19 @@ export default function ImportPage() {
     performanceItems: performanceResult?.items || [],
     idleStoppedPSAs: renewalSettings?.idle_stopped_psas || []
   }), [servers, assetMetaServers, assetMetaRacks, assetMetaConfigs, packages, performanceResult, renewalSettings]);
+
+  function onExportUnmatchedRackCSV() {
+    const rows = assetAnalysis.unmatchedRackRows || [];
+    if (!rows.length) {
+      message.warning('暂无机柜未匹配服务器清单可下载');
+      return;
+    }
+    const headers = ['服务器SN', '机柜', '配置类型', 'PSA', '机房', '未匹配原因'];
+    const csv = [headers, ...rows.map((r) => [r.sn, r.rack, r.configType, r.psa, r.idc, r.reason])]
+      .map((row) => row.map(csvCell).join(','))
+      .join('\n');
+    downloadCSV(`unmatched-rack-servers-${formatDateTime(new Date())}.csv`, csv);
+  }
 
   const section = searchParams.get('section') || '';
   const requestedTab = (searchParams.get('tab') as DataKey | null) || null;
@@ -689,12 +702,19 @@ export default function ImportPage() {
             label: '资产分析',
             children: (
               <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                <Card title="国内计算服务器闲置率">
+                <Card
+                  title="国内计算服务器闲置率"
+                  extra={
+                    <Button icon={<DownloadOutlined />} onClick={onExportUnmatchedRackCSV} disabled={!assetAnalysis.unmatchedRackRows.length}>
+                      下载未匹配清单
+                    </Button>
+                  }
+                >
                   <Row gutter={[16, 16]}>
                     <Col xs={12} md={6}><StatisticBlock title="在用数量" value={assetAnalysis.idleSummary.active} /></Col>
                     <Col xs={12} md={6}><StatisticBlock title="闲置数量" value={assetAnalysis.idleSummary.idle} /></Col>
                     <Col xs={12} md={6}><StatisticBlock title="闲置率" value={`${assetAnalysis.idleSummary.idleRate.toFixed(2)}%`} /></Col>
-                    <Col xs={12} md={6}><StatisticBlock title="未匹配机柜" value={assetAnalysis.idleSummary.unmatchedRack} /></Col>
+                    <Col xs={12} md={6}><StatisticBlock title="机柜未匹配服务器" value={assetAnalysis.idleSummary.unmatchedRack} /></Col>
                   </Row>
                   <Space direction="vertical" size={12} style={{ width: '100%', marginTop: 16 }}>
                     <IdleStackedBarChart rows={assetAnalysis.idleRows} />
@@ -712,7 +732,7 @@ export default function ImportPage() {
                         { title: '闲置率', dataIndex: 'idleRate', render: (v: number) => `${v.toFixed(2)}%`, sorter: (a, b) => a.idleRate - b.idleRate }
                       ]}
                     />
-                    <Text type="secondary">口径：server.rack 关联 rack.sn 获取 rack.datacenter；未匹配机柜不纳入本指标统计。国内为 rack.datacenter 非 IN 开头；仅统计场景=计算的配置类型；L0级Buffer PSA 复用续保配置。</Text>
+                    <Text type="secondary">口径：server.rack 关联 rack.sn 获取 rack.datacenter；机柜未匹配服务器不纳入本指标统计。国内为 rack.datacenter 非 IN 开头；仅统计场景=计算的配置类型；L0级Buffer PSA 复用续保配置。</Text>
                   </Space>
                 </Card>
                 <Card title="国内/印度保内保外概览">
@@ -744,6 +764,7 @@ interface AssetTrendPoint { year: number; outCount: number; cumulativeOutCount: 
 interface AssetServerRow { sn: string; psa: string; configType: string; rack: string; idc: string; warrantyEndDate: string; }
 interface AssetIdleRow { configType: string; activeCount: number; idleCount: number; totalCount: number; idleRate: number; performanceScore: number; }
 interface AssetIdleSummary { active: number; idle: number; idleRate: number; unmatchedRack: number; }
+interface AssetUnmatchedRackRow { sn: string; psa: string; configType: string; rack: string; idc: string; reason: string; }
 interface AssetAnalysisInput {
   legacyServers: ServerItem[];
   metaServers: MetaRecord[];
@@ -824,7 +845,7 @@ function normalizeAssetServers(input: AssetAnalysisInput): AssetServerRow[] {
   }));
 }
 
-function buildIdleAnalysis(assetServers: AssetServerRow[], input: AssetAnalysisInput): { idleRows: AssetIdleRow[]; idleSummary: AssetIdleSummary } {
+function buildIdleAnalysis(assetServers: AssetServerRow[], input: AssetAnalysisInput): { idleRows: AssetIdleRow[]; idleSummary: AssetIdleSummary; unmatchedRackRows: AssetUnmatchedRackRow[] } {
   const computeConfigs = new Set<string>();
   for (const pkg of input.valuePackages) {
     const scene = String((pkg as any).application_category || pkg.scene_category || '').trim();
@@ -849,12 +870,21 @@ function buildIdleAnalysis(assetServers: AssetServerRow[], input: AssetAnalysisI
 
   const idlePatterns = normalizePSAPatterns(input.idleStoppedPSAs);
   const byConfig = new Map<string, AssetIdleRow>();
+  const unmatchedRackRows: AssetUnmatchedRackRow[] = [];
   let unmatchedRack = 0;
   for (const s of assetServers) {
     const configType = s.configType.trim();
     if (!configType || !computeConfigs.has(configType)) continue;
     if (!s.rack || !s.idc) {
       unmatchedRack += 1;
+      unmatchedRackRows.push({
+        sn: s.sn,
+        psa: s.psa,
+        configType,
+        rack: s.rack,
+        idc: s.idc,
+        reason: !s.rack ? '服务器机柜为空' : '机柜未匹配到机房'
+      });
       continue;
     }
     if (resolveRegion(s.idc) !== 'domestic') continue;
@@ -884,6 +914,7 @@ function buildIdleAnalysis(assetServers: AssetServerRow[], input: AssetAnalysisI
   const idle = idleRows.reduce((sum, r) => sum + r.idleCount, 0);
   return {
     idleRows,
+    unmatchedRackRows,
     idleSummary: {
       active,
       idle,
@@ -1040,6 +1071,19 @@ function AssetTrendChart({ points, total, regionLabel }: { points: AssetTrendPoi
   return (<Space direction="vertical" size={12} style={{ width: '100%' }}><svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', background: '#fff', borderRadius: 8 }}><g><rect x={m.left} y={6} width="12" height="12" fill="#91caff" rx="2" /><text x={m.left + 18} y={16} fontSize="11" fill="#666">当年过保数量（柱状）</text><line x1={m.left + 170} y1={12} x2={m.left + 194} y2={12} stroke="#ff4d4f" strokeWidth="2.5" /><circle cx={m.left + 182} cy={12} r="3.5" fill="#ff4d4f" /><text x={m.left + 202} y={16} fontSize="11" fill="#666">累计过保占比（曲线）</text></g>{[0, 25, 50, 75, 100].map((r) => (<g key={r}><line x1={m.left} x2={width - m.right} y1={yRatio(r)} y2={yRatio(r)} stroke="#f0f0f0" strokeWidth="1" /><text x={width - m.right + 6} y={yRatio(r) + 4} fontSize="10" fill="#888">{r}%</text></g>))}{points.map((p, i) => (<g key={p.year}><rect x={x(i) - barW / 2} y={yCount(p.outCount)} width={barW} height={Math.max(0, m.top + innerH - yCount(p.outCount))} fill="#91caff" rx="4"><title>{`${p.year}年过保数量：${p.outCount}`}</title></rect><text x={x(i)} y={labelPositions[i].barY} textAnchor="middle" fontSize="10" fill="#3b6ea8">{formatInt(p.outCount)}</text><text x={x(i)} y={height - 22} textAnchor="middle" fontSize="11" fill="#666">{p.year}</text></g>))}<path d={linePath} fill="none" stroke="#ff4d4f" strokeWidth="2.5" />{points.map((p, i) => (<g key={`dot-${p.year}`}><circle cx={x(i)} cy={yRatio(p.cumulativeOutRatio)} r="4" fill="#ff4d4f" /><text x={x(i)} y={labelPositions[i].lineY} textAnchor="middle" fontSize="10" fill="#c62828">{`${p.cumulativeOutRatio.toFixed(2)}%`}</text><title>{`${p.year}年累计过保占比：${p.cumulativeOutRatio.toFixed(2)}%`}</title></g>))}<text x={m.left - 40} y={m.top - 2} fontSize="10" fill="#888">过保数量</text><text x={width - m.right + 6} y={m.top - 2} fontSize="10" fill="#888">累计占比</text></svg><Table size="small" pagination={false} rowKey={(r) => `${regionLabel}-${r.year}`} dataSource={points} columns={[{ title: '年份', dataIndex: 'year' }, { title: '当年过保数量', dataIndex: 'outCount', render: (v: number) => formatInt(v) }, { title: '累计过保数量', dataIndex: 'cumulativeOutCount', render: (v: number) => formatInt(v) }, { title: '累计过保占比', dataIndex: 'cumulativeOutRatio', render: (v: number) => `${v.toFixed(2)}%` }]} /><Text type="secondary">{regionLabel}样本总量：{formatInt(total)} 台</Text></Space>);
 }
 function withTotalPagination(pageSize: number) { return { pageSize, showTotal: (total: number) => `共${total}条，${Math.ceil(total / pageSize)}页` }; }
+function csvCell(v: string | number | undefined | null) { return `"${String(v ?? '').replace(/"/g, '""')}"`; }
+function downloadCSV(filename: string, csv: string) {
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function formatDateTime(d: Date) {
+  return `${formatDate(d)}-${`${d.getHours()}`.padStart(2, '0')}${`${d.getMinutes()}`.padStart(2, '0')}${`${d.getSeconds()}`.padStart(2, '0')}`;
+}
 function formatInt(v?: number) { return Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 }); }
 function formatFloat(v?: number) { return Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function formatMaybeNumber(v?: string) { const n = Number((v || '').trim()); if (Number.isNaN(n)) return v || '-'; return n.toLocaleString('en-US', { maximumFractionDigits: 2 }); }
