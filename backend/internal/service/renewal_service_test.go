@@ -136,6 +136,94 @@ func TestRenewalService_CreatePlan_UsesNormalizedConfigTypeForValueScore(t *test
 	}
 }
 
+func TestRenewalService_CreatePlan_FiltersComputeByMinPerformanceScore(t *testing.T) {
+	ctx := context.Background()
+	serverRepo := mem.NewServerRepo()
+	datasetRepo := mem.NewDatasetRepo()
+	renewalRepo := mem.NewRenewalRepo()
+	mustSeedUnitPrices(t, renewalRepo)
+
+	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
+		{SN: "LOW", ConfigType: "compute-low", PSA: "10", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+		{SN: "HIGH", ConfigType: "compute-high", PSA: "11", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+	})
+	_ = datasetRepo.ReplaceHostPackages(ctx, []domain.HostPackageConfig{
+		{ConfigType: "compute-low", SceneCategory: "计算型", CPULogicalCores: 8, MemoryCapacityGB: 64, ArchStandardizedFactor: 1},
+		{ConfigType: "compute-high", SceneCategory: "计算型", CPULogicalCores: 8, MemoryCapacityGB: 64, ArchStandardizedFactor: 1},
+	})
+	_ = datasetRepo.ReplaceValueScorePerformanceParams(ctx, []domain.ValueScorePerformanceParam{
+		{ConfigType: "compute-low", PerformanceScore: 1800},
+		{ConfigType: "compute-high", PerformanceScore: 2400},
+	})
+
+	svc := NewRenewalService(serverRepo, datasetRepo, renewalRepo)
+	plan, err := svc.CreatePlan(ctx, CreatePlanInput{
+		TargetDate: "2026-01-01",
+		Requirements: domain.RenewalRequirements{
+			Domestic: domain.RenewalRegionTargets{
+				Compute: domain.RenewalSceneTarget{Mode: domain.RenewalTargetModeManual, Target: 8, MinPerformanceScore: 2000},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreatePlan() error = %v", err)
+	}
+	if len(plan.Items) != 1 || plan.Items[0].SN != "HIGH" {
+		t.Fatalf("items=%+v, want only HIGH above performance gate", plan.Items)
+	}
+	found := false
+	for _, item := range plan.NonRenewalItems {
+		if item.SN == "LOW" && item.ReasonCode == "performance_gate" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("NonRenewalItems=%+v, want LOW with performance_gate", plan.NonRenewalItems)
+	}
+}
+
+func TestRenewalService_CreatePlan_FiltersWarmStorageBySingleDiskCapacity(t *testing.T) {
+	ctx := context.Background()
+	serverRepo := mem.NewServerRepo()
+	datasetRepo := mem.NewDatasetRepo()
+	renewalRepo := mem.NewRenewalRepo()
+	mustSeedUnitPrices(t, renewalRepo)
+
+	_ = serverRepo.ReplaceAll(ctx, []domain.Server{
+		{SN: "SMALL", ConfigType: "warm-small", PSA: "10", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+		{SN: "LARGE", ConfigType: "warm-large", PSA: "11", WarrantyEndDate: "2025-01-01", Environment: "生产"},
+	})
+	_ = datasetRepo.ReplaceHostPackages(ctx, []domain.HostPackageConfig{
+		{ConfigType: "warm-small", SceneCategory: "温存储", CPULogicalCores: 8, StorageCapacityTB: 48, DataDiskCount: 12, ArchStandardizedFactor: 1},
+		{ConfigType: "warm-large", SceneCategory: "温存储", CPULogicalCores: 8, StorageCapacityTB: 96, DataDiskCount: 12, ArchStandardizedFactor: 1},
+	})
+
+	svc := NewRenewalService(serverRepo, datasetRepo, renewalRepo)
+	plan, err := svc.CreatePlan(ctx, CreatePlanInput{
+		TargetDate: "2026-01-01",
+		Requirements: domain.RenewalRequirements{
+			Domestic: domain.RenewalRegionTargets{
+				WarmStorage: domain.RenewalSceneTarget{Mode: domain.RenewalTargetModeManual, Target: 96, MinSingleDiskCapacityTB: 6},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreatePlan() error = %v", err)
+	}
+	if len(plan.Items) != 1 || plan.Items[0].SN != "LARGE" {
+		t.Fatalf("items=%+v, want only LARGE above single disk capacity gate", plan.Items)
+	}
+	found := false
+	for _, item := range plan.NonRenewalItems {
+		if item.SN == "SMALL" && item.ReasonCode == "single_disk_capacity_gate" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("NonRenewalItems=%+v, want SMALL with single_disk_capacity_gate", plan.NonRenewalItems)
+	}
+}
+
 func TestRenewalService_CreatePlan_ExcludePSA(t *testing.T) {
 	ctx := context.Background()
 	serverRepo := mem.NewServerRepo()

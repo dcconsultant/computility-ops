@@ -282,7 +282,7 @@ export default function PlanPage() {
     setSettings((prev) => ({ ...prev, [field]: values }));
   }
 
-  function onSettingTarget(region: 'domestic' | 'india', scene: keyof RenewalRequirements['domestic'], patch: Partial<{ mode: RenewalTargetMode; target: number }>) {
+  function onSettingTarget(region: 'domestic' | 'india', scene: keyof RenewalRequirements['domestic'], patch: Partial<RenewalRequirements['domestic']['compute']>) {
     setSettings((prev) => ({
       ...prev,
       requirements: {
@@ -713,6 +713,40 @@ export default function PlanPage() {
                               value={Number(v || 0)}
                               disabled={row.mode === 'maximize'}
                               onChange={(next) => onSettingTarget(row.region, row.scene, { target: Number(next ?? 0) })}
+                            />
+                          );
+                        }
+                      },
+                      {
+                        title: '准入性能分',
+                        dataIndex: 'min_performance_score',
+                        width: 160,
+                        render: (v: number, row: any) => {
+                          if (row.scene !== 'compute') return '-';
+                          if (!settingsEditing) return formatFloat(v || 0);
+                          return (
+                            <InputNumber
+                              min={0}
+                              step={100}
+                              value={Number(v || 0)}
+                              onChange={(next) => onSettingTarget(row.region, row.scene, { min_performance_score: Number(next ?? 0) })}
+                            />
+                          );
+                        }
+                      },
+                      {
+                        title: '准入单盘容量(TB)',
+                        dataIndex: 'min_single_disk_capacity_tb',
+                        width: 180,
+                        render: (v: number, row: any) => {
+                          if (row.scene !== 'warm_storage') return '-';
+                          if (!settingsEditing) return formatFloat(v || 0);
+                          return (
+                            <InputNumber
+                              min={0}
+                              step={1}
+                              value={Number(v || 0)}
+                              onChange={(next) => onSettingTarget(row.region, row.scene, { min_single_disk_capacity_tb: Number(next ?? 0) })}
                             />
                           );
                         }

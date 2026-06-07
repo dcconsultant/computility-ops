@@ -205,12 +205,14 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 	}
 
 	perfByConfig := map[string]domain.ValueScorePerformanceParam{}
+	performanceScoreByConfig := map[string]float64{}
 	for _, p := range perfParams {
 		k := normalizeConfigTypeKey(p.ConfigType)
 		if k == "" {
 			continue
 		}
 		perfByConfig[k] = p
+		performanceScoreByConfig[k] = p.PerformanceScore
 	}
 	origByConfig := map[string]float64{}
 	for _, r := range originalRows {
@@ -473,6 +475,50 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 		}
 		if hasSpecialRule && specialPolicy == "whitelist" {
 			item.SpecialPolicy = "whitelist"
+		}
+
+		regionReq := renewalRequirementFor(req, region, bucket)
+		if specialPolicy != "whitelist" {
+			if bucket == "compute" && regionReq.MinPerformanceScore > 0 {
+				perfScore := performanceScoreByConfig[serverConfigKey]
+				if perfScore < regionReq.MinPerformanceScore {
+					nonRenewalItems = append(nonRenewalItems, domain.NonRenewalItem{
+						SN:           item.SN,
+						Bucket:       item.Bucket,
+						Manufacturer: item.Manufacturer,
+						Model:        item.Model,
+						Environment:  item.Environment,
+						IDC:          item.IDC,
+						ConfigType:   item.ConfigType,
+						PSA:          item.PSA,
+						FinalScore:   item.FinalScore,
+						ReasonCode:   "performance_gate",
+						Reason:       "性能分未达准入要求",
+						ReasonDetail: fmt.Sprintf("性能跑分 %.2f < 准入性能分 %.2f", perfScore, regionReq.MinPerformanceScore),
+					})
+					continue
+				}
+			}
+			if bucket == "warm_storage" && regionReq.MinSingleDiskCapacityTB > 0 {
+				singleDiskCapacity := singleDiskCapacityTB(pkg)
+				if singleDiskCapacity < regionReq.MinSingleDiskCapacityTB {
+					nonRenewalItems = append(nonRenewalItems, domain.NonRenewalItem{
+						SN:           item.SN,
+						Bucket:       item.Bucket,
+						Manufacturer: item.Manufacturer,
+						Model:        item.Model,
+						Environment:  item.Environment,
+						IDC:          item.IDC,
+						ConfigType:   item.ConfigType,
+						PSA:          item.PSA,
+						FinalScore:   item.FinalScore,
+						ReasonCode:   "single_disk_capacity_gate",
+						Reason:       "单盘容量未达准入要求",
+						ReasonDetail: fmt.Sprintf("单盘容量 %.2fTB < 准入单盘容量 %.2fTB", singleDiskCapacity, regionReq.MinSingleDiskCapacityTB),
+					})
+					continue
+				}
+			}
 		}
 
 		bucketItems[bucket] = append(bucketItems[bucket], item)
@@ -1514,6 +1560,12 @@ func normalizeRequirements(req domain.RenewalRequirements) domain.RenewalRequire
 		if x.Target < 0 {
 			x.Target = 0
 		}
+		if x.MinPerformanceScore < 0 {
+			x.MinPerformanceScore = 0
+		}
+		if x.MinSingleDiskCapacityTB < 0 {
+			x.MinSingleDiskCapacityTB = 0
+		}
 		return x
 	}
 	req.Domestic.Compute = normalize(req.Domestic.Compute)
@@ -1540,6 +1592,12 @@ func validateRequirements(req domain.RenewalRequirements) error {
 		if x.Target < 0 {
 			return fmt.Errorf("target must be >= 0")
 		}
+		if x.MinPerformanceScore < 0 {
+			return fmt.Errorf("min_performance_score must be >= 0")
+		}
+		if x.MinSingleDiskCapacityTB < 0 {
+			return fmt.Errorf("min_single_disk_capacity_tb must be >= 0")
+		}
 		if x.Mode == domain.RenewalTargetModeMaximize || x.Target > 0 {
 			hasDemand = true
 		}
@@ -1548,6 +1606,32 @@ func validateRequirements(req domain.RenewalRequirements) error {
 		return fmt.Errorf("at least one demand target is required")
 	}
 	return nil
+}
+
+func renewalRequirementFor(req domain.RenewalRequirements, region, bucket string) domain.RenewalSceneTarget {
+	targets := req.Domestic
+	if region == "india" {
+		targets = req.India
+	}
+	switch bucket {
+	case "compute":
+		return targets.Compute
+	case "warm_storage":
+		return targets.WarmStorage
+	case "hot_storage":
+		return targets.HotStorage
+	case "gpu":
+		return targets.GPU
+	default:
+		return domain.RenewalSceneTarget{}
+	}
+}
+
+func singleDiskCapacityTB(pkg domain.HostPackageConfig) float64 {
+	if pkg.StorageCapacityTB <= 0 || pkg.DataDiskCount <= 0 {
+		return 0
+	}
+	return pkg.StorageCapacityTB / float64(pkg.DataDiskCount)
 }
 
 func containsNormalized(list []string, target string) bool {

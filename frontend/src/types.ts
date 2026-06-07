@@ -344,6 +344,8 @@ export type RenewalTargetMode = 'manual' | 'maximize';
 export interface RenewalSceneTarget {
   mode: RenewalTargetMode;
   target: number;
+  min_performance_score?: number;
+  min_single_disk_capacity_tb?: number;
 }
 
 export interface RenewalRegionTargets {

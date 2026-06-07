@@ -8,8 +8,10 @@ const (
 )
 
 type RenewalSceneTarget struct {
-	Mode   RenewalTargetMode `json:"mode"`
-	Target float64           `json:"target"`
+	Mode                    RenewalTargetMode `json:"mode"`
+	Target                  float64           `json:"target"`
+	MinPerformanceScore     float64           `json:"min_performance_score,omitempty"`
+	MinSingleDiskCapacityTB float64           `json:"min_single_disk_capacity_tb,omitempty"`
 }
 
 type RenewalRegionTargets struct {
