@@ -10,6 +10,7 @@ import (
 
 	"computility-ops/backend/internal/domain"
 	"computility-ops/backend/internal/repository"
+	"github.com/xuri/excelize/v2"
 )
 
 type ArrivalPlanFilter struct {
@@ -309,6 +310,9 @@ func stampDeliveryAudit(createdAt, updatedAt *string, isCreate bool) {
 func normalizeDeliveryTime(raw, field string) (string, error) {
 	t, err := parseOptionalDeliveryTime(raw)
 	if err != nil || t == nil {
+		if err != nil {
+			return "", fmt.Errorf("invalid %s: %v", field, err)
+		}
 		return "", fmt.Errorf("invalid %s", field)
 	}
 	return t.Format("2006-01-02 15:04:05"), nil
@@ -319,9 +323,21 @@ func parseOptionalDeliveryTime(raw string) (*time.Time, error) {
 	if v == "" {
 		return nil, nil
 	}
-	layouts := []string{"2006-01-02 15:04:05", "2006-01-02 15:04", "2006-01-02", "2006/01/02 15:04:05", "2006/01/02 15:04", "2006/01/02", time.RFC3339}
+	layouts := []string{
+		"2006-01-02 15:04:05", "2006-01-02 15:04", "2006-01-02",
+		"2006-1-2 15:04:05", "2006-1-2 15:04", "2006-1-2",
+		"2006/01/02 15:04:05", "2006/01/02 15:04", "2006/01/02",
+		"2006/1/2 15:04:05", "2006/1/2 15:04", "2006/1/2",
+		"2006.01.02", "2006.1.2", "2006年01月02日", "2006年1月2日",
+		"20060102", time.RFC3339,
+	}
 	for _, layout := range layouts {
 		if t, err := time.ParseInLocation(layout, v, time.Local); err == nil {
+			return &t, nil
+		}
+	}
+	if serial, err := strconv.ParseFloat(v, 64); err == nil && serial > 0 {
+		if t, err := excelize.ExcelDateToTime(serial, false); err == nil {
 			return &t, nil
 		}
 	}
