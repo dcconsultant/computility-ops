@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, DatePicker, Form, Input, InputNumber, Popconfirm, Select, Space, Table, Tabs, Tag, Upload, message } from 'antd';
+import { Button, Card, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tabs, Tag, Upload, message } from 'antd';
 import { DownloadOutlined, UploadOutlined } from '@ant-design/icons';
 import type { Dayjs } from 'dayjs';
 import type { UploadProps } from 'antd';
@@ -610,10 +610,21 @@ function ListActions(props: {
 async function importFile(file: File, importer: (file: File) => Promise<any>, reload: () => Promise<void>) {
   try {
     const resp = ensureApiOk(await importer(file));
-    const data = resp.data as { created?: number; success?: number; failed?: number };
+    const data = resp.data as { created?: number; success?: number; failed?: number; failures?: Array<{ row: number; reason: string }> };
     const created = data.created ?? data.success ?? 0;
     if ((data.failed || 0) > 0) {
       message.warning(`导入完成，成功 ${created} 条，失败 ${data.failed || 0} 条`);
+      Modal.warning({
+        title: '导入失败原因',
+        width: 720,
+        content: (
+          <Space direction="vertical" size={8} style={{ width: '100%', maxHeight: 360, overflow: 'auto' }}>
+            {(data.failures || []).map((item) => (
+              <div key={`${item.row}-${item.reason}`}>第 {item.row} 行：{item.reason}</div>
+            ))}
+          </Space>
+        )
+      });
     } else {
       message.success(`导入成功 ${created} 条`);
     }
