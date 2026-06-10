@@ -15,6 +15,7 @@ type Handlers struct {
 	Renewal             *handler.RenewalHandler
 	Contract            *handler.ContractHandler
 	Supplier            *handler.SupplierHandler
+	Delivery            *handler.DeliveryHandler
 	Cabinet             *handler.CabinetHandler
 	System              *handler.SystemHandler
 	ValueScoreSetup     *handler.ValueScoreSetupHandler
@@ -112,6 +113,28 @@ func NewRouter(h Handlers) *gin.Engine {
 		v1.POST("/contracts/:contract_id/attachments", h.Contract.UploadAttachment)
 		v1.GET("/contracts/:contract_id/attachments/:attachment_id/download", h.Contract.DownloadAttachment)
 		v1.DELETE("/contracts/:contract_id/attachments/:attachment_id", h.Contract.DeleteAttachment)
+
+		v1.POST("/delivery/arrival-plans", h.Delivery.CreateArrivalPlan)
+		v1.POST("/delivery/arrival-plans/import", h.Delivery.ImportArrivalPlans)
+		v1.GET("/delivery/arrival-plans", h.Delivery.ListArrivalPlans)
+		v1.GET("/delivery/arrival-plans/export", h.Delivery.ExportArrivalPlans)
+		v1.GET("/delivery/arrival-plans/template/export", h.Delivery.ExportArrivalPlanTemplate)
+		v1.PUT("/delivery/arrival-plans/:plan_id", h.Delivery.UpdateArrivalPlan)
+		v1.DELETE("/delivery/arrival-plans/:plan_id", h.Delivery.DeleteArrivalPlan)
+		v1.POST("/delivery/device-arrivals", h.Delivery.CreateDeviceArrival)
+		v1.POST("/delivery/device-arrivals/import", h.Delivery.ImportDeviceArrivals)
+		v1.GET("/delivery/device-arrivals", h.Delivery.ListDeviceArrivals)
+		v1.GET("/delivery/device-arrivals/export", h.Delivery.ExportDeviceArrivals)
+		v1.GET("/delivery/device-arrivals/template/export", h.Delivery.ExportDeviceArrivalTemplate)
+		v1.PUT("/delivery/device-arrivals/:record_id", h.Delivery.UpdateDeviceArrival)
+		v1.DELETE("/delivery/device-arrivals/:record_id", h.Delivery.DeleteDeviceArrival)
+		v1.POST("/delivery/accessory-arrivals", h.Delivery.CreateAccessoryArrival)
+		v1.POST("/delivery/accessory-arrivals/import", h.Delivery.ImportAccessoryArrivals)
+		v1.GET("/delivery/accessory-arrivals", h.Delivery.ListAccessoryArrivals)
+		v1.GET("/delivery/accessory-arrivals/export", h.Delivery.ExportAccessoryArrivals)
+		v1.GET("/delivery/accessory-arrivals/template/export", h.Delivery.ExportAccessoryArrivalTemplate)
+		v1.PUT("/delivery/accessory-arrivals/:record_id", h.Delivery.UpdateAccessoryArrival)
+		v1.DELETE("/delivery/accessory-arrivals/:record_id", h.Delivery.DeleteAccessoryArrival)
 
 		v1.POST("/renewals/plan", h.Renewal.CreatePlan)
 		v1.GET("/renewals/plans", h.Renewal.ListPlans)

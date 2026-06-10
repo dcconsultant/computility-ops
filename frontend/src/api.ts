@@ -32,6 +32,9 @@ import type {
   ImportErrorInsight,
   Contract,
   ContractAttachment,
+  ArrivalPlan,
+  DeviceArrivalRecord,
+  AccessoryArrivalRecord,
   Supplier,
   MetaField,
   MetaModel,
@@ -468,6 +471,147 @@ export function downloadContractAttachment(contractId: string, attachmentId: str
 export async function deleteContractAttachment(contractId: string, attachmentId: string) {
   const { data } = await http.delete<ApiResp<Contract>>(`/contracts/${contractId}/attachments/${attachmentId}`);
   return data;
+}
+
+export interface ArrivalPlanPayload {
+  category: string;
+  material_code: string;
+  material_name: string;
+  quantity: number;
+  receiving_address: string;
+  supplier: string;
+  order_no: string;
+  asset_code_range: string;
+  estimated_arrival_time: string;
+  remark?: string;
+}
+
+export interface DeviceArrivalPayload {
+  category: string;
+  package_code: string;
+  package_type: string;
+  material_service_code: string;
+  material_service_description: string;
+  rack_units: number;
+  manufacturer: string;
+  quantity: number;
+  receiving_location: string;
+  purchase_request_no: string;
+  srm_requirement_submitted_at: string;
+  po_no: string;
+  actual_arrival_time: string;
+}
+
+export interface AccessoryArrivalPayload {
+  purchase_request_no: string;
+  material_service_code: string;
+  material_service_description: string;
+  quantity: number;
+  supplier: string;
+  idc_room: string;
+  purchase_background: string;
+  srm_requirement_submitted_at: string;
+  po_no: string;
+  arrival_time: string;
+}
+
+export async function listArrivalPlans(params?: Record<string, string>) {
+  const { data } = await http.get<ApiResp<ListData<ArrivalPlan>>>('/delivery/arrival-plans', { params });
+  return data;
+}
+
+export async function createArrivalPlan(payload: ArrivalPlanPayload) {
+  const { data } = await http.post<ApiResp<ArrivalPlan>>('/delivery/arrival-plans', payload);
+  return data;
+}
+
+export async function updateArrivalPlan(planId: string, payload: ArrivalPlanPayload) {
+  const { data } = await http.put<ApiResp<ArrivalPlan>>(`/delivery/arrival-plans/${planId}`, payload);
+  return data;
+}
+
+export async function deleteArrivalPlan(planId: string) {
+  const { data } = await http.delete<ApiResp<{ deleted: boolean; plan_id: string }>>(`/delivery/arrival-plans/${planId}`);
+  return data;
+}
+
+export async function importArrivalPlans(file: File) {
+  return uploadImport('/delivery/arrival-plans/import', file);
+}
+
+export function exportArrivalPlans(params?: Record<string, string>) {
+  const query = new URLSearchParams(params || {});
+  window.open(`/api/v1/delivery/arrival-plans/export${query.toString() ? `?${query.toString()}` : ''}`, '_blank');
+}
+
+export function exportArrivalPlanTemplate() {
+  window.open('/api/v1/delivery/arrival-plans/template/export', '_blank');
+}
+
+export async function listDeviceArrivals(params?: Record<string, string>) {
+  const { data } = await http.get<ApiResp<ListData<DeviceArrivalRecord>>>('/delivery/device-arrivals', { params });
+  return data;
+}
+
+export async function createDeviceArrival(payload: DeviceArrivalPayload) {
+  const { data } = await http.post<ApiResp<DeviceArrivalRecord>>('/delivery/device-arrivals', payload);
+  return data;
+}
+
+export async function updateDeviceArrival(recordId: string, payload: DeviceArrivalPayload) {
+  const { data } = await http.put<ApiResp<DeviceArrivalRecord>>(`/delivery/device-arrivals/${recordId}`, payload);
+  return data;
+}
+
+export async function deleteDeviceArrival(recordId: string) {
+  const { data } = await http.delete<ApiResp<{ deleted: boolean; record_id: string }>>(`/delivery/device-arrivals/${recordId}`);
+  return data;
+}
+
+export async function importDeviceArrivals(file: File) {
+  return uploadImport('/delivery/device-arrivals/import', file);
+}
+
+export function exportDeviceArrivals(params?: Record<string, string>) {
+  const query = new URLSearchParams(params || {});
+  window.open(`/api/v1/delivery/device-arrivals/export${query.toString() ? `?${query.toString()}` : ''}`, '_blank');
+}
+
+export function exportDeviceArrivalTemplate() {
+  window.open('/api/v1/delivery/device-arrivals/template/export', '_blank');
+}
+
+export async function listAccessoryArrivals(params?: Record<string, string>) {
+  const { data } = await http.get<ApiResp<ListData<AccessoryArrivalRecord>>>('/delivery/accessory-arrivals', { params });
+  return data;
+}
+
+export async function createAccessoryArrival(payload: AccessoryArrivalPayload) {
+  const { data } = await http.post<ApiResp<AccessoryArrivalRecord>>('/delivery/accessory-arrivals', payload);
+  return data;
+}
+
+export async function updateAccessoryArrival(recordId: string, payload: AccessoryArrivalPayload) {
+  const { data } = await http.put<ApiResp<AccessoryArrivalRecord>>(`/delivery/accessory-arrivals/${recordId}`, payload);
+  return data;
+}
+
+export async function deleteAccessoryArrival(recordId: string) {
+  const { data } = await http.delete<ApiResp<{ deleted: boolean; record_id: string }>>(`/delivery/accessory-arrivals/${recordId}`);
+  return data;
+}
+
+export async function importAccessoryArrivals(file: File) {
+  return uploadImport('/delivery/accessory-arrivals/import', file);
+}
+
+export function exportAccessoryArrivals(params?: Record<string, string>) {
+  const query = new URLSearchParams(params || {});
+  window.open(`/api/v1/delivery/accessory-arrivals/export${query.toString() ? `?${query.toString()}` : ''}`, '_blank');
+}
+
+export function exportAccessoryArrivalTemplate() {
+  window.open('/api/v1/delivery/accessory-arrivals/template/export', '_blank');
 }
 
 

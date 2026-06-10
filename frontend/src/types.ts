@@ -500,6 +500,57 @@ export interface Contract {
   updated_at?: string;
 }
 
+export interface ArrivalPlan {
+  plan_id: string;
+  category: '服务器' | '网络设备' | '耗材及配件' | string;
+  material_code: string;
+  material_name: string;
+  quantity: number;
+  receiving_address: string;
+  supplier: string;
+  order_no: string;
+  asset_code_range: string;
+  estimated_arrival_time: string;
+  remark?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DeviceArrivalRecord {
+  record_id: string;
+  category: '服务器' | '网络设备' | string;
+  package_code: string;
+  package_type: string;
+  material_service_code: string;
+  material_service_description: string;
+  rack_units: number;
+  manufacturer: string;
+  quantity: number;
+  receiving_location: string;
+  purchase_request_no: string;
+  srm_requirement_submitted_at: string;
+  po_no: string;
+  actual_arrival_time: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AccessoryArrivalRecord {
+  record_id: string;
+  purchase_request_no: string;
+  material_service_code: string;
+  material_service_description: string;
+  quantity: number;
+  supplier: string;
+  idc_room: string;
+  purchase_background: string;
+  srm_requirement_submitted_at: string;
+  po_no: string;
+  arrival_time: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 
 export type MetaModelStatus = 'draft' | 'published' | 'archived';
 

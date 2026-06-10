@@ -40,13 +40,22 @@ func buildTestRouter() *gin.Engine {
 	serverRepo := mem.NewServerRepo()
 	datasetRepo := mem.NewDatasetRepo()
 	renewalRepo := mem.NewRenewalRepo()
+	contractRepo := mem.NewContractRepo()
+	supplierRepo := mem.NewSupplierRepo()
+	deliveryRepo := mem.NewDeliveryRepo()
 
 	importSvc := service.NewImportService(serverRepo, datasetRepo)
 	renewalSvc := service.NewRenewalService(serverRepo, datasetRepo, renewalRepo)
+	contractSvc := service.NewContractService(contractRepo)
+	supplierSvc := service.NewSupplierService(supplierRepo, contractRepo)
+	deliverySvc := service.NewDeliveryService(deliveryRepo)
 
 	return NewRouter(Handlers{
 		Import:              handler.NewImportHandler(importSvc),
 		Renewal:             handler.NewRenewalHandler(renewalSvc),
+		Contract:            handler.NewContractHandler(contractSvc),
+		Supplier:            handler.NewSupplierHandler(supplierSvc),
+		Delivery:            handler.NewDeliveryHandler(deliverySvc),
 		System:              handler.NewSystemHandler(),
 		StorageDriver:       "memory",
 		ReplacementPlanning: rpapi.NewHandler(rpapp.NewService(rpinfra.NewStaticReader())),
