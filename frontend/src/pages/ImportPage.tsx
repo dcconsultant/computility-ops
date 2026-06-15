@@ -732,6 +732,18 @@ export default function ImportPage() {
                         { title: '整备中', dataIndex: 'stagingCapacity', render: (v: number, row) => formatCapacity(v, row.unit), sorter: (a, b) => a.stagingCapacity - b.stagingCapacity }
                       ]}
                     />
+                    <Table
+                      title={() => '热存储诊断'}
+                      rowKey="item"
+                      dataSource={assetAnalysis.hotStorageDiagnosticRows}
+                      pagination={false}
+                      size="small"
+                      columns={[
+                        { title: '检查项', dataIndex: 'item' },
+                        { title: '数量', dataIndex: 'count', width: 100, render: (v: number) => formatInt(v), sorter: (a, b) => a.count - b.count },
+                        { title: '说明', dataIndex: 'note' }
+                      ]}
+                    />
                     <IdleStackedBarChart rows={assetAnalysis.idleRows} />
                     <Table
                       rowKey="configType"
@@ -782,6 +794,7 @@ interface AssetIdleRow { configType: string; activeCount: number; idleCount: num
 interface AssetIdleSummary { active: number; idle: number; staging: number; idleRate: number; unmatchedRack: number; }
 interface AssetUnmatchedRackRow { sn: string; psa: string; configType: string; rack: string; idc: string; reason: string; }
 interface AssetResourceRow { category: string; unit: string; activeCapacity: number; idleCapacity: number; stagingCapacity: number; }
+interface AssetResourceDiagnosticRow { item: string; count: number; note: string; }
 interface AssetAnalysisInput {
   legacyServers: ServerItem[];
   metaServers: MetaRecord[];
@@ -829,7 +842,8 @@ function buildAssetAnalysis(input: AssetAnalysisInput) {
 
   const idleAnalysis = buildIdleAnalysis(assetServers, input);
   const resourceSummaryRows = buildResourceSummary(assetServers, input);
-  return { snapshotRows, trends, totals, resourceSummaryRows, ...idleAnalysis };
+  const hotStorageDiagnosticRows = buildHotStorageDiagnostic(assetServers, input);
+  return { snapshotRows, trends, totals, resourceSummaryRows, hotStorageDiagnosticRows, ...idleAnalysis };
 }
 
 function normalizeAssetServers(input: AssetAnalysisInput): AssetServerRow[] {
@@ -1030,6 +1044,67 @@ function buildResourceSummary(assetServers: AssetServerRow[], input: AssetAnalys
   return order.map(({ category, unit }) => summaryMap.get(category) || { category, unit, activeCapacity: 0, idleCapacity: 0, stagingCapacity: 0 });
 }
 
+function buildHotStorageDiagnostic(assetServers: AssetServerRow[], input: AssetAnalysisInput): AssetResourceDiagnosticRow[] {
+  const packageMap = new Map<string, HostPackageConfig>();
+  for (const pkg of input.valuePackages) packageMap.set(String(pkg.config_type || '').trim(), pkg);
+
+  const knownHotConfigs = new Set<string>();
+  for (const pkg of input.valuePackages) {
+    if (isHotStorageScene(pkg.scene_category)) knownHotConfigs.add(String(pkg.config_type || '').trim());
+  }
+  for (const r of input.metaConfigs) {
+    const data = r.data || {};
+    const configType = pickMeta(data, 'config_type', '配置类型');
+    const scene = pickMeta(data, 'application_category', 'scene_category', '场景大类');
+    if (isHotStorageScene(scene)) knownHotConfigs.add(configType.trim());
+  }
+  knownHotConfigs.delete('');
+
+  let included = 0;
+  let noPackage = 0;
+  let notHotScene = 0;
+  let unmatchedRackOrIDC = 0;
+  let nonDomestic = 0;
+  let zeroCapacity = 0;
+  for (const s of assetServers) {
+    const configType = s.configType.trim();
+    if (!configType) continue;
+    const pkg = packageMap.get(configType);
+    const knownAsHot = knownHotConfigs.has(configType);
+    if (!pkg) {
+      if (knownAsHot) noPackage += 1;
+      continue;
+    }
+    if (!isHotStorageScene(pkg.scene_category)) {
+      if (knownAsHot || maybeHotStorageScene(pkg.scene_category)) notHotScene += 1;
+      continue;
+    }
+    if (!s.rack || !s.idc) {
+      unmatchedRackOrIDC += 1;
+      continue;
+    }
+    if (resolveRegion(s.idc) !== 'domestic') {
+      nonDomestic += 1;
+      continue;
+    }
+    if (Number(pkg.storage_capacity_tb || 0) <= 0) {
+      zeroCapacity += 1;
+      continue;
+    }
+    included += 1;
+  }
+
+  return [
+    { item: '热存储套餐配置', count: knownHotConfigs.size, note: '主机套餐/配置元数据中场景为热存储的配置类型数量' },
+    { item: '已纳入热存储服务器', count: included, note: '同时满足配置匹配、热存储场景、国内、机柜/机房匹配、容量>0' },
+    { item: '配置未匹配套餐', count: noPackage, note: '服务器配置类型没有在主机套餐中找到同名配置' },
+    { item: '套餐场景未识别为热存储', count: notHotScene, note: '配置看起来属于热存储，但套餐场景值没有被识别为热存储' },
+    { item: '机柜或机房未匹配', count: unmatchedRackOrIDC, note: '服务器 rack 为空，或 rack 未关联到机房 idc' },
+    { item: '非国内服务器', count: nonDomestic, note: '机房 idc 以 IN 开头，按印度排除' },
+    { item: '容量为0', count: zeroCapacity, note: '热存储套餐存储容量(TB)为空或小于等于0' }
+  ];
+}
+
 function pickMeta(data: Record<string, any>, ...keys: string[]) {
   for (const key of keys) {
     const v = data[key];
@@ -1076,19 +1151,36 @@ function isComputeScene(raw: string) {
 }
 
 function isStorageScene(raw: string) {
-  const scene = String(raw || '').trim().toLowerCase();
-  return ['温存储', 'warm_storage', 'warmstorage', '温储', '温', 'hot_storage', 'hotstorage', '热储', '热'].includes(scene);
+  return isWarmStorageScene(raw) || isHotStorageScene(raw);
 }
 
 function isGPUScene(raw?: string) {
-  const scene = String(raw || '').trim().toLowerCase();
+  const scene = normalizeSceneToken(raw);
   return ['gpu'].includes(scene);
 }
 
 function normalizeStorageCategory(raw: string) {
-  const scene = String(raw || '').trim().toLowerCase();
-  if (scene.includes('hot') || scene.includes('热')) return '热存储';
+  if (isHotStorageScene(raw)) return '热存储';
   return '温存储';
+}
+
+function isWarmStorageScene(raw?: string) {
+  const scene = normalizeSceneToken(raw);
+  return ['温存储', '温储', '温', 'warmstorage', 'coldstorage', 'wenstorage'].includes(scene);
+}
+
+function isHotStorageScene(raw?: string) {
+  const scene = normalizeSceneToken(raw);
+  return ['热存储', '热储', '热', 'hotstorage'].includes(scene);
+}
+
+function maybeHotStorageScene(raw?: string) {
+  const scene = normalizeSceneToken(raw);
+  return scene.includes('hot') || scene.includes('热');
+}
+
+function normalizeSceneToken(raw?: string) {
+  return String(raw || '').trim().toLowerCase().replace(/[\s_-]/g, '');
 }
 
 function normalizePSAPatterns(values: string[]) {
