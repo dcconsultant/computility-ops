@@ -711,12 +711,27 @@ export default function ImportPage() {
                   }
                 >
                   <Row gutter={[16, 16]}>
-                    <Col xs={12} md={6}><StatisticBlock title="在用数量" value={assetAnalysis.idleSummary.active} /></Col>
-                    <Col xs={12} md={6}><StatisticBlock title="闲置数量" value={assetAnalysis.idleSummary.idle} /></Col>
-                    <Col xs={12} md={6}><StatisticBlock title="闲置率" value={`${assetAnalysis.idleSummary.idleRate.toFixed(2)}%`} /></Col>
-                    <Col xs={12} md={6}><StatisticBlock title="机柜未匹配服务器" value={assetAnalysis.idleSummary.unmatchedRack} /></Col>
+                    <Col xs={12} md={5}><StatisticBlock title="在用数量" value={assetAnalysis.idleSummary.active} /></Col>
+                    <Col xs={12} md={5}><StatisticBlock title="闲置数量" value={assetAnalysis.idleSummary.idle} /></Col>
+                    <Col xs={12} md={5}><StatisticBlock title="整备中数量" value={assetAnalysis.idleSummary.staging} /></Col>
+                    <Col xs={12} md={4}><StatisticBlock title="闲置率" value={`${assetAnalysis.idleSummary.idleRate.toFixed(2)}%`} /></Col>
+                    <Col xs={12} md={5}><StatisticBlock title="机柜未匹配服务器" value={assetAnalysis.idleSummary.unmatchedRack} /></Col>
                   </Row>
                   <Space direction="vertical" size={12} style={{ width: '100%', marginTop: 16 }}>
+                    <Table
+                      title={() => '资源统计'}
+                      rowKey="category"
+                      dataSource={assetAnalysis.resourceSummaryRows}
+                      pagination={false}
+                      size="small"
+                      columns={[
+                        { title: '分类', dataIndex: 'category' },
+                        { title: '单位', dataIndex: 'unit', width: 90 },
+                        { title: '在用算力', dataIndex: 'activeCapacity', render: (v: number, row) => formatCapacity(v, row.unit), sorter: (a, b) => a.activeCapacity - b.activeCapacity },
+                        { title: '闲置算力', dataIndex: 'idleCapacity', render: (v: number, row) => formatCapacity(v, row.unit), sorter: (a, b) => a.idleCapacity - b.idleCapacity },
+                        { title: '整备中', dataIndex: 'stagingCapacity', render: (v: number, row) => formatCapacity(v, row.unit), sorter: (a, b) => a.stagingCapacity - b.stagingCapacity }
+                      ]}
+                    />
                     <IdleStackedBarChart rows={assetAnalysis.idleRows} />
                     <Table
                       rowKey="configType"
@@ -728,11 +743,12 @@ export default function ImportPage() {
                         { title: '性能跑分', dataIndex: 'performanceScore', render: (v: number) => formatFloat(v), sorter: (a, b) => a.performanceScore - b.performanceScore },
                         { title: '在用数量', dataIndex: 'activeCount', render: (v: number) => formatInt(v), sorter: (a, b) => a.activeCount - b.activeCount },
                         { title: '闲置数量', dataIndex: 'idleCount', render: (v: number) => formatInt(v), sorter: (a, b) => a.idleCount - b.idleCount },
+                        { title: '整备中数量', dataIndex: 'stagingCount', render: (v: number) => formatInt(v), sorter: (a, b) => a.stagingCount - b.stagingCount },
                         { title: '合计', dataIndex: 'totalCount', render: (v: number) => formatInt(v), sorter: (a, b) => a.totalCount - b.totalCount },
                         { title: '闲置率', dataIndex: 'idleRate', render: (v: number) => `${v.toFixed(2)}%`, sorter: (a, b) => a.idleRate - b.idleRate }
                       ]}
                     />
-                    <Text type="secondary">口径：server.rack 关联 rack.sn 获取 rack.datacenter；机柜未匹配服务器不纳入本指标统计。国内为 rack.datacenter 非 IN 开头；仅统计场景=计算的配置类型；L0级Buffer PSA 复用续保配置。</Text>
+                    <Text type="secondary">口径：server.rack 关联 rack.sn 获取 rack.datacenter；机柜未匹配服务器不纳入本指标统计。国内为 rack.datacenter 非 IN 开头；闲置=PSA命中续保配置的闲置/停服PSA；整备中=未命中闲置PSA且机柜包含SPR；在用=其余。计算分类按价值分性能跑分，≥956 为标准计算，其它为低配计算。</Text>
                   </Space>
                 </Card>
                 <Card title="国内/印度保内保外概览">
@@ -762,9 +778,10 @@ type RegionKey = 'domestic' | 'india';
 interface AssetSnapshotRow { region: '国内' | '印度'; snapshotLabel: string; snapshotDate: string; inWarranty: number; outWarranty: number; total: number; outWarrantyRatio: number; }
 interface AssetTrendPoint { year: number; outCount: number; cumulativeOutCount: number; cumulativeOutRatio: number; }
 interface AssetServerRow { sn: string; psa: string; configType: string; rack: string; idc: string; warrantyEndDate: string; }
-interface AssetIdleRow { configType: string; activeCount: number; idleCount: number; totalCount: number; idleRate: number; performanceScore: number; }
-interface AssetIdleSummary { active: number; idle: number; idleRate: number; unmatchedRack: number; }
+interface AssetIdleRow { configType: string; activeCount: number; idleCount: number; stagingCount: number; totalCount: number; idleRate: number; performanceScore: number; }
+interface AssetIdleSummary { active: number; idle: number; staging: number; idleRate: number; unmatchedRack: number; }
 interface AssetUnmatchedRackRow { sn: string; psa: string; configType: string; rack: string; idc: string; reason: string; }
+interface AssetResourceRow { category: string; unit: string; activeCapacity: number; idleCapacity: number; stagingCapacity: number; }
 interface AssetAnalysisInput {
   legacyServers: ServerItem[];
   metaServers: MetaRecord[];
@@ -811,7 +828,8 @@ function buildAssetAnalysis(input: AssetAnalysisInput) {
   });
 
   const idleAnalysis = buildIdleAnalysis(assetServers, input);
-  return { snapshotRows, trends, totals, ...idleAnalysis };
+  const resourceSummaryRows = buildResourceSummary(assetServers, input);
+  return { snapshotRows, trends, totals, resourceSummaryRows, ...idleAnalysis };
 }
 
 function normalizeAssetServers(input: AssetAnalysisInput): AssetServerRow[] {
@@ -846,35 +864,15 @@ function normalizeAssetServers(input: AssetAnalysisInput): AssetServerRow[] {
 }
 
 function buildIdleAnalysis(assetServers: AssetServerRow[], input: AssetAnalysisInput): { idleRows: AssetIdleRow[]; idleSummary: AssetIdleSummary; unmatchedRackRows: AssetUnmatchedRackRow[] } {
-  const computeConfigs = new Set<string>();
-  for (const pkg of input.valuePackages) {
-    const scene = String((pkg as any).application_category || pkg.scene_category || '').trim();
-    if (pkg.config_type && isComputeScene(scene)) computeConfigs.add(pkg.config_type);
-  }
-  for (const r of input.metaConfigs) {
-    const data = r.data || {};
-    const configType = pickMeta(data, 'config_type', '配置类型');
-    const scene = pickMeta(data, 'application_category', 'scene_category', '场景大类');
-    if (configType && isComputeScene(scene)) computeConfigs.add(configType);
-  }
-  if (!computeConfigs.size) {
-    for (const item of input.performanceItems) {
-      if (item.config_type) computeConfigs.add(item.config_type);
-    }
-  }
-
-  const performanceByConfig = new Map<string, number>();
-  for (const item of input.performanceItems) {
-    performanceByConfig.set(String(item.config_type || '').trim(), Number(item.performance_score || 0));
-  }
-
+  const computeInfoByConfig = buildComputeClassification(input);
   const idlePatterns = normalizePSAPatterns(input.idleStoppedPSAs);
   const byConfig = new Map<string, AssetIdleRow>();
   const unmatchedRackRows: AssetUnmatchedRackRow[] = [];
   let unmatchedRack = 0;
   for (const s of assetServers) {
     const configType = s.configType.trim();
-    if (!configType || !computeConfigs.has(configType)) continue;
+    const computeInfo = computeInfoByConfig.get(configType);
+    if (!configType || !computeInfo) continue;
     if (!s.rack || !s.idc) {
       unmatchedRack += 1;
       unmatchedRackRows.push({
@@ -893,15 +891,18 @@ function buildIdleAnalysis(assetServers: AssetServerRow[], input: AssetAnalysisI
       configType,
       activeCount: 0,
       idleCount: 0,
+      stagingCount: 0,
       totalCount: 0,
       idleRate: 0,
-      performanceScore: performanceByConfig.get(configType) || 0
+      performanceScore: computeInfo.performanceScore
     };
     const isIdle = matchPSA(s.psa, idlePatterns);
-    const isActive = !isIdle && !s.rack.toUpperCase().includes('SPR');
+    const isStaging = !isIdle && s.rack.toUpperCase().includes('SPR');
+    const isActive = !isIdle && !isStaging;
     if (isIdle) row.idleCount += 1;
+    if (isStaging) row.stagingCount += 1;
     if (isActive) row.activeCount += 1;
-    row.totalCount = row.activeCount + row.idleCount;
+    row.totalCount = row.activeCount + row.idleCount + row.stagingCount;
     row.idleRate = row.totalCount > 0 ? (row.idleCount * 100) / row.totalCount : 0;
     byConfig.set(configType, row);
   }
@@ -912,16 +913,121 @@ function buildIdleAnalysis(assetServers: AssetServerRow[], input: AssetAnalysisI
   });
   const active = idleRows.reduce((sum, r) => sum + r.activeCount, 0);
   const idle = idleRows.reduce((sum, r) => sum + r.idleCount, 0);
+  const staging = idleRows.reduce((sum, r) => sum + r.stagingCount, 0);
   return {
     idleRows,
     unmatchedRackRows,
     idleSummary: {
       active,
       idle,
+      staging,
       unmatchedRack,
-      idleRate: active + idle > 0 ? (idle * 100) / (active + idle) : 0
+      idleRate: active + idle + staging > 0 ? (idle * 100) / (active + idle + staging) : 0
     }
   };
+}
+
+function buildComputeClassification(input: AssetAnalysisInput) {
+  const performanceByConfig = new Map<string, number>();
+  for (const item of input.performanceItems) {
+    performanceByConfig.set(String(item.config_type || '').trim(), Number(item.performance_score || 0));
+  }
+
+  const computeInfoByConfig = new Map<string, { performanceScore: number; className: string }>();
+  const addIfCompute = (configType: string, scene: string) => {
+    const key = String(configType || '').trim();
+    if (!key || !isComputeScene(scene)) return;
+    const performanceScore = performanceByConfig.get(key) || 0;
+    computeInfoByConfig.set(key, {
+      performanceScore,
+      className: performanceScore >= 956 ? '标准计算' : '低配计算'
+    });
+  };
+
+  for (const pkg of input.valuePackages) {
+    addIfCompute(pkg.config_type, String((pkg as any).application_category || pkg.scene_category || '').trim());
+  }
+  for (const r of input.metaConfigs) {
+    const data = r.data || {};
+    addIfCompute(pickMeta(data, 'config_type', '配置类型'), pickMeta(data, 'application_category', 'scene_category', '场景大类'));
+  }
+  if (!computeInfoByConfig.size) {
+    for (const item of input.performanceItems) {
+      const key = String(item.config_type || '').trim();
+      if (!key) continue;
+      const performanceScore = Number(item.performance_score || 0);
+      computeInfoByConfig.set(key, {
+        performanceScore,
+        className: performanceScore >= 956 ? '标准计算' : '低配计算'
+      });
+    }
+  }
+  return computeInfoByConfig;
+}
+
+function buildResourceSummary(assetServers: AssetServerRow[], input: AssetAnalysisInput): AssetResourceRow[] {
+  const computeInfoByConfig = buildComputeClassification(input);
+  const packageMap = new Map<string, HostPackageConfig>();
+  for (const pkg of input.valuePackages) packageMap.set(String(pkg.config_type || '').trim(), pkg);
+
+  const idlePatterns = normalizePSAPatterns(input.idleStoppedPSAs);
+  const summaryMap = new Map<string, AssetResourceRow>();
+
+  const getRow = (category: string, unit: string) => {
+    const existing = summaryMap.get(category);
+    if (existing) return existing;
+    const created = { category, unit, activeCapacity: 0, idleCapacity: 0, stagingCapacity: 0 };
+    summaryMap.set(category, created);
+    return created;
+  };
+
+  for (const s of assetServers) {
+    if (resolveRegion(s.idc) !== 'domestic') continue;
+    if (!s.rack || !s.idc) continue;
+    const configType = s.configType.trim();
+    if (!configType) continue;
+    const pkg = packageMap.get(configType);
+    if (!pkg) continue;
+
+    const isIdle = matchPSA(s.psa, idlePatterns);
+    const isStaging = !isIdle && s.rack.toUpperCase().includes('SPR');
+    const isActive = !isIdle && !isStaging;
+
+    if (computeInfoByConfig.has(configType)) {
+      const row = getRow(computeInfoByConfig.get(configType)?.className || '低配计算', '核');
+      const capacity = Number(pkg.cpu_logical_cores || 0);
+      if (isIdle) row.idleCapacity += capacity;
+      else if (isStaging) row.stagingCapacity += capacity;
+      else if (isActive) row.activeCapacity += capacity;
+      continue;
+    }
+
+    if (pkg.scene_category && isStorageScene(pkg.scene_category)) {
+      const row = getRow(normalizeStorageCategory(pkg.scene_category), 'TB');
+      const capacity = Number(pkg.storage_capacity_tb || 0);
+      if (isIdle) row.idleCapacity += capacity;
+      else if (isStaging) row.stagingCapacity += capacity;
+      else if (isActive) row.activeCapacity += capacity;
+      continue;
+    }
+
+    if (Number(pkg.gpu_card_count || 0) > 0 || isGPUScene(pkg.scene_category)) {
+      const row = getRow('GPU', '卡');
+      const capacity = Number(pkg.gpu_card_count || 0);
+      if (isIdle) row.idleCapacity += capacity;
+      else if (isStaging) row.stagingCapacity += capacity;
+      else if (isActive) row.activeCapacity += capacity;
+    }
+  }
+
+  const order = [
+    { category: '低配计算', unit: '核' },
+    { category: '标准计算', unit: '核' },
+    { category: '温存储', unit: 'TB' },
+    { category: '热存储', unit: 'TB' },
+    { category: 'GPU', unit: '卡' }
+  ];
+  return order.map(({ category, unit }) => summaryMap.get(category) || { category, unit, activeCapacity: 0, idleCapacity: 0, stagingCapacity: 0 });
 }
 
 function pickMeta(data: Record<string, any>, ...keys: string[]) {
@@ -967,6 +1073,22 @@ function metaValueToText(value: any): string {
 function isComputeScene(raw: string) {
   const scene = String(raw || '').trim().toLowerCase();
   return ['计算', '计算型', 'compute'].includes(scene);
+}
+
+function isStorageScene(raw: string) {
+  const scene = String(raw || '').trim().toLowerCase();
+  return ['温存储', 'warm_storage', 'warmstorage', '温储', '温', 'hot_storage', 'hotstorage', '热储', '热'].includes(scene);
+}
+
+function isGPUScene(raw?: string) {
+  const scene = String(raw || '').trim().toLowerCase();
+  return ['gpu'].includes(scene);
+}
+
+function normalizeStorageCategory(raw: string) {
+  const scene = String(raw || '').trim().toLowerCase();
+  if (scene.includes('hot') || scene.includes('热')) return '热存储';
+  return '温存储';
 }
 
 function normalizePSAPatterns(values: string[]) {
@@ -1016,6 +1138,11 @@ function StatisticBlock({ title, value }: { title: string; value: string | numbe
   );
 }
 
+function formatCapacity(v: number, unit: string) {
+  if (unit === 'TB') return formatFloat(v);
+  return formatInt(v);
+}
+
 function IdleStackedBarChart({ rows }: { rows: AssetIdleRow[] }) {
   if (!rows.length) return <Text type="secondary">暂无可用于绘图的国内计算服务器闲置数据。</Text>;
   const width = 920;
@@ -1034,6 +1161,8 @@ function IdleStackedBarChart({ rows }: { rows: AssetIdleRow[] }) {
         <text x={m.left + 18} y={18} fontSize="11" fill="#666">在用</text>
         <rect x={m.left + 72} y={8} width="12" height="12" fill="#ffa940" rx="2" />
         <text x={m.left + 90} y={18} fontSize="11" fill="#666">闲置</text>
+        <rect x={m.left + 144} y={8} width="12" height="12" fill="#95de64" rx="2" />
+        <text x={m.left + 162} y={18} fontSize="11" fill="#666">整备中</text>
       </g>
       {[0, 0.25, 0.5, 0.75, 1].map((p) => {
         const y = m.top + innerH - p * innerH;
@@ -1042,16 +1171,19 @@ function IdleStackedBarChart({ rows }: { rows: AssetIdleRow[] }) {
       {rows.map((row, i) => {
         const activeH = barH(row.activeCount);
         const idleH = barH(row.idleCount);
+        const stagingH = barH(row.stagingCount);
         const baseY = m.top + innerH;
         const activeY = baseY - activeH;
         const idleY = activeY - idleH;
+        const stagingY = idleY - stagingH;
         return (
           <g key={row.configType}>
             <rect x={x(i) - barW / 2} y={activeY} width={barW} height={activeH} fill="#69b1ff" rx="3" />
             <rect x={x(i) - barW / 2} y={idleY} width={barW} height={idleH} fill="#ffa940" rx="3" />
-            <text x={x(i)} y={Math.max(14, idleY - 6)} textAnchor="middle" fontSize="10" fill="#595959">{formatInt(row.totalCount)}</text>
+            <rect x={x(i) - barW / 2} y={stagingY} width={barW} height={stagingH} fill="#95de64" rx="3" />
+            <text x={x(i)} y={Math.max(14, stagingY - 6)} textAnchor="middle" fontSize="10" fill="#595959">{formatInt(row.totalCount)}</text>
             <text x={x(i)} y={height - 42} textAnchor="end" fontSize="10" fill="#666" transform={`rotate(-35 ${x(i)} ${height - 42})`}>{row.configType}</text>
-            <title>{`${row.configType}：在用 ${row.activeCount}，闲置 ${row.idleCount}，闲置率 ${row.idleRate.toFixed(2)}%，性能跑分 ${formatFloat(row.performanceScore)}`}</title>
+            <title>{`${row.configType}：在用 ${row.activeCount}，闲置 ${row.idleCount}，整备中 ${row.stagingCount}，闲置率 ${row.idleRate.toFixed(2)}%，性能跑分 ${formatFloat(row.performanceScore)}`}</title>
           </g>
         );
       })}
