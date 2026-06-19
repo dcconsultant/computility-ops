@@ -59,6 +59,8 @@ const titles: Record<DataKey, string> = {
   assets: '资产分析'
 };
 
+const COMPUTE_STANDARD_PERFORMANCE_THRESHOLD = 870;
+
 export default function ImportPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
@@ -760,7 +762,7 @@ export default function ImportPage() {
                         { title: '闲置率', dataIndex: 'idleRate', render: (v: number) => `${v.toFixed(2)}%`, sorter: (a, b) => a.idleRate - b.idleRate }
                       ]}
                     />
-                    <Text type="secondary">口径：server.rack 关联 rack.sn 获取 rack.datacenter；机柜未匹配服务器不纳入本指标统计。国内为 rack.datacenter 非 IN 开头；闲置=PSA命中续保配置的闲置/停服PSA；整备中=未命中闲置PSA且机柜包含SPR；在用=其余。计算分类按价值分性能跑分，≥956 为标准计算，其它为低配计算。</Text>
+                    <Text type="secondary">口径：server.rack 关联 rack.sn 获取 rack.datacenter；机柜未匹配服务器不纳入本指标统计。国内为 rack.datacenter 非 IN 开头；闲置=PSA命中续保配置的闲置/停服PSA；整备中=未命中闲置PSA且机柜包含SPR；在用=其余。计算分类按价值分性能跑分，≥{COMPUTE_STANDARD_PERFORMANCE_THRESHOLD} 为标准计算，其它为低配计算。</Text>
                   </Space>
                 </Card>
                 <Card title="国内/印度保内保外概览">
@@ -954,7 +956,7 @@ function buildComputeClassification(input: AssetAnalysisInput) {
     const performanceScore = performanceByConfig.get(key) || 0;
     computeInfoByConfig.set(key, {
       performanceScore,
-      className: performanceScore >= 956 ? '标准计算' : '低配计算'
+      className: performanceScore >= COMPUTE_STANDARD_PERFORMANCE_THRESHOLD ? '标准计算' : '低配计算'
     });
   };
 
@@ -972,7 +974,7 @@ function buildComputeClassification(input: AssetAnalysisInput) {
       const performanceScore = Number(item.performance_score || 0);
       computeInfoByConfig.set(key, {
         performanceScore,
-        className: performanceScore >= 956 ? '标准计算' : '低配计算'
+        className: performanceScore >= COMPUTE_STANDARD_PERFORMANCE_THRESHOLD ? '标准计算' : '低配计算'
       });
     }
   }
