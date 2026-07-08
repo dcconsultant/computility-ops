@@ -427,8 +427,10 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 			ConfigType:             srv.ConfigType,
 			SceneCategory:          pkg.SceneCategory,
 			CPULogicalCores:        cores,
+			CPUPerformanceScore:    performanceScoreByConfig[serverConfigKey],
 			GPUCardCount:           gpuCards,
 			StorageCapacityTB:      pkg.StorageCapacityTB,
+			SingleDiskCapacityTB:   singleDiskCapacityTB(pkg),
 			Recent1YFailureRate:    pkgRecent1Y[serverConfigKey],
 			PSA:                    domain.PSAString(strings.TrimSpace(srv.PSA)),
 			ArchStandardizedFactor: coef,
@@ -995,6 +997,62 @@ func (s *RenewalService) CreatePlan(ctx context.Context, in CreatePlanInput) (do
 
 func (s *RenewalService) GetPlan(ctx context.Context, planID string) (domain.RenewalPlan, error) {
 	return s.renewalRepo.GetPlan(ctx, planID)
+}
+
+func (s *RenewalService) EnrichPlanItemMetrics(ctx context.Context, plan domain.RenewalPlan) (domain.RenewalPlan, error) {
+	packages, err := s.datasetRepo.ListHostPackages(ctx)
+	if err != nil {
+		return domain.RenewalPlan{}, err
+	}
+	perfParams, err := s.datasetRepo.ListValueScorePerformanceParams(ctx)
+	if err != nil {
+		return domain.RenewalPlan{}, err
+	}
+	performanceScoreByConfig := make(map[string]float64, len(perfParams))
+	for _, p := range perfParams {
+		k := normalizeConfigTypeKey(p.ConfigType)
+		if k == "" {
+			continue
+		}
+		performanceScoreByConfig[k] = p.PerformanceScore
+	}
+	singleDiskCapacityByConfig := make(map[string]float64, len(packages))
+	for _, pkg := range packages {
+		k := normalizeConfigTypeKey(pkg.ConfigType)
+		if k == "" {
+			continue
+		}
+		singleDiskCapacityByConfig[k] = singleDiskCapacityTB(pkg)
+	}
+
+	enrichItems := func(items []domain.RenewalItem) {
+		for i := range items {
+			k := normalizeConfigTypeKey(items[i].ConfigType)
+			if items[i].CPUPerformanceScore == 0 {
+				items[i].CPUPerformanceScore = performanceScoreByConfig[k]
+			}
+			if items[i].SingleDiskCapacityTB == 0 {
+				items[i].SingleDiskCapacityTB = singleDiskCapacityByConfig[k]
+			}
+		}
+	}
+	enrichItems(plan.Items)
+	for i := range plan.Sections {
+		enrichItems(plan.Sections[i].Items)
+	}
+	if plan.FullRenewal != nil {
+		enrichItems(plan.FullRenewal.Items)
+		for i := range plan.FullRenewal.Sections {
+			enrichItems(plan.FullRenewal.Sections[i].Items)
+		}
+	}
+	if plan.MinimalRenewal != nil {
+		enrichItems(plan.MinimalRenewal.Items)
+		for i := range plan.MinimalRenewal.Sections {
+			enrichItems(plan.MinimalRenewal.Sections[i].Items)
+		}
+	}
+	return plan, nil
 }
 
 func (s *RenewalService) ListPlans(ctx context.Context, filter ListPlansFilter) ([]domain.RenewalPlan, error) {

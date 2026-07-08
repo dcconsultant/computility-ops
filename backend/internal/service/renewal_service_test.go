@@ -171,6 +171,9 @@ func TestRenewalService_CreatePlan_FiltersComputeByMinPerformanceScore(t *testin
 	if len(plan.Items) != 1 || plan.Items[0].SN != "HIGH" {
 		t.Fatalf("items=%+v, want only HIGH above performance gate", plan.Items)
 	}
+	if plan.Items[0].CPUPerformanceScore != 2400 {
+		t.Fatalf("CPUPerformanceScore=%f, want 2400", plan.Items[0].CPUPerformanceScore)
+	}
 	found := false
 	for _, item := range plan.NonRenewalItems {
 		if item.SN == "LOW" && item.ReasonCode == "performance_gate" {
@@ -212,6 +215,9 @@ func TestRenewalService_CreatePlan_FiltersWarmStorageBySingleDiskCapacity(t *tes
 	}
 	if len(plan.Items) != 1 || plan.Items[0].SN != "LARGE" {
 		t.Fatalf("items=%+v, want only LARGE above single disk capacity gate", plan.Items)
+	}
+	if plan.Items[0].SingleDiskCapacityTB != 8 {
+		t.Fatalf("SingleDiskCapacityTB=%f, want 8", plan.Items[0].SingleDiskCapacityTB)
 	}
 	found := false
 	for _, item := range plan.NonRenewalItems {
@@ -488,6 +494,38 @@ func TestRenewalService_CreatePlan_CountsIdleStoppedPSAOutsideExcludedEnvironmen
 	}
 	if plan.CoveredComputeCores != 100 {
 		t.Fatalf("covered compute cores=%d, want excluded environment kept out of renewal target coverage", plan.CoveredComputeCores)
+	}
+}
+
+func TestRenewalService_EnrichPlanItemMetrics_FillsLegacyPlanItems(t *testing.T) {
+	ctx := context.Background()
+	datasetRepo := mem.NewDatasetRepo()
+	_ = datasetRepo.ReplaceHostPackages(ctx, []domain.HostPackageConfig{
+		{ConfigType: "Compute-A", SceneCategory: "计算型", CPULogicalCores: 16, StorageCapacityTB: 24, DataDiskCount: 6},
+	})
+	_ = datasetRepo.ReplaceValueScorePerformanceParams(ctx, []domain.ValueScorePerformanceParam{
+		{ConfigType: "compute-a", PerformanceScore: 2500},
+	})
+
+	svc := NewRenewalService(mem.NewServerRepo(), datasetRepo, mem.NewRenewalRepo())
+	plan, err := svc.EnrichPlanItemMetrics(ctx, domain.RenewalPlan{
+		Items: []domain.RenewalItem{{SN: "SN-1", ConfigType: "compute-a"}},
+		Sections: []domain.RenewalPlanSection{{
+			Bucket: "compute",
+			Items:  []domain.RenewalItem{{SN: "SN-1", ConfigType: "compute-a"}},
+		}},
+		FullRenewal: &domain.RenewalPlanVariant{
+			Items: []domain.RenewalItem{{SN: "SN-1", ConfigType: "compute-a"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("EnrichPlanItemMetrics() error = %v", err)
+	}
+	if plan.Items[0].CPUPerformanceScore != 2500 || plan.Items[0].SingleDiskCapacityTB != 4 {
+		t.Fatalf("enriched plan item=%+v, want performance=2500 single_disk=4", plan.Items[0])
+	}
+	if plan.Sections[0].Items[0].CPUPerformanceScore != 2500 || plan.FullRenewal.Items[0].SingleDiskCapacityTB != 4 {
+		t.Fatalf("nested items not enriched: section=%+v full=%+v", plan.Sections[0].Items[0], plan.FullRenewal.Items[0])
 	}
 }
 

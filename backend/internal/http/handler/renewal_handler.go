@@ -178,6 +178,11 @@ func (h *RenewalHandler) ExportPlan(c *gin.Context) {
 		fail(c, 40001, err.Error())
 		return
 	}
+	exportPlan, err = h.service.EnrichPlanItemMetrics(c.Request.Context(), exportPlan)
+	if err != nil {
+		fail(c, 50001, err.Error())
+		return
+	}
 
 	filename := exportFilename(exportPlan, format, variantName)
 	if format == "csv" {
@@ -266,7 +271,7 @@ func buildCSV(plan domain.RenewalPlan) (*bytes.Buffer, error) {
 	if err := w.Write([]string{}); err != nil {
 		return nil, err
 	}
-	if err := w.Write([]string{"rank", "bucket", "sn", "manufacturer", "model", "environment", "config_type", "scene_category", "cpu_logical_cores", "gpu_card_count", "storage_capacity_tb", "psa", "arch_standardized_factor", "base_score", "afr_old", "afr_avg", "failure_adjust_factor", "final_score", "special_policy"}); err != nil {
+	if err := w.Write([]string{"rank", "bucket", "sn", "manufacturer", "model", "environment", "config_type", "scene_category", "cpu_logical_cores", "cpu_performance_score", "gpu_card_count", "storage_capacity_tb", "single_disk_capacity_tb", "psa", "arch_standardized_factor", "base_score", "afr_old", "afr_avg", "failure_adjust_factor", "final_score", "special_policy"}); err != nil {
 		return nil, err
 	}
 	for _, item := range plan.Items {
@@ -280,8 +285,10 @@ func buildCSV(plan domain.RenewalPlan) (*bytes.Buffer, error) {
 			item.ConfigType,
 			item.SceneCategory,
 			fmt.Sprint(item.CPULogicalCores),
+			fmt.Sprintf("%.4f", item.CPUPerformanceScore),
 			fmt.Sprint(item.GPUCardCount),
 			fmt.Sprintf("%.4f", item.StorageCapacityTB),
+			fmt.Sprintf("%.4f", item.SingleDiskCapacityTB),
 			string(item.PSA),
 			fmt.Sprintf("%.4f", item.ArchStandardizedFactor),
 			fmt.Sprintf("%.4f", item.BaseScore),
@@ -421,7 +428,7 @@ func writePlanOverviewSheet(f *excelize.File, sheet string, plan domain.RenewalP
 }
 
 func writePlanRegionItemsSheet(f *excelize.File, sheet string, plan domain.RenewalPlan, india bool) error {
-	headers := []string{"场景大类", "配置类型", "SN", "型号", "最近1年故障率", "详细配置", "投产日期"}
+	headers := []string{"场景大类", "配置类型", "SN", "型号", "CPU性能分", "单盘容量（TB）", "最近1年故障率", "详细配置", "投产日期"}
 	if err := f.SetSheetRow(sheet, "A1", &headers); err != nil {
 		return err
 	}
@@ -436,6 +443,8 @@ func writePlanRegionItemsSheet(f *excelize.File, sheet string, plan domain.Renew
 			item.ConfigType,
 			item.SN,
 			item.Model,
+			item.CPUPerformanceScore,
+			item.SingleDiskCapacityTB,
 			fmt.Sprintf("%.2f%%", item.Recent1YFailureRate*100),
 			item.DetailedConfig,
 			item.LaunchDate,

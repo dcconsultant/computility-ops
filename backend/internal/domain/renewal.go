@@ -163,8 +163,10 @@ type RenewalItem struct {
 	ConfigType             string    `json:"config_type"`
 	SceneCategory          string    `json:"scene_category,omitempty"`
 	CPULogicalCores        int       `json:"cpu_logical_cores"`
+	CPUPerformanceScore    float64   `json:"cpu_performance_score,omitempty"`
 	GPUCardCount           int       `json:"gpu_card_count,omitempty"`
 	StorageCapacityTB      float64   `json:"storage_capacity_tb,omitempty"`
+	SingleDiskCapacityTB   float64   `json:"single_disk_capacity_tb,omitempty"`
 	Recent1YFailureRate    float64   `json:"recent_1y_failure_rate,omitempty"`
 	PSA                    PSAString `json:"psa"`
 	ArchStandardizedFactor float64   `json:"arch_standardized_factor"`
