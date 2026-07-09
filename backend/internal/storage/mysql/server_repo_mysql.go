@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"computility-ops/backend/internal/domain"
 )
@@ -185,7 +186,6 @@ func (r *ServerRepo) listMetaServers(ctx context.Context, modelCode string) ([]d
 				''
 			) AS detailed_config,
 			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(s.data_json, '$.psa')), '') AS psa,
-			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(rk.data_json, '$.datacenter')), '') AS idc,
 			COALESCE(
 				NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.data_json, '$.env')), ''),
 				NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.data_json, '$.environment')), ''),
@@ -210,14 +210,10 @@ func (r *ServerRepo) listMetaServers(ctx context.Context, modelCode string) ([]d
 				NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.data_json, '$.launch_date')), ''),
 				NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.data_json, '$."投产日期"')), ''),
 				''
-			) AS launch_date
+			) AS launch_date,
+			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(s.data_json, '$.rack')), '') AS rack
 		FROM md_record s
 		INNER JOIN md_model ms ON ms.id = s.model_id
-		LEFT JOIN md_model mr ON mr.model_code = 'rack'
-		LEFT JOIN md_record rk
-			ON rk.model_id = mr.id
-			AND rk.deleted_flag = 0
-			AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(rk.data_json, '$.sn')), '') = COALESCE(JSON_UNQUOTE(JSON_EXTRACT(s.data_json, '$.rack')), '')
 		WHERE ms.model_code = ?
 			AND s.deleted_flag = 0
 		ORDER BY s.updated_at DESC
@@ -228,35 +224,94 @@ func (r *ServerRepo) listMetaServers(ctx context.Context, modelCode string) ([]d
 	defer metaRows.Close()
 
 	out := make([]domain.Server, 0)
+	serverRack := make([]string, 0)
+	hasRack := false
 	for metaRows.Next() {
 		var s domain.Server
+		var rackSN string
 		if err := metaRows.Scan(
 			&s.SN,
 			&s.Manufacturer,
 			&s.Model,
 			&s.DetailedConfig,
 			&s.PSA,
-			&s.IDC,
 			&s.Environment,
 			&s.ConfigType,
 			&s.WarrantyEndDate,
 			&s.LaunchDate,
+			&rackSN,
 		); err != nil {
 			return nil, err
 		}
+		s.SN = strings.TrimSpace(s.SN)
+		rackSN = strings.TrimSpace(rackSN)
 		if s.SN == "" {
 			continue
 		}
+		if rackSN != "" {
+			hasRack = true
+		}
+		serverRack = append(serverRack, rackSN)
 		out = append(out, s)
 	}
 	if err := metaRows.Err(); err != nil {
 		return nil, err
+	}
+	if len(out) == 0 {
+		return out, nil
+	}
+	if !hasRack {
+		return out, nil
+	}
+	rackIDCs, err := r.listRackDatacenters(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i, rackSN := range serverRack {
+		if idc := strings.TrimSpace(rackIDCs[rackSN]); idc != "" {
+			out[i].IDC = idc
+		}
 	}
 	return out, nil
 }
 
 func serverMetadataModelCodes() []string {
 	return []string{"server", "sever"}
+}
+
+func (r *ServerRepo) listRackDatacenters(ctx context.Context) (map[string]string, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT
+			COALESCE(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.sn')), '') AS sn,
+			COALESCE(
+				NULLIF(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$.datacenter')), ''),
+				NULLIF(JSON_UNQUOTE(JSON_EXTRACT(r.data_json, '$."机房"')), ''),
+				''
+			) AS datacenter
+		FROM md_record r
+		INNER JOIN md_model m ON m.id = r.model_id
+		WHERE m.model_code = 'rack'
+			AND r.deleted_flag = 0
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make(map[string]string)
+	for rows.Next() {
+		var sn string
+		var datacenter string
+		if err := rows.Scan(&sn, &datacenter); err != nil {
+			return nil, err
+		}
+		sn = strings.TrimSpace(sn)
+		if sn == "" {
+			continue
+		}
+		out[sn] = strings.TrimSpace(datacenter)
+	}
+	return out, rows.Err()
 }
 
 func (r *ServerRepo) Clear(ctx context.Context) error {
