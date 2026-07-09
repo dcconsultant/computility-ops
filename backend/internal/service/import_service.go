@@ -159,17 +159,17 @@ var hostPackageHeaderMap = map[string]string{
 	"storagecapacitytb":      "storage_capacity_tb",
 	"功率":                     "power_watts",
 	"功率(w)":                  "power_watts",
-	"功率（w）":                 "power_watts",
-	"power":                   "power_watts",
-	"powerw":                  "power_watts",
+	"功率（w）":                  "power_watts",
+	"power":                  "power_watts",
+	"powerw":                 "power_watts",
 	"发布年份":                   "release_year",
 	"年份":                     "release_year",
-	"releaseyear":             "release_year",
+	"releaseyear":            "release_year",
 	"内存容量(gb)":               "memory_capacity_gb",
-	"内存容量（gb）":              "memory_capacity_gb",
+	"内存容量（gb）":               "memory_capacity_gb",
 	"内存容量":                   "memory_capacity_gb",
-	"memorycapacitygb":        "memory_capacity_gb",
-	"内存gb":                    "memory_capacity_gb",
+	"memorycapacitygb":       "memory_capacity_gb",
+	"内存gb":                   "memory_capacity_gb",
 	"架构标准化系数":                "arch_standardized_factor",
 	"archstandardizedfactor": "arch_standardized_factor",
 }
@@ -319,6 +319,9 @@ func (s *ImportService) ValidateAndReplaceSpecialRules(ctx context.Context, rows
 		if sn == "" {
 			continue
 		}
+		if _, exists := serverBySN[sn]; exists {
+			continue
+		}
 		serverBySN[sn] = srv
 	}
 
@@ -334,17 +337,11 @@ func (s *ImportService) ValidateAndReplaceSpecialRules(ctx context.Context, rows
 
 		srv, ok := serverBySN[item.SN]
 		if !ok {
-			errRows = append(errRows, RowError{Row: rowNo, Reason: "SN 不存在于服务器管理表"})
+			errRows = append(errRows, RowError{Row: rowNo, Reason: "SN 不存在于元数据服务器模型"})
 			continue
 		}
 
-		item.Manufacturer = strings.TrimSpace(srv.Manufacturer)
-		item.Model = strings.TrimSpace(srv.Model)
-		item.PSA = strings.TrimSpace(srv.PSA)
-		item.IDC = strings.TrimSpace(srv.IDC)
-		item.PackageType = strings.TrimSpace(srv.ConfigType)
-		item.WarrantyEndDate = strings.TrimSpace(srv.WarrantyEndDate)
-		item.LaunchDate = strings.TrimSpace(srv.LaunchDate)
+		applyServerToSpecialRule(&item, srv)
 		out = append(out, item)
 	}
 	res := applyResult(len(rows), errRows)
@@ -356,7 +353,31 @@ func (s *ImportService) ValidateAndReplaceSpecialRules(ctx context.Context, rows
 	return res, nil
 }
 func (s *ImportService) ListSpecialRules(ctx context.Context) ([]domain.SpecialRule, error) {
-	return s.datasetRepo.ListSpecialRules(ctx)
+	rules, err := s.datasetRepo.ListSpecialRules(ctx)
+	if err != nil {
+		return nil, err
+	}
+	servers, err := s.serverRepo.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	serverBySN := make(map[string]domain.Server, len(servers))
+	for _, srv := range servers {
+		sn := strings.TrimSpace(srv.SN)
+		if sn == "" {
+			continue
+		}
+		if _, exists := serverBySN[sn]; exists {
+			continue
+		}
+		serverBySN[sn] = srv
+	}
+	for i := range rules {
+		if srv, ok := serverBySN[strings.TrimSpace(rules[i].SN)]; ok {
+			applyServerToSpecialRule(&rules[i], srv)
+		}
+	}
+	return rules, nil
 }
 
 func validateSpecialRuleRow(raw map[string]string) (domain.SpecialRule, error) {
@@ -370,6 +391,16 @@ func validateSpecialRuleRow(raw map[string]string) (domain.SpecialRule, error) {
 		return domain.SpecialRule{}, fmt.Errorf("策略必须是加白/加黑(whitelist/blacklist)")
 	}
 	return domain.SpecialRule{SN: sn, Policy: policy, Reason: get("reason")}, nil
+}
+
+func applyServerToSpecialRule(rule *domain.SpecialRule, srv domain.Server) {
+	rule.Manufacturer = strings.TrimSpace(srv.Manufacturer)
+	rule.Model = strings.TrimSpace(srv.Model)
+	rule.PSA = strings.TrimSpace(srv.PSA)
+	rule.IDC = strings.TrimSpace(srv.IDC)
+	rule.PackageType = strings.TrimSpace(srv.ConfigType)
+	rule.WarrantyEndDate = strings.TrimSpace(srv.WarrantyEndDate)
+	rule.LaunchDate = strings.TrimSpace(srv.LaunchDate)
 }
 
 func normalizeSpecialPolicy(v string) string {

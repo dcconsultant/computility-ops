@@ -827,7 +827,7 @@ export default function PlanPage() {
               )}
             >
               <Space direction="vertical" style={{ width: '100%' }}>
-                <Text type="secondary">导入模板建议三列：SN、策略（加白/加黑）、原因（可选）。其余字段会自动从服务器管理表按 SN 补全。</Text>
+                <Text type="secondary">导入模板建议三列：SN、策略（加白/加黑）、原因（可选）。其余字段会自动从元数据服务器模型按 SN 补全。</Text>
                 <Table
                   rowKey="sn"
                   loading={specialLoading}

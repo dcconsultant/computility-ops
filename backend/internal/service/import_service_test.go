@@ -129,8 +129,57 @@ func TestValidateAndReplaceSpecialRules_SNNotFound(t *testing.T) {
 	if res.Success != 0 || res.Failed != 1 || len(res.Errors) != 1 {
 		t.Fatalf("unexpected result: %+v", res)
 	}
-	if res.Errors[0].Reason != "SN 不存在于服务器管理表" {
+	if res.Errors[0].Reason != "SN 不存在于元数据服务器模型" {
 		t.Fatalf("unexpected error reason: %s", res.Errors[0].Reason)
+	}
+}
+
+func TestListSpecialRules_EnrichesFromCurrentServerMetadata(t *testing.T) {
+	ctx := context.Background()
+	serverRepo := memory.NewServerRepo()
+	datasetRepo := memory.NewDatasetRepo()
+	svc := NewImportService(serverRepo, datasetRepo)
+
+	if err := datasetRepo.ReplaceSpecialRules(ctx, []domain.SpecialRule{{
+		SN:              "SN001",
+		Manufacturer:    "OldVendor",
+		Model:           "OldModel",
+		PSA:             "old-psa",
+		IDC:             "old-idc",
+		PackageType:     "old-package",
+		WarrantyEndDate: "2026-01-01",
+		LaunchDate:      "2022-01-01",
+		Policy:          "blacklist",
+		Reason:          "退役计划",
+	}}); err != nil {
+		t.Fatalf("seed special rules failed: %v", err)
+	}
+	if err := serverRepo.ReplaceAll(ctx, []domain.Server{{
+		SN:              "SN001",
+		Manufacturer:    "Dell",
+		Model:           "R760",
+		PSA:             "new-psa",
+		IDC:             "CN-N01",
+		ConfigType:      "compute-a",
+		WarrantyEndDate: "2028-12-31",
+		LaunchDate:      "2024-01-01",
+	}}); err != nil {
+		t.Fatalf("seed servers failed: %v", err)
+	}
+
+	rules, err := svc.ListSpecialRules(ctx)
+	if err != nil {
+		t.Fatalf("ListSpecialRules() error = %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("len(rules)=%d, want 1", len(rules))
+	}
+	r := rules[0]
+	if r.Policy != "blacklist" || r.Reason != "退役计划" {
+		t.Fatalf("rule policy/reason changed unexpectedly: %+v", r)
+	}
+	if r.Manufacturer != "Dell" || r.Model != "R760" || r.PSA != "new-psa" || r.IDC != "CN-N01" || r.PackageType != "compute-a" || r.WarrantyEndDate != "2028-12-31" || r.LaunchDate != "2024-01-01" {
+		t.Fatalf("rule not enriched from current server metadata: %+v", r)
 	}
 }
 
