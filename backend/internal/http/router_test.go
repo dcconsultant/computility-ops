@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"computility-ops/backend/internal/http/handler"
@@ -49,6 +50,7 @@ func buildTestRouter() *gin.Engine {
 	contractSvc := service.NewContractService(contractRepo)
 	supplierSvc := service.NewSupplierService(supplierRepo, contractRepo)
 	deliverySvc := service.NewDeliveryService(deliveryRepo)
+	deliveryDecisionSvc := service.NewDeliveryDecisionService()
 
 	return NewRouter(Handlers{
 		Import:              handler.NewImportHandler(importSvc),
@@ -56,6 +58,7 @@ func buildTestRouter() *gin.Engine {
 		Contract:            handler.NewContractHandler(contractSvc),
 		Supplier:            handler.NewSupplierHandler(supplierSvc),
 		Delivery:            handler.NewDeliveryHandler(deliverySvc),
+		DeliveryDecision:    handler.NewDeliveryDecisionHandler(deliveryDecisionSvc),
 		System:              handler.NewSystemHandler(),
 		StorageDriver:       "memory",
 		ReplacementPlanning: rpapi.NewHandler(rpapp.NewService(rpinfra.NewStaticReader())),
@@ -96,6 +99,7 @@ func TestNewRouter_DecisionRoutesContract(t *testing.T) {
 		"/api/v1/ops/decisions/replacement",
 		"/api/v1/ops/decisions/reconfig",
 		"/api/v1/ops/decisions/self-repair",
+		"/api/v1/delivery-decision/defaults",
 	}
 
 	for _, p := range paths {
@@ -113,5 +117,24 @@ func TestNewRouter_DecisionRoutesContract(t *testing.T) {
 		if got.Code != 0 || got.Msg != "ok" {
 			t.Fatalf("path=%s unexpected envelope: %+v", p, got)
 		}
+	}
+}
+
+func TestNewRouter_DeliveryDecisionCalculate(t *testing.T) {
+	r := buildTestRouter()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/delivery-decision/calculate", strings.NewReader(`{"input":{"hw_total":277000,"hw_cores":128,"hw_tax_rate":0.13,"idc_rent_monthly":4639,"idc_rack_kw":3.52,"idc_fill_rate":1.2,"idc_server_power_w":570,"idc_network_depreciation":3.62,"cloud_memory_ratio":8,"cloud_disk_ratio":0,"cloud_cpu_daily_price":0.78543,"cloud_memory_daily_price":0.1122,"cloud_disk_daily_price":0.00732,"cloud_tax_rate":0.06,"depreciation_years":7,"wacc_rate":0.03,"residual_rate":0.05,"country":"China","currency":"CNY","cloud_current_discount":0.25}}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200", w.Code)
+	}
+	var got envelopeResp
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal response error: %v", err)
+	}
+	if got.Code != 0 || got.Msg != "ok" {
+		t.Fatalf("unexpected response envelope: %+v", got)
 	}
 }

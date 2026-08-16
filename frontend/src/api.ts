@@ -45,7 +45,10 @@ import type {
   MetaRecord,
   ResourcePlanningRequest,
   ResourcePlanningResponse,
-  ResourcePlanningConfigState
+  ResourcePlanningConfigState,
+  DeliveryDecisionDefaults,
+  DeliveryDecisionResult,
+  DeliveryDecisionInput
 } from './types';
 
 const http = axios.create({ baseURL: '/api/v1' });
@@ -203,6 +206,16 @@ export async function getLatestResourcePlanningResult() {
 
 export async function calculateResourcePlanning(payload: ResourcePlanningRequest) {
   const { data } = await http.post<ApiResp<ResourcePlanningResponse>>('/resource-planning/calculate', payload);
+  return data;
+}
+
+export async function getDeliveryDecisionDefaults(country = 'China') {
+  const { data } = await http.get<ApiResp<DeliveryDecisionDefaults>>('/delivery-decision/defaults', { params: { country } });
+  return data;
+}
+
+export async function calculateDeliveryDecision(payload: { input: DeliveryDecisionInput }) {
+  const { data } = await http.post<ApiResp<DeliveryDecisionResult>>('/delivery-decision/calculate', payload);
   return data;
 }
 

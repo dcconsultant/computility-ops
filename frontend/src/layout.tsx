@@ -100,7 +100,8 @@ export default function AppLayout() {
               children: [
                 { key: '/contracts', label: <Link to="/contracts">合同</Link> },
                 { key: '/suppliers', label: <Link to="/suppliers">供应商</Link> },
-                { key: '/delivery-tracking', label: <Link to="/delivery-tracking">交付管理</Link> }
+                { key: '/delivery-tracking', label: <Link to="/delivery-tracking">交付管理</Link> },
+                { key: '/delivery-decision', label: <Link to="/delivery-decision">交付决策</Link> }
               ]
             },
             { key: '/resource-analysis', label: <Link to="/import?section=resource-analysis&tab=assets">资源分析</Link> },

@@ -835,6 +835,84 @@ export interface ResourcePlanningResponse {
   };
 }
 
+export interface DeliveryDecisionInput {
+  hw_total: number;
+  hw_cores: number;
+  hw_tax_rate: number;
+  idc_rent_monthly: number;
+  idc_rack_kw: number;
+  idc_fill_rate: number;
+  idc_server_power_w: number;
+  idc_network_depreciation: number;
+  cloud_memory_ratio: number;
+  cloud_disk_ratio: number;
+  cloud_cpu_daily_price: number;
+  cloud_memory_daily_price: number;
+  cloud_disk_daily_price: number;
+  cloud_tax_rate: number;
+  depreciation_years: number;
+  wacc_rate: number;
+  residual_rate: number;
+  country: string;
+  currency: string;
+  cloud_current_discount: number;
+}
+
+export interface DeliveryDecisionDefaults {
+  country: string;
+  currency: string;
+  input: DeliveryDecisionInput;
+}
+
+export interface DeliveryDecisionFormulaTrace {
+  cloud_gross: number;
+  cloud_daily_net: number;
+  hardware_net_per_core: number;
+  server_kw: number;
+  physical_monthly_net: number;
+  physical_daily_net: number;
+  daily_depreciation: number;
+  daily_wacc: number;
+  daily_depreciation_3y: number;
+  self_daily_tco: number;
+  self_daily_tco_3y: number;
+  premium_ratio_r: number;
+  self_weight: number;
+  cloud_weight: number;
+  formula_self_share: number;
+  formula_cloud_share: number;
+  final_self_share: number;
+  final_cloud_share: number;
+  daily_margin: number;
+  break_even_years?: number | null;
+  cloud_hedge_lost: boolean;
+  equality_tolerance: number;
+}
+
+export interface DeliveryDecisionSensitivityPoint {
+  curve: 'hardware_price' | 'cloud_discount';
+  label: string;
+  x_value: number;
+  cloud_daily_net: number;
+  self_daily_tco: number;
+  self_daily_tco_3y: number;
+  formula_self_share: number;
+  final_self_share: number;
+  cloud_hedge_lost: boolean;
+}
+
+export interface DeliveryDecisionSnapshot {
+  operator: string;
+  formula_version: string;
+  calculated_at: string;
+}
+
+export interface DeliveryDecisionResult {
+  input: DeliveryDecisionInput;
+  formula: DeliveryDecisionFormulaTrace;
+  sensitivity_points: DeliveryDecisionSensitivityPoint[];
+  snapshot: DeliveryDecisionSnapshot;
+}
 
 export interface Supplier {
   supplier_id: string;

@@ -6,6 +6,7 @@ const ImportPage = lazy(() => import('./pages/ImportPage'));
 const ContractPage = lazy(() => import('./pages/ContractPage'));
 const SupplierPage = lazy(() => import('./pages/SupplierPage'));
 const DeliveryTrackingPage = lazy(() => import('./pages/DeliveryTrackingPage'));
+const DeliveryDecisionPage = lazy(() => import('./pages/DeliveryDecisionPage'));
 const PlanPage = lazy(() => import('./pages/PlanPage'));
 const PlanDetailPage = lazy(() => import('./pages/PlanDetailPage'));
 const FailureAnalysisPage = lazy(() => import('./pages/FailureAnalysisPage'));
@@ -25,6 +26,7 @@ export default function App() {
           <Route path="/contracts" element={<ContractPage />} />
           <Route path="/suppliers" element={<SupplierPage />} />
           <Route path="/delivery-tracking" element={<DeliveryTrackingPage />} />
+          <Route path="/delivery-decision" element={<DeliveryDecisionPage />} />
           <Route path="/plan" element={<PlanPage />} />
           <Route path="/plan/:planId" element={<PlanDetailPage />} />
           <Route path="/failure" element={<FailureAnalysisPage />} />
