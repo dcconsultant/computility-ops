@@ -33,6 +33,11 @@ type DeliveryDecisionDefaults struct {
 	Input    DeliveryDecisionInput `json:"input"`
 }
 
+type DeliveryDecisionConfigState struct {
+	SavedAt string                `json:"saved_at"`
+	Input   DeliveryDecisionInput `json:"input"`
+}
+
 type DeliveryDecisionFormulaTrace struct {
 	CloudGross          float64  `json:"cloud_gross"`
 	CloudDailyNet       float64  `json:"cloud_daily_net"`

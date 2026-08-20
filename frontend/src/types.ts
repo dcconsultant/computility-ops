@@ -864,6 +864,11 @@ export interface DeliveryDecisionDefaults {
   input: DeliveryDecisionInput;
 }
 
+export interface DeliveryDecisionConfigState {
+  saved_at: string;
+  input: DeliveryDecisionInput;
+}
+
 export interface DeliveryDecisionFormulaTrace {
   cloud_gross: number;
   cloud_daily_net: number;

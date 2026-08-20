@@ -137,6 +137,8 @@ func NewRouter(h Handlers) *gin.Engine {
 		v1.PUT("/delivery/accessory-arrivals/:record_id", h.Delivery.UpdateAccessoryArrival)
 		v1.DELETE("/delivery/accessory-arrivals/:record_id", h.Delivery.DeleteAccessoryArrival)
 		v1.GET("/delivery-decision/defaults", h.DeliveryDecision.GetDefaults)
+		v1.GET("/delivery-decision/config", h.DeliveryDecision.GetConfig)
+		v1.PUT("/delivery-decision/config", h.DeliveryDecision.SaveConfig)
 		v1.POST("/delivery-decision/calculate", h.DeliveryDecision.Calculate)
 
 		v1.POST("/renewals/plan", h.Renewal.CreatePlan)

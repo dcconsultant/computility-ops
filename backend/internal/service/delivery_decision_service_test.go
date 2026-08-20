@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"computility-ops/backend/internal/domain"
+	mem "computility-ops/backend/internal/storage/memory"
 )
 
 func TestDeliveryDecisionService_Calculate_DefaultChina(t *testing.T) {
@@ -70,6 +71,31 @@ func TestDeliveryDecisionService_Calculate_HedgeLost(t *testing.T) {
 	}
 	if !deliveryDecisionCloseEnough(res.Formula.FinalSelfShare, 1) || !deliveryDecisionCloseEnough(res.Formula.FinalCloudShare, 0) {
 		t.Fatalf("unexpected final shares: %+v", res.Formula)
+	}
+}
+
+func TestDeliveryDecisionService_SaveAndGetConfig(t *testing.T) {
+	svc := NewDeliveryDecisionService(mem.NewDeliveryDecisionRepo())
+	input := svc.Defaults(context.Background(), "China").Input
+	input.HardwareTotalCNY = 310000
+
+	saved, err := svc.SaveConfig(context.Background(), input)
+	if err != nil {
+		t.Fatalf("save config error: %v", err)
+	}
+	if saved.SavedAt == "" {
+		t.Fatal("expected saved_at")
+	}
+
+	got, found, err := svc.GetConfig(context.Background())
+	if err != nil {
+		t.Fatalf("get config error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected saved config")
+	}
+	if got.Input.Country != "China" || got.Input.HardwareTotalCNY != 310000 {
+		t.Fatalf("unexpected config: %+v", got.Input)
 	}
 }
 

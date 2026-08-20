@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"computility-ops/backend/internal/domain"
+	"computility-ops/backend/internal/repository"
 )
 
 const (
@@ -17,10 +18,16 @@ const (
 	equalityTolerance              = 0.000001
 )
 
-type DeliveryDecisionService struct{}
+type DeliveryDecisionService struct {
+	repo repository.DeliveryDecisionRepo
+}
 
-func NewDeliveryDecisionService() *DeliveryDecisionService {
-	return &DeliveryDecisionService{}
+func NewDeliveryDecisionService(repo ...repository.DeliveryDecisionRepo) *DeliveryDecisionService {
+	var r repository.DeliveryDecisionRepo
+	if len(repo) > 0 {
+		r = repo[0]
+	}
+	return &DeliveryDecisionService{repo: r}
 }
 
 func (s *DeliveryDecisionService) Defaults(_ context.Context, country string) domain.DeliveryDecisionDefaults {
@@ -50,6 +57,31 @@ func (s *DeliveryDecisionService) Calculate(_ context.Context, req domain.Delive
 			CalculatedAt:   time.Now().UTC().Format(time.RFC3339),
 		},
 	}, nil
+}
+
+func (s *DeliveryDecisionService) GetConfig(ctx context.Context) (domain.DeliveryDecisionConfigState, bool, error) {
+	if s.repo == nil {
+		return domain.DeliveryDecisionConfigState{}, false, nil
+	}
+	return s.repo.GetConfig(ctx)
+}
+
+func (s *DeliveryDecisionService) SaveConfig(ctx context.Context, input domain.DeliveryDecisionInput) (domain.DeliveryDecisionConfigState, error) {
+	normalized := normalizeDeliveryDecisionInput(input)
+	if err := validateDeliveryDecisionInput(normalized); err != nil {
+		return domain.DeliveryDecisionConfigState{}, err
+	}
+	state := domain.DeliveryDecisionConfigState{
+		SavedAt: time.Now().UTC().Format(time.RFC3339),
+		Input:   normalized,
+	}
+	if s.repo == nil {
+		return state, nil
+	}
+	if err := s.repo.SaveConfig(ctx, state); err != nil {
+		return domain.DeliveryDecisionConfigState{}, err
+	}
+	return state, nil
 }
 
 func defaultDeliveryDecisionInput(country string) domain.DeliveryDecisionInput {
@@ -123,8 +155,8 @@ func validateDeliveryDecisionInput(input domain.DeliveryDecisionInput) error {
 	if input.HardwareTaxRate < 0 || input.HardwareTaxRate > 0.18 {
 		return fmt.Errorf("硬件增值税率必须在 0%%~18%% 范围内")
 	}
-	if input.CloudTaxRate < 0 || input.CloudTaxRate > 0.17 {
-		return fmt.Errorf("云服务进项税率必须在 0%%~17%% 范围内")
+	if input.CloudTaxRate < 0 || input.CloudTaxRate > 0.18 {
+		return fmt.Errorf("云服务进项税率必须在 0%%~18%% 范围内")
 	}
 	if input.WACCRate < 0 || input.WACCRate > 1 {
 		return fmt.Errorf("WACC 年资金成本率必须在 0%%~100%% 范围内")

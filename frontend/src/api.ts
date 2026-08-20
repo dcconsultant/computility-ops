@@ -47,6 +47,7 @@ import type {
   ResourcePlanningResponse,
   ResourcePlanningConfigState,
   DeliveryDecisionDefaults,
+  DeliveryDecisionConfigState,
   DeliveryDecisionResult,
   DeliveryDecisionInput
 } from './types';
@@ -211,6 +212,16 @@ export async function calculateResourcePlanning(payload: ResourcePlanningRequest
 
 export async function getDeliveryDecisionDefaults(country = 'China') {
   const { data } = await http.get<ApiResp<DeliveryDecisionDefaults>>('/delivery-decision/defaults', { params: { country } });
+  return data;
+}
+
+export async function getDeliveryDecisionConfig() {
+  const { data } = await http.get<ApiResp<{ found: boolean; state?: DeliveryDecisionConfigState }>>('/delivery-decision/config');
+  return data;
+}
+
+export async function saveDeliveryDecisionConfig(payload: { input: DeliveryDecisionInput }) {
+  const { data } = await http.put<ApiResp<{ saved: boolean; state: DeliveryDecisionConfigState }>>('/delivery-decision/config', payload);
   return data;
 }
 

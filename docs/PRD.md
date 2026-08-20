@@ -50,6 +50,7 @@ computility-ops 用于支撑“服务器续保规划”场景：
 2. 输入目标核数，系统自动产出续保候选清单
 3. 审批/管理层按排名与策略字段复核结果
 4. 导出 CSV/XLSX 给下游执行或归档
+5. 资源工程师与采购工程师维护算力行情基线，供交付方式决策与后续成本模块引用
 
 ---
 
@@ -112,6 +113,67 @@ computility-ops 用于支撑“服务器续保规划”场景：
   - 对外访问：`http://localhost:18080`
   - 审计日志：`./logs/audit.log`
 
+### 3.6 算力行情基线（规划中）
+
+目标：
+- 建立按配置类型与部件维度维护的算力行情基线
+- 为交付方式决策、成本测算和采购判断提供统一价格底座
+
+角色与职责：
+1. **算力资源工程师**：录入指定配置类型的资源基线
+2. **采购工程师**：录入部件价格、价格来源、未来 12 个月预测，并持续刷新
+
+配置类型基线：
+- 每个配置类型至少包含 CPU、内存、数据盘、系统盘、GPU、机箱的配置信息和数量
+- 数量为 `0` 时，对应配置信息可为空
+- 配置信息用于描述该配置类型的标准构成，数量用于表达该部件是否参与基线与成本计算
+
+价格维护：
+- 录入字段至少包含部件单价、部件总价
+- 同时维护未来 12 个月的价格预测
+- 支持随时刷新价格预测
+- 询价价与采购价都要入库，并通过 `price_source` 区分
+
+价格来源：
+- 正式询价
+- 行业情报
+- 自主分析
+
+联动方式：
+- 交付方式决策模块读取最新行情基线，按区域刷新自建、公有云采购比例
+- 行情基线变更后应可触发重新计算与趋势更新
+- 页面需支持按区域、配置类型、部件、价格来源查看历史与最新值
+
+开发字段规划：
+- `market_baseline`：主表。字段包括 `baseline_id`、`region`、`country`、`config_type`、`effective_month`、`currency`、`hw_tax_rate`、`cloud_tax_rate`、`status`、`version`、`baseline_snapshot_id`、`created_by`、`updated_by`。
+- `market_baseline_component`：配置部件明细。字段包括 `baseline_id`、`component_type`、`component_spec`、`quantity`、`unit`、`cpu_physical_cores`、`memory_gb`、`disk_capacity_tb`、`gpu_model`、`remark`。`component_type` 取值为 `CPU`、`MEMORY`、`DATA_DISK`、`SYSTEM_DISK`、`GPU`、`CHASSIS`。
+- `market_component_price`：自建部件价格。字段包括 `price_id`、`baseline_id`、`component_type`、`price_type`、`price_source`、`unit_price`、`total_price`、`tax_included`、`tax_rate`、`quote_date`、`forecast_month`、`forecast_version`、`confidence_level`、`supplier`、`remark`。
+- `cloud_market_price`：公有云行情。字段包括 `cloud_price_id`、`region`、`country`、`cloud_provider`、`resource_type`、`unit_daily_price`、`discount`、`price_type`、`price_source`、`currency`、`tax_rate`、`effective_month`、`forecast_month`、`forecast_version`。
+- `price_type`：价格类型，取值为 `inquiry`、`purchase`、`forecast`。
+- `price_source`：价格来源，取值为 `formal_quote`、`industry_intel`、`self_analysis`。
+- `status`：基线状态，取值为 `draft`、`active`、`archived`。
+
+交付方式决策字段映射：
+- `hw_total`：自建部件 `total_price` 汇总。
+- `hw_cores`：CPU 数量 × `cpu_physical_cores`。
+- `hw_tax_rate`：来自 `market_baseline.hw_tax_rate`。
+- `cloud_cpu_daily_price`：来自 `cloud_market_price.resource_type=CPU_CORE` 的 `unit_daily_price`。
+- `cloud_memory_daily_price`：来自 `cloud_market_price.resource_type=MEMORY_GB` 的 `unit_daily_price`。
+- `cloud_disk_daily_price`：来自 `cloud_market_price.resource_type=DISK_GB` 的 `unit_daily_price`。
+- `cloud_tax_rate`：来自公有云行情税率或区域默认税率。
+- `cloud_current_discount`：来自公有云行情折扣。
+- `cloud_memory_ratio`：内存总量 / 物理核心数。
+- `cloud_disk_ratio`：数据盘总量 / 物理核心数。
+- `baseline_snapshot_id`：本次决策使用的行情基线快照。
+
+开发补充要求：
+- 同一区域、配置类型、生效月份只能有一个 `active` 基线版本。
+- `quantity=0` 时对应配置信息可为空；`quantity>0` 时规格必填。
+- `active` 基线必须完成自建关键部件价格和公有云关键资源价格。
+- 未来 12 个月预测按 `YYYY-MM` 维护，每次刷新生成新 `forecast_version`，历史不覆盖。
+- 缺失关键价格或数量时，交付方式决策不得静默计算，需提示缺失字段与兜底策略。
+- 交付方式决策结果需展示行情基线版本、价格来源、刷新时间、计算时间。
+
 ---
 
 ## 4. 信息架构与页面
@@ -120,6 +182,8 @@ computility-ops 用于支撑“服务器续保规划”场景：
 - `/import`：数据导入与列表管理
 - `/plan`：生成续保方案
 - `/result/:planId`：查询与查看方案结果
+- `/market-baseline`：算力行情基线维护（规划中）
+- `/delivery-decision`：交付方式决策（引用算力行情基线）
 
 页面关系：
 - 导入数据（Import）是生成方案（Plan）的前置
@@ -131,6 +195,9 @@ computility-ops 用于支撑“服务器续保规划”场景：
 
 基础前缀：`/api/v1`
 
+说明：
+- 下列算力行情基线接口为规划口径，具体实现时可按实际资源命名微调
+
 - `GET /healthz`
 - `POST /servers/import`, `GET /servers`
 - `POST /host-packages/import`, `GET /host-packages`
@@ -141,6 +208,10 @@ computility-ops 用于支撑“服务器续保规划”场景：
 - `POST /renewals/plan`
 - `GET /renewals/plans/:plan_id`
 - `GET /renewals/plans/:plan_id/export?format=xlsx|csv`
+- `GET /market-baseline`
+- `POST /market-baseline`
+- `PUT /market-baseline/:id`
+- `POST /market-baseline/forecast/refresh`
 
 返回规范：
 - 成功：`code=0`
@@ -176,6 +247,7 @@ computility-ops 用于支撑“服务器续保规划”场景：
 2. **可维护性**：前后端分离，API 与页面解耦
 3. **可追踪性**：审计日志可关联请求链路
 4. **可扩展性**：存储层接口化，后续切换 MySQL 成本可控
+5. **可刷新性**：算力行情基线可按需刷新并保留历史来源
 
 ---
 
@@ -240,6 +312,7 @@ P2：
 - **架构标准化系数**：按配置类型定义的权重系数
 - **加白/加黑**：强制入选 / 强制排除策略
 - **目标核数**：本次续保计划的资源目标
+- **price_source**：价格来源，取值包括正式询价、行业情报、自主分析
 
 ---
 

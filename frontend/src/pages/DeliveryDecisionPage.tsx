@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Card, Col, Divider, Form, InputNumber, Row, Select, Space, Statistic, Table, Typography, message } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
-import { calculateDeliveryDecision, getDeliveryDecisionDefaults } from '../api';
+import { ReloadOutlined, SaveOutlined } from '@ant-design/icons';
+import { calculateDeliveryDecision, getDeliveryDecisionConfig, getDeliveryDecisionDefaults, saveDeliveryDecisionConfig } from '../api';
 import { ensureApiOk, parseApiError } from '../error';
 import type { DeliveryDecisionInput, DeliveryDecisionResult, DeliveryDecisionSensitivityPoint } from '../types';
 
 const { Text, Title } = Typography;
-
-const STORAGE_KEY = 'delivery-decision-input-v1';
 
 const fmt = (value?: number | null, digits = 4) => {
   if (value === null || value === undefined || Number.isNaN(value)) return '-';
@@ -46,21 +44,6 @@ const defaults: DeliveryDecisionInput = {
 
 type CurveRow = DeliveryDecisionSensitivityPoint & { key: string };
 
-function readStoredInput(): DeliveryDecisionInput | null {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<DeliveryDecisionInput>;
-    return { ...defaults, ...parsed } as DeliveryDecisionInput;
-  } catch {
-    return null;
-  }
-}
-
-function saveStoredInput(input: DeliveryDecisionInput) {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(input));
-}
-
 function SimpleLineChart({ title, series, yLabel }: { title: string; series: DeliveryDecisionSensitivityPoint[]; yLabel: string }) {
   const width = 560;
   const height = 220;
@@ -96,29 +79,42 @@ export default function DeliveryDecisionPage() {
   const [result, setResult] = useState<DeliveryDecisionResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [initLoading, setInitLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const debounceRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const stored = readStoredInput();
-    if (stored) {
-      setInput(stored);
-      form.setFieldsValue(stored);
-    }
-    loadDefaults(stored?.country || defaults.country);
+    void loadConfig();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function loadConfig() {
+    setInitLoading(true);
+    try {
+      const resp = ensureApiOk(await getDeliveryDecisionConfig());
+      if (resp.data.found && resp.data.state?.input) {
+        const next = resp.data.state.input;
+        setInput(next);
+        form.setFieldsValue(next);
+        await runCalculate(next);
+        return;
+      }
+      await loadDefaults(defaults.country);
+    } catch (e) {
+      message.error(parseApiError(e, '加载交付决策配置失败'));
+      await loadDefaults(defaults.country);
+    } finally {
+      setInitLoading(false);
+    }
+  }
 
   async function loadDefaults(country: string) {
     setInitLoading(true);
     try {
       const resp = ensureApiOk(await getDeliveryDecisionDefaults(country));
       const next = resp.data.input;
-      const stored = readStoredInput();
-      const merged = stored && stored.country === country ? { ...next, ...stored, country, currency: next.currency } : next;
-      setInput(merged);
-      form.setFieldsValue(merged);
-      saveStoredInput(merged);
-      await runCalculate(merged);
+      setInput(next);
+      form.setFieldsValue(next);
+      await runCalculate(next);
     } catch (e) {
       message.error(parseApiError(e, '加载交付决策默认参数失败'));
     } finally {
@@ -142,13 +138,28 @@ export default function DeliveryDecisionPage() {
   function scheduleCalculate(next: DeliveryDecisionInput) {
     setInput(next);
     form.setFieldsValue(next);
-    saveStoredInput(next);
     if (debounceRef.current) {
       window.clearTimeout(debounceRef.current);
     }
     debounceRef.current = window.setTimeout(() => {
       void runCalculate(next);
     }, 220);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const resp = ensureApiOk(await saveDeliveryDecisionConfig({ input }));
+      const next = resp.data.state.input;
+      setInput(next);
+      form.setFieldsValue(next);
+      await runCalculate(next);
+      message.success('配置已保存');
+    } catch (e) {
+      message.error(parseApiError(e, '保存配置失败'));
+    } finally {
+      setSaving(false);
+    }
   }
 
   const hardwarePoints = useMemo(
@@ -178,15 +189,20 @@ export default function DeliveryDecisionPage() {
               <Title level={4} style={{ margin: 0 }}>交付方式决策</Title>
               <Text type="secondary">自建与公有云成本对标、动态配比与价格敏感度分析</Text>
             </div>
-            <Button icon={<ReloadOutlined />} onClick={() => loadDefaults(input.country)} loading={initLoading}>
-              重置默认值
-            </Button>
+            <Space>
+              <Button icon={<SaveOutlined />} type="primary" onClick={handleSave} loading={saving}>
+                保存配置
+              </Button>
+              <Button icon={<ReloadOutlined />} onClick={() => loadDefaults(input.country)} loading={initLoading}>
+                重置默认值
+              </Button>
+            </Space>
           </Space>
           <Alert
             type="info"
             showIcon
             message="说明"
-            description="国家切换只影响默认模板，币种保持为元；本页结果按当前输入实时计算。"
+            description="国家切换只影响默认模板，币种保持为元；本页结果按当前输入实时计算，点击保存配置后写入后端持久化。"
           />
         </Space>
       </Card>
@@ -220,7 +236,7 @@ export default function DeliveryDecisionPage() {
               </Row>
               <Row gutter={12}>
                 <Col span={12}><Form.Item label="网络及机柜月折旧"><InputNumber value={input.idc_network_depreciation} onChange={(v) => scheduleCalculate({ ...input, idc_network_depreciation: Number(v || 0) })} style={{ width: '100%' }} min={0} precision={2} /></Form.Item></Col>
-                <Col span={12}><Form.Item label="云服务进项税率"><InputNumber value={input.cloud_tax_rate * 100} onChange={(v) => scheduleCalculate({ ...input, cloud_tax_rate: Number(v || 0) / 100 })} style={{ width: '100%' }} min={0} max={17} precision={2} addonAfter="%" /></Form.Item></Col>
+                <Col span={12}><Form.Item label="云服务进项税率"><InputNumber value={input.cloud_tax_rate * 100} onChange={(v) => scheduleCalculate({ ...input, cloud_tax_rate: Number(v || 0) / 100 })} style={{ width: '100%' }} min={0} max={18} precision={2} addonAfter="%" /></Form.Item></Col>
               </Row>
               <Row gutter={12}>
                 <Col span={12}><Form.Item label="内存比 (GB/Core)"><InputNumber value={input.cloud_memory_ratio} onChange={(v) => scheduleCalculate({ ...input, cloud_memory_ratio: Number(v || 0) })} style={{ width: '100%' }} min={0} precision={2} /></Form.Item></Col>
